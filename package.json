@@ -9,9 +9,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "build": "tsc",
-    "build:types": "dts-bundle-generator --config dtsconfig.json",
-    "dev": "bun --hot run ./src/index.ts"
+    "dev": "bun --hot run ./index.ts"
   },
   "type": "module",
   "types": "src/index.ts"
