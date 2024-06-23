@@ -4,13 +4,6 @@ An Express-like framework for Bun. Quick and easy to use.
 
 ## Installation
 
-Create a new bun application:
-```bash
-mkdir my-app;
-cd my-app;
-bun init;
-```
-Install Xerus
 ```bash
 bun create phillip-england/xerus <app-name>
 ```
