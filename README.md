@@ -12,7 +12,7 @@ bun init;
 ```
 Install Xerus
 ```bash
-bun install xerus
+bun create phillip-england/xerus <app-name>
 ```
 
 ## Quickstart
