@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+
     // Enable latest features
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",
@@ -24,15 +25,17 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
 
+	// user-defined options
     "rootDir": "./src",
     "declaration": true,
-    "declarationDir": "./dist",
+    "declarationDir": "./dist/types",
     "emitDeclarationOnly": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
+
     
   },
-  "include": ["src"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 
 }

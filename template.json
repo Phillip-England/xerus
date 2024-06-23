@@ -1,0 +1,6 @@
+{
+	"name": "xerus",
+	"description": "A quick http server",
+	"postinstall": "bun install"
+  }
+  

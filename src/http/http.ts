@@ -1,4 +1,5 @@
-import type { AppContext, Cookie } from "./types/types";
+import type { AppContext } from "../types/AppContext";
+import type { Cookie } from "../types/Cookie";
 
 export const setBody = (ctx: AppContext, body: string) => {
     ctx.response.body = body;
