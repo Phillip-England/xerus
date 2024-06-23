@@ -9,7 +9,10 @@ With bun 1.1.12 or greater installed, run:
 bun create phillip-england/xerus <app-name>
 cd <app-name>
 bun install
+bun run dev
 ```
+
+visit `localhost:8080/`
 
 ## Quickstart
 
