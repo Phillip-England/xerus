@@ -88,7 +88,7 @@ app.run(8080)
 ```
 
 ### JSX
-And using strings is lame:
+Strings are lame:
 
 ```tsx
 const app = new Xerus()
@@ -115,3 +115,15 @@ app.get("/", async (ctx: XerusCtx) => {
 
 app.run(8080)
 ```
+
+### Static Files / Favicon
+Serving static files and `/favicon.ico` is easy:
+
+```ts
+const app = new Xerus()
+
+app.use(XerusMw.serveStaticFiles)
+app.use(XerusMw.serveFavicon)
+```
+
+Now all files located in `/static` will be available on the server.
