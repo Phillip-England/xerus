@@ -21,11 +21,11 @@ const SomeComponent = (props: {
 }
 
 app.get("/", async (ctx: XerusCtx) => {
-	ctx.html(200, renderToString(<SomeComponent text="/" />))
+	ctx.jsx(200, <SomeComponent text="/" />)
 })
 
 app.get("/about", async (ctx: XerusCtx) => {
-	ctx.html(200, renderToString(<SomeComponent text='/about' />))
+	ctx.jsx(200, <SomeComponent text='/about' />)
 })
 
 type User = {

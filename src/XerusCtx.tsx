@@ -1,6 +1,8 @@
 import type { Cookie } from "./Cookie";
 import { XerusRequest } from "./XerusRequest";
 import { XerusResponse } from "./XerusResponse";
+import { renderToString } from "react-dom/server"
+
 
 export class XerusCtx {
     xerusReq: XerusRequest | null;
@@ -65,6 +67,12 @@ export class XerusCtx {
         this.xerusRes.setHeader("Content-Type", "application/json");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(JSON.stringify(body));
+    }
+
+    jsx(status: number, body: any) {
+        this.xerusRes.setHeader("Content-Type", "text/html");
+        this.xerusRes.setStatus(status);
+        this.xerusRes.setBody(renderToString(body));
     }
 
 }
