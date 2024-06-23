@@ -186,8 +186,6 @@ const SomeComponent = (props: {
     return (
         <>  
             <h1>{props.text}</h1>
-            <a href='/'>Home</a>
-            <a href='/about'>About</a>
         </>
     )
 }
@@ -201,3 +199,28 @@ app.run(8080)
 ```
 
 `ctx.pathPart` enables you to access pieces of the path as if they were parts of an array.
+
+### Query Parameters
+Query params are a breeze:
+
+
+```ts
+const app = new Xerus()
+
+const SomeComponent = (props: {
+    text: string
+}) => {
+    return (
+        <>  
+            <h1>{props.text}</h1>
+        </>
+    )
+}
+
+app.get("/", async (ctx: XerusCtx) => {
+    let someParam = ctx.pathParam('someParam') // returns "" if no param exists
+	ctx.html(200, renderToString(<SomeComponent text="Home" />))
+})
+
+app.run(8080)
+```
