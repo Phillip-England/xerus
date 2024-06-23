@@ -7,6 +7,8 @@ An Express-like framework for Bun.
 With bun 1.1.12 or greater installed, run:
 ```bash
 bun create phillip-england/xerus <app-name>
+cd <app-name>
+bun install
 ```
 
 ## Quickstart
@@ -45,12 +47,39 @@ Here is a list of them:
 ## Features
 
 ### Simple Routing
+A simple Hello, World application:
 
-Hello, World example @GET /
 ```ts
 let app = new Xerus();
+
 app.get('/', async (ctx: AppContext) => {
     setHeader(ctx, "Content-Type", "text/html")
     setBody(ctx, "<h1>Hello, World!</h1>")
 })
+
+app.run(8080)
+```
+
+Then serve using:
+```bash
+bun run dev
+```
+
+now visit `localhost:8080`
+
+### Middleware
+Maybe we want all routes to return html?
+
+```ts
+let app = new Xerus();
+
+app.use(async (ctx: AppContext) => {
+    setHeader(ctx, "Content-Type", "text/html")
+})
+
+app.get('/', async (ctx: AppContext) => {
+    setBody(ctx, "<h1>Hello, World!</h1>")
+})
+
+app.run(8080)
 ```
