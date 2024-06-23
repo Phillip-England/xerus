@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "dev": "bun --hot run ./index.ts"
+    "dev": "bun --hot run ./index.tsx"
   },
   "type": "module",
   "types": "src/index.ts"

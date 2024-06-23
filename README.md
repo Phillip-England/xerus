@@ -65,10 +65,10 @@ Then serve using:
 bun run dev
 ```
 
-now visit `localhost:8080`
+now visit `localhost:8080/`
 
 ### Middleware
-Maybe we want all routes to return html?
+Maybe we want all routes to return html? Boom:
 
 ```ts
 let app = new Xerus();
@@ -79,6 +79,23 @@ app.use(async (ctx: AppContext) => {
 
 app.get('/', async (ctx: AppContext) => {
     setBody(ctx, "<h1>Hello, World!</h1>")
+})
+
+app.run(8080)
+```
+
+### JSX
+And using strings is lame:
+
+```tsx
+let app = new Xerus();
+
+app.use(async (ctx: AppContext) => {
+    setHeader(ctx, "Content-Type", "text/html")
+})
+
+app.get('/', async (ctx: AppContext) => {
+    setBody(ctx, $c(<SomeComponent/>))
 })
 
 app.run(8080)
