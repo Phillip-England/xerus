@@ -21,7 +21,7 @@ app.use(XerusMw.serveStaticFiles)
 app.use(XerusMw.serveFavicon)
 
 app.use(async (ctx: XerusCtx) => {
-	ctx.res.setHeader("Content-Type", "text/html")
+	ctx.setHeader("Content-Type", "text/html")
 })
 
 const SomeComponent = (props: {
@@ -37,11 +37,11 @@ const SomeComponent = (props: {
 }
 
 app.get("/", async (ctx: XerusCtx) => {
-	ctx.res.setBody(renderToString(<SomeComponent text="/" />))
+	ctx.send(200, renderToString(<SomeComponent text="/" />))
 })
 
 app.get("/about", async (ctx: XerusCtx) => {
-	ctx.res.setBody(renderToString(<SomeComponent text='/about' />))
+	ctx.send(200, renderToString(<SomeComponent text='/about' />))
 })
 
 app.run(8080)
@@ -56,8 +56,8 @@ A simple Hello, World application:
 let app = new Xerus();
 
 app.get('/', async (ctx: RequestCtx) => {
-    setHeader(ctx, "Content-Type", "text/html")
-    setBody(ctx, "<h1>Hello, World!</h1>")
+    ctx.setHeader("Content-Type", "text/html")
+    ctx.send(200, "<h1>Hello, World!</h1>")
 })
 
 app.run(8080)
@@ -77,11 +77,11 @@ Maybe we want all routes to return html? Boom:
 let app = new Xerus();
 
 app.use(async (ctx: RequestCtx) => {
-    setHeader(ctx, "Content-Type", "text/html")
+    ctx.setHeader("Content-Type", "text/html")
 })
 
 app.get('/', async (ctx: RequestCtx) => {
-    setBody(ctx, "<h1>Hello, World!</h1>")
+    ctx.send(200, "<h1>Hello, World!</h1>")
 })
 
 app.run(8080)
@@ -97,16 +97,20 @@ app.use(async (ctx: RequestCtx) => {
 	setHeader(ctx, "Content-Type", "text/html")
 })
 
-const SomeComponent = () => {
+const SomeComponent = (props: {
+    text: string
+}) => {
     return (
-        <>
-            <h1>Hello, world!</h1>
+        <>  
+            <h1>{props.text}</h1>
+            <a href='/'>Home</a>
+            <a href='/about'>About</a>
         </>
     )
 }
 
-app.get("/", async (ctx: RequestCtx) => {
-	setBody(ctx, comp(<SomeComponent />))
+app.get("/", async (ctx: XerusCtx) => {
+	ctx.send(200, renderToString(<SomeComponent text="Home" />))
 })
 
 app.run(8080)
