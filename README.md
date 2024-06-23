@@ -85,13 +85,13 @@ export class Xerus {
 
     constructor() {
         this.routers = {
-            "/": new Router('/') // generic router created
+            "/": new Router('/') // this.routers['/'] created
         }
         //...
     }
     //...
     get(path: string, handler: HandlerFunc) {
-        this.routers['/'].get(path, handler) // using this.routers['/'].get()
+        this.routers['/'].get(path, handler) // using the .get() method of this.routers['/']
     }
     //...
 }
