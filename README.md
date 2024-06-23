@@ -76,3 +76,23 @@ export class Xerus {
     //...
 }
 ```
+
+Notice, we are really just using the router instantiated in `Xerus`'s constructor:
+```ts
+export class Xerus {
+        routers: {[key: string]: Router}
+    //...
+
+    constructor() {
+        this.routers = {
+            "/": new Router('/') // generic router created
+        }
+        //...
+    }
+    //...
+    get(path: string, handler: HandlerFunc) {
+        this.routers['/'].get(path, handler) // using this.routers['/'].get()
+    }
+    //...
+}
+```
