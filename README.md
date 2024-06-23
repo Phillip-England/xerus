@@ -29,67 +29,28 @@ app.run(8080)
 ```
 
 ## Type-System
-Xerus is built off of a few core types and classes. Here are their definitions and roles.
+Xerus is really just a series of types and classes built around the Bun http utilites. To really get a feel for how Xerus works, read over the type definitions. 
 
-## Xerus
+Here is a list of them:
 
-When creating a new instance of Xerus, a `Router` is mapped to the key `'/'` at `this.routers`:
+1. `Xerus`
+2. `Router`
+3. `Route`
+4. `HandlerFunc`
+5. `MiddlewareFunc`
+6. `AppContext`
+7. `Cookie`
+8. `MockResponse`
+
+## Features
+
+### Simple Routing
+
+Hello, World example @GET /
 ```ts
-export class Xerus {
-
-    routers: {[key: string]: Router}
-
-    constructor() {
-        this.routers = {
-            "/": new Router('/')
-        }
-    }
-    
-}
-```
-
-`Xerus` has methods for each HTTP request method type:
-```ts
-export class Xerus {
-
-    get(path: string, handler: HandlerFunc) {
-        this.routers['/'].get(path, handler)
-    }
-
-    post(path: string, handler: HandlerFunc) {
-        this.routers['/'].post(path, handler)
-    }
-
-    patch(path: string, handler: HandlerFunc) {
-        this.routers['/'].patch(path, handler)
-    }
-
-    update(path: string, handler: HandlerFunc) {
-        this.routers['/'].update(path, handler)
-    }
-
-    delete(path: string, handler: HandlerFunc) {
-        this.routers['/'].delete(path, handler)
-    }
-
-}
-```
-
-Notice, we are really just using the router instantiated in `Xerus`'s constructor:
-```ts
-export class Xerus {
-
-    routers: {[key: string]: Router}
-
-    constructor() {
-        this.routers = {
-            "/": new Router('/') // this.routers['/'] created
-        }
-    }
-
-    get(path: string, handler: HandlerFunc) {
-        this.routers['/'].get(path, handler) // this.routers['/'] used
-    }
-
-}
+let app = new Xerus();
+app.get('/', async (ctx: AppContext) => {
+    setHeader(ctx, "Content-Type", "text/html")
+    setBody(ctx, "<h1>Hello, World!</h1>")
+})
 ```

@@ -1,18 +1,8 @@
-import type { HandlerFunc, MiddlewareFunc } from "./types/types";
+import type { HandlerFunc } from "./HandlerFunc";
+import type { MiddlewareFunc } from "./MiddlewareFunc";
+import { Route } from "./Route";
 
-export class Route {
-    prefix: string;
-    path: string;
-    method: string;
-    handler: HandlerFunc;
 
-    constructor(prefix: string, path: string, method: string, handler: HandlerFunc) {
-        this.prefix = prefix;
-        this.path = path;
-        this.method = method;
-        this.handler = handler;
-    }
-}
 
 export class Router {
     prefix: string;
