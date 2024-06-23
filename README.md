@@ -38,22 +38,20 @@ When creating a new instance of Xerus, a `Router` is mapped to the key `'/'` at 
 export class Xerus {
 
     routers: {[key: string]: Router}
-    //...
 
     constructor() {
         this.routers = {
-            "/": new Router('/') // generic router created
+            "/": new Router('/')
         }
-        //...
     }
-    //...
+    
 }
 ```
 
 `Xerus` has methods for each HTTP request method type:
 ```ts
 export class Xerus {
-    //...
+
     get(path: string, handler: HandlerFunc) {
         this.routers['/'].get(path, handler)
     }
@@ -73,26 +71,25 @@ export class Xerus {
     delete(path: string, handler: HandlerFunc) {
         this.routers['/'].delete(path, handler)
     }
-    //...
+
 }
 ```
 
 Notice, we are really just using the router instantiated in `Xerus`'s constructor:
 ```ts
 export class Xerus {
-        routers: {[key: string]: Router}
-    //...
+
+    routers: {[key: string]: Router}
 
     constructor() {
         this.routers = {
             "/": new Router('/') // this.routers['/'] created
         }
-        //...
     }
-    //...
+
     get(path: string, handler: HandlerFunc) {
-        this.routers['/'].get(path, handler) // using the .get() method of this.routers['/']
+        this.routers['/'].get(path, handler) // this.routers['/'] used
     }
-    //...
+
 }
 ```
