@@ -148,7 +148,7 @@ type User = {
 }
 
 apiRouter.use(async (ctx: XerusCtx) => {
-    console.log('i only print on routes prefixed with "/api"')
+    console.log('I only print on routes prefixed with "/api"')
 })
 
 apiRouter.get("/users", async (ctx: XerusCtx) => {
@@ -172,3 +172,32 @@ apiRouter.get('/users' ....
 instead of:
 ```ts
 apiRouter.get('/api/users' ......
+```
+
+### Dynamic Paths
+Dynamic paths should be easy:
+
+```ts
+const app = new Xerus()
+
+const SomeComponent = (props: {
+    text: string
+}) => {
+    return (
+        <>  
+            <h1>{props.text}</h1>
+            <a href='/'>Home</a>
+            <a href='/about'>About</a>
+        </>
+    )
+}
+
+app.get("/users/:id", async (ctx: XerusCtx) => {
+    let id = ctx.pathPart(1)
+	ctx.html(200, renderToString(<SomeComponent text={id} />))
+})
+
+app.run(8080)
+```
+
+`ctx.pathPart` enables you to access pieces of the path as if they were parts of an array.
