@@ -1,0 +1,14 @@
+{
+  "name": "xerus",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "dev": "bun --hot run index.tsx"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
