@@ -15,34 +15,37 @@ bun install
 
 Hello world example:
 ```ts
-import { Xerus, setBody, setHeader, type RequestCtx } from "./xerus/package"
-
 const app = new Xerus()
 
-app.use(async (ctx: RequestCtx) => {
-	setHeader(ctx, "Content-Type", "text/html")
+app.use(XerusMw.serveStaticFiles)
+app.use(XerusMw.serveFavicon)
+
+app.use(async (ctx: XerusCtx) => {
+	ctx.res.setHeader("Content-Type", "text/html")
 })
 
-app.get("/", async (ctx: RequestCtx) => {
-	setBody(ctx, "<h1>Hello, World!</h1>")
+const SomeComponent = (props: {
+    text: string
+}) => {
+    return (
+        <>  
+            <h1>{props.text}</h1>
+            <a href='/'>Home</a>
+            <a href='/about'>About</a>
+        </>
+    )
+}
+
+app.get("/", async (ctx: XerusCtx) => {
+	ctx.res.setBody(renderToString(<SomeComponent text="/" />))
+})
+
+app.get("/about", async (ctx: XerusCtx) => {
+	ctx.res.setBody(renderToString(<SomeComponent text='/about' />))
 })
 
 app.run(8080)
 ```
-
-## Type-System
-Xerus is really just a series of types and classes built around the Bun http utilites. To really get a feel for how Xerus works, read over the type definitions. 
-
-Here is a list of them:
-
-1. `Xerus`
-2. `Router`
-3. `Route`
-4. `HandlerFunc`
-5. `MiddlewareFunc`
-6. `RequestCtx`
-7. `Cookie`
-8. `MockResponse`
 
 ## Features
 

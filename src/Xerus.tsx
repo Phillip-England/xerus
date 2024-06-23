@@ -1,13 +1,14 @@
-import type { RequestCtx } from "./RequestCtx";
+import { XerusCtx } from "./XerusCtx";
 import type { HandlerFunc } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Router } from "./Router";
+import type { XerusRequest } from "./XerusRequest";
 
 export class Xerus {
 
     routers: {[key: string]: Router}
     middleware: MiddlewareFunc[]
-    requestCtx: () => Promise<RequestCtx>
+    xerusCtx: (request: Request) => Promise<XerusCtx>
     noLogPathPrefixes: string[]
     notFoundHandler: HandlerFunc | null
 
@@ -18,16 +19,8 @@ export class Xerus {
         this.routers = {
             "/": new Router('/')
         }
-        this.requestCtx = async (): Promise<RequestCtx> => {
-            return {
-                request: null,
-                response: {
-                    status: 200,
-                    body: '',
-                    headers: {},
-                    ready: false
-                }
-            }
+        this.xerusCtx = async (request: Request): Promise<XerusCtx> => {
+            return new XerusCtx(request)
         }
     }
 
@@ -102,46 +95,33 @@ export class Xerus {
         const method = request.method
         const router = this.pullRouter(path)
         const route = router.route(router.prefix, path, method)
-        // if (!route) {
-        //     if (this.notFoundHandler) {
-        //         let ctx = await this.requestCtx()
-        //         ctx.request = request
-        //         this.notFoundHandler(ctx)
-        //         if (ctx.response.ready) {
-        //             return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
-        //         } else {
-        //             return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
-        //         }
-        //     } else {
-        //         return new Response('Not Found', {status: 404})
-        //     }
-        // }
-        let ctx = await this.requestCtx()
-        ctx.request = request
+        let ctx = await this.xerusCtx(request)
+        let xerusReq = ctx.xerusReq as XerusRequest
+        xerusReq.req = request
         for (let middleware of this.middleware) {
             await middleware(ctx) 
-            if (ctx.response.ready) {
-                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            if (ctx.xerusRes.ready) {
+                return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
             }
         }
         for (let middleware of router.middleware) {
             await middleware(ctx) 
-            if (ctx.response.ready) {
-                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            if (ctx.xerusRes.ready) {
+                return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
             }
         }
         if (route) {
             route.handler(ctx)
-            if (ctx.response.ready) {
-                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            if (ctx.xerusRes.ready) {
+                return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
             } else {
                 return new Response("Xerus: failed to return a response from handler", {status: 500})
             }
         }
         if (this.notFoundHandler) {
             this.notFoundHandler(ctx)
-            if (ctx.response.ready) {
-                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            if (ctx.xerusRes.ready) {
+                return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
             } else {
                 return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
             }

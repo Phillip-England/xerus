@@ -1,0 +1,63 @@
+import type { Cookie } from "./Cookie";
+import { XerusRequest } from "./XerusRequest";
+import { XerusResponse } from "./XerusResponse";
+
+export class XerusCtx {
+    xerusReq: XerusRequest | null;
+    xerusRes: XerusResponse;
+
+    constructor(request: Request) {
+        this.xerusReq = new XerusRequest(request);
+        this.xerusRes = new XerusResponse();
+    }
+
+    getCookie(key: string): Cookie | null {
+        if (!this.xerusReq) {
+            return null;
+        }
+        return this.xerusReq.getCookie(key);
+    }
+
+    setCookie(cookie: Cookie) {
+        this.xerusRes.setCookie(cookie);
+    }
+
+    setHeader(key: string, value: string) {
+        this.xerusRes.setHeader(key, value);
+    }
+
+    setStatus(status: number) {
+        this.xerusRes.setStatus(status);
+    }
+
+    setBody(body: any) {
+        this.xerusRes.setBody(body);
+    }
+
+    pathPart(index: number): string {
+        if (!this.xerusReq) {
+            return "";
+        }
+        return this.xerusReq.pathPart(index);
+    }
+
+    pathParam(key: string): string {
+        if (!this.xerusReq) {
+            return "";
+        }
+        return this.xerusReq.getParam(key);
+    }
+
+    getHeader(key: string): string | null {
+        if (!this.xerusReq) {
+            return null;
+        }
+        return this.xerusReq.getHeader(key);
+    }
+
+    send(status: number, body: any) {
+        this.xerusRes.setStatus(status);
+        this.xerusRes.setBody(body);
+    }
+
+}

@@ -1,3 +1,3 @@
-import type { RequestCtx } from "./RequestCtx";
+import type { RequestCtx } from "./XerusCtx";
 
 export type MiddlewareFunc = (ctx: RequestCtx) => Promise<void>
