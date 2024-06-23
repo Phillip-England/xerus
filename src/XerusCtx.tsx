@@ -55,9 +55,16 @@ export class XerusCtx {
         return this.xerusReq.getHeader(key);
     }
 
-    send(status: number, body: any) {
+    html(status: number, body: any) {
+        this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(body);
+    }
+
+    json(status: number, body: any) {
+        this.xerusRes.setHeader("Content-Type", "application/json");
+        this.xerusRes.setStatus(status);
+        this.xerusRes.setBody(JSON.stringify(body));
     }
 
 }

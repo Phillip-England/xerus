@@ -20,12 +20,8 @@ Hello world example:
 ```ts
 const app = new Xerus()
 
-app.use(XerusMw.serveStaticFiles)
-app.use(XerusMw.serveFavicon)
-
-app.use(async (ctx: XerusCtx) => {
-	ctx.setHeader("Content-Type", "text/html")
-})
+app.global(XerusMw.serveStaticFiles)
+app.global(XerusMw.serveFavicon)
 
 const SomeComponent = (props: {
     text: string
@@ -40,11 +36,23 @@ const SomeComponent = (props: {
 }
 
 app.get("/", async (ctx: XerusCtx) => {
-	ctx.send(200, renderToString(<SomeComponent text="/" />))
+	ctx.html(200, renderToString(<SomeComponent text="/" />))
 })
 
 app.get("/about", async (ctx: XerusCtx) => {
-	ctx.send(200, renderToString(<SomeComponent text='/about' />))
+	ctx.html(200, renderToString(<SomeComponent text='/about' />))
+})
+
+type User = {
+    name: string
+}
+
+app.get("/api/users", async (ctx: XerusCtx) => {
+    const users: User[] = [
+        { name: "Alice" },
+        { name: "Bob" }
+    ]
+    ctx.json(200, users)
 })
 
 app.run(8080)
@@ -59,8 +67,7 @@ A simple Hello, World application:
 let app = new Xerus();
 
 app.get('/', async (ctx: RequestCtx) => {
-    ctx.setHeader("Content-Type", "text/html")
-    ctx.send(200, "<h1>Hello, World!</h1>")
+    ctx.html(200, "<h1>Hello, World!</h1>")
 })
 
 app.run(8080)
@@ -74,17 +81,17 @@ bun run dev
 now visit `localhost:8080/`
 
 ### Middleware
-Maybe we want all routes to return html? Boom:
+Maybe we want all routes to say hi? Boom:
 
 ```ts
 let app = new Xerus();
 
-app.use(async (ctx: RequestCtx) => {
-    ctx.setHeader("Content-Type", "text/html")
+app.global(async (ctx: RequestCtx) => {
+    console.log('hi')
 })
 
 app.get('/', async (ctx: RequestCtx) => {
-    ctx.send(200, "<h1>Hello, World!</h1>")
+    ctx.html(200, "<h1>Hello, World!</h1>")
 })
 
 app.run(8080)
@@ -95,10 +102,6 @@ Strings are lame:
 
 ```tsx
 const app = new Xerus()
-
-app.use(async (ctx: RequestCtx) => {
-	setHeader(ctx, "Content-Type", "text/html")
-})
 
 const SomeComponent = (props: {
     text: string
@@ -113,7 +116,7 @@ const SomeComponent = (props: {
 }
 
 app.get("/", async (ctx: XerusCtx) => {
-	ctx.send(200, renderToString(<SomeComponent text="Home" />))
+	ctx.html(200, renderToString(<SomeComponent text="Home" />))
 })
 
 app.run(8080)
@@ -125,8 +128,35 @@ Serving static files and `/favicon.ico` is easy:
 ```ts
 const app = new Xerus()
 
-app.use(XerusMw.serveStaticFiles)
-app.use(XerusMw.serveFavicon)
+app.global(XerusMw.serveStaticFiles)
+app.global(XerusMw.serveFavicon)
 ```
 
 Now all files located in `/static` will be available on the server.
+
+### Routers
+What if you want to apply a middleware to only *certain* routes? That's what `Router` is for.
+
+Spawn a `Router`:
+```ts
+const app = new Xerus()
+
+let apiRouter = app.spawnRouter('/api')
+
+type User = {
+    name: string
+}
+
+apiRouter.get("/users", async (ctx: XerusCtx) => {
+    const users: User[] = [
+        { name: "Alice" },
+        { name: "Bob" }
+    ]
+    ctx.json(200, users)
+})
+```
+
+at `localhost:8080` you'll see:
+```json
+[{"name":"Alice"},{"name":"Bob"}]
+```

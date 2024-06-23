@@ -5,12 +5,8 @@ import type { XerusCtx } from "./src/XerusCtx"
 
 const app = new Xerus()
 
-app.use(XerusMw.serveStaticFiles)
-app.use(XerusMw.serveFavicon)
-
-app.use(async (ctx: XerusCtx) => {
-	ctx.setHeader("Content-Type", "text/html")
-})
+app.global(XerusMw.serveStaticFiles)
+app.global(XerusMw.serveFavicon)
 
 const SomeComponent = (props: {
     text: string
@@ -25,11 +21,23 @@ const SomeComponent = (props: {
 }
 
 app.get("/", async (ctx: XerusCtx) => {
-	ctx.send(200, renderToString(<SomeComponent text="/" />))
+	ctx.html(200, renderToString(<SomeComponent text="/" />))
 })
 
 app.get("/about", async (ctx: XerusCtx) => {
-	ctx.send(200, renderToString(<SomeComponent text='/about' />))
+	ctx.html(200, renderToString(<SomeComponent text='/about' />))
+})
+
+type User = {
+    name: string
+}
+
+app.get("/api/users", async (ctx: XerusCtx) => {
+    const users: User[] = [
+        { name: "Alice" },
+        { name: "Bob" }
+    ]
+    ctx.json(200, users)
 })
 
 app.run(8080)

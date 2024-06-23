@@ -8,6 +8,7 @@ export class Xerus {
 
     routers: {[key: string]: Router}
     middleware: MiddlewareFunc[]
+    globalMiddleware: MiddlewareFunc[]
     xerusCtx: (request: Request) => Promise<XerusCtx>
     noLogPathPrefixes: string[]
     notFoundHandler: HandlerFunc | null
@@ -16,12 +17,17 @@ export class Xerus {
         this.notFoundHandler = null
         this.noLogPathPrefixes = ["/favicon.ico", "/static"]
         this.middleware = []
+        this.globalMiddleware = []
         this.routers = {
             "/": new Router('/')
         }
         this.xerusCtx = async (request: Request): Promise<XerusCtx> => {
             return new XerusCtx(request)
         }
+    }
+
+    global(middleware: MiddlewareFunc) {
+        this.globalMiddleware.push(middleware)
     }
 
     use(middleware: MiddlewareFunc) {
@@ -98,10 +104,18 @@ export class Xerus {
         let ctx = await this.xerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
         xerusReq.req = request
-        for (let middleware of this.middleware) {
+        for (let middleware of this.globalMiddleware) {
             await middleware(ctx) 
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
+            }
+        }
+        if (router.prefix === "/") {
+            for (let middleware of this.middleware) {
+                await middleware(ctx) 
+                if (ctx.xerusRes.ready) {
+                    return new Response(ctx.xerusRes.body, {status: ctx.xerusRes.status, headers: ctx.xerusRes.headers})
+                }
             }
         }
         for (let middleware of router.middleware) {
