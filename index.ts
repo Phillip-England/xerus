@@ -1,4 +1,4 @@
-import { Xerus, setBody, setHeader, type AppContext } from "./src/package"
+import { Xerus, setBody, setHeader, type AppContext } from "./xerus/package"
 
 const app = new Xerus()
 
