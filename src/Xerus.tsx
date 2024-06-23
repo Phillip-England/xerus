@@ -102,20 +102,20 @@ export class Xerus {
         const method = request.method
         const router = this.pullRouter(path)
         const route = router.route(router.prefix, path, method)
-        if (!route) {
-            if (this.notFoundHandler) {
-                let ctx = await this.requestCtx()
-                ctx.request = request
-                this.notFoundHandler(ctx)
-                if (ctx.response.ready) {
-                    return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
-                } else {
-                    return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
-                }
-            } else {
-                return new Response('Not Found', {status: 404})
-            }
-        }
+        // if (!route) {
+        //     if (this.notFoundHandler) {
+        //         let ctx = await this.requestCtx()
+        //         ctx.request = request
+        //         this.notFoundHandler(ctx)
+        //         if (ctx.response.ready) {
+        //             return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+        //         } else {
+        //             return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
+        //         }
+        //     } else {
+        //         return new Response('Not Found', {status: 404})
+        //     }
+        // }
         let ctx = await this.requestCtx()
         ctx.request = request
         for (let middleware of this.middleware) {
