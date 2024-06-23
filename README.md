@@ -28,13 +28,10 @@ app.get("/", async (ctx: AppContext) => {
 app.run(8080)
 ```
 
-## Features
-
-### Type System
-
+## Type-System
 Xerus is built off of a few core types and classes. Here are their definitions and roles.
 
-#### Xerus
+## Xerus
 
 Xerus is a class which serves as a container for all routers.
 
