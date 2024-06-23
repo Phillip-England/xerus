@@ -1,5 +1,7 @@
+import type { AppContext } from "./AppContext";
+import type { HandlerFunc } from "./HandlerFunc";
+import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Router } from "./Router";
-import type { AppContext, HandlerFunc, MiddlewareFunc } from "./types";
 
 export class Xerus {
 

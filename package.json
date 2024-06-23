@@ -1,14 +1,18 @@
 {
   "name": "xerus",
-  "module": "index.ts",
-  "type": "module",
+  "version": "0.0.1",
   "devDependencies": {
     "@types/bun": "latest"
   },
-  "scripts": {
-    "dev": "bun --hot run index.tsx"
-  },
   "peerDependencies": {
     "typescript": "^5.0.0"
-  }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "build:types": "dts-bundle-generator --config dtsconfig.json",
+    "dev": "bun --hot run ./src/index.ts"
+  },
+  "type": "module",
+  "types": "src/index.ts"
 }
