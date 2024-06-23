@@ -90,14 +90,13 @@ export class Router {
 
     route(prefix: string, path: string, method: string): Route | null {
         let searchPath: string;
-        if (prefix === this.prefix) {
+        if (prefix === this.prefix && this.prefix != "/") {
             searchPath = "/";
-        } else if (path.startsWith(prefix)) {
+        } else if (path.startsWith(prefix) && this.prefix != "/") {
             searchPath = path.slice(prefix.length);
         } else {
-            return null;
+            searchPath = path
         }
-
         switch (method) {
             case 'GET':
                 return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath);

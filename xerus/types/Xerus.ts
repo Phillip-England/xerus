@@ -1,4 +1,4 @@
-import type { AppContext } from "./AppContext";
+import type { RequestCtx } from "./RequestCtx";
 import type { HandlerFunc } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Router } from "./Router";
@@ -7,14 +7,18 @@ export class Xerus {
 
     routers: {[key: string]: Router}
     middleware: MiddlewareFunc[]
-    appContext: () => Promise<AppContext>
+    requestCtx: () => Promise<RequestCtx>
+    noLogPathPrefixes: string[]
+    notFoundHandler: HandlerFunc | null
 
     constructor() {
+        this.notFoundHandler = null
+        this.noLogPathPrefixes = ["/favicon.ico", "/static"]
         this.middleware = []
         this.routers = {
             "/": new Router('/')
         }
-        this.appContext = async (): Promise<AppContext> => {
+        this.requestCtx = async (): Promise<RequestCtx> => {
             return {
                 request: null,
                 response: {
@@ -81,6 +85,9 @@ export class Xerus {
                 let startTime = Date.now()
                 const path = new URL(request.url).pathname
                 let response = await this.handleRequest(request, path)
+                if (this.noLogPathPrefixes.some(prefix => path.startsWith(prefix))) {
+                    return response
+                }
                 let endTime = Date.now()
                 let timeTook = endTime - startTime
                 console.log(`[${response.status}][${request.method}][${path}][${timeTook}ms]`)
@@ -95,7 +102,21 @@ export class Xerus {
         const method = request.method
         const router = this.pullRouter(path)
         const route = router.route(router.prefix, path, method)
-        let ctx = await this.appContext()
+        if (!route) {
+            if (this.notFoundHandler) {
+                let ctx = await this.requestCtx()
+                ctx.request = request
+                this.notFoundHandler(ctx)
+                if (ctx.response.ready) {
+                    return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+                } else {
+                    return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
+                }
+            } else {
+                return new Response('Not Found', {status: 404})
+            }
+        }
+        let ctx = await this.requestCtx()
         ctx.request = request
         for (let middleware of this.middleware) {
             await middleware(ctx) 
@@ -111,9 +132,23 @@ export class Xerus {
         }
         if (route) {
             route.handler(ctx)
-            return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            if (ctx.response.ready) {
+                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            } else {
+                return new Response("Xerus: failed to return a response from handler", {status: 500})
+            }
         }
-        return new Response('Not Found', {status: 404})
+        if (this.notFoundHandler) {
+            this.notFoundHandler(ctx)
+            if (ctx.response.ready) {
+                return new Response(ctx.response.body, {status: ctx.response.status, headers: ctx.response.headers})
+            } else {
+                return new Response("Xerus: failed to return a response from middleware or handler", {status: 500})
+            }
+
+        } else {
+            return new Response('Not Found', {status: 404})
+        }
     }
 
 }

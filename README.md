@@ -15,15 +15,15 @@ bun install
 
 Hello world example:
 ```ts
-import { Xerus, setBody, setHeader, type AppContext } from "./xerus/package"
+import { Xerus, setBody, setHeader, type RequestCtx } from "./xerus/package"
 
 const app = new Xerus()
 
-app.use(async (ctx: AppContext) => {
+app.use(async (ctx: RequestCtx) => {
 	setHeader(ctx, "Content-Type", "text/html")
 })
 
-app.get("/", async (ctx: AppContext) => {
+app.get("/", async (ctx: RequestCtx) => {
 	setBody(ctx, "<h1>Hello, World!</h1>")
 })
 
@@ -40,7 +40,7 @@ Here is a list of them:
 3. `Route`
 4. `HandlerFunc`
 5. `MiddlewareFunc`
-6. `AppContext`
+6. `RequestCtx`
 7. `Cookie`
 8. `MockResponse`
 
@@ -52,7 +52,7 @@ A simple Hello, World application:
 ```ts
 let app = new Xerus();
 
-app.get('/', async (ctx: AppContext) => {
+app.get('/', async (ctx: RequestCtx) => {
     setHeader(ctx, "Content-Type", "text/html")
     setBody(ctx, "<h1>Hello, World!</h1>")
 })
@@ -73,11 +73,11 @@ Maybe we want all routes to return html? Boom:
 ```ts
 let app = new Xerus();
 
-app.use(async (ctx: AppContext) => {
+app.use(async (ctx: RequestCtx) => {
     setHeader(ctx, "Content-Type", "text/html")
 })
 
-app.get('/', async (ctx: AppContext) => {
+app.get('/', async (ctx: RequestCtx) => {
     setBody(ctx, "<h1>Hello, World!</h1>")
 })
 
@@ -88,14 +88,22 @@ app.run(8080)
 And using strings is lame:
 
 ```tsx
-let app = new Xerus();
+const app = new Xerus()
 
-app.use(async (ctx: AppContext) => {
-    setHeader(ctx, "Content-Type", "text/html")
+app.use(async (ctx: RequestCtx) => {
+	setHeader(ctx, "Content-Type", "text/html")
 })
 
-app.get('/', async (ctx: AppContext) => {
-    setBody(ctx, $c(<SomeComponent/>))
+const SomeComponent = () => {
+    return (
+        <>
+            <h1>Hello, world!</h1>
+        </>
+    )
+}
+
+app.get("/", async (ctx: RequestCtx) => {
+	setBody(ctx, comp(<SomeComponent />))
 })
 
 app.run(8080)

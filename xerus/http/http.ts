@@ -1,21 +1,22 @@
-import type { AppContext } from "../types/AppContext";
+import type { RequestCtx } from "../types/RequestCtx";
 import type { Cookie } from "../types/Cookie";
+import { renderToString } from 'react-dom/server';
 
-export const setBody = (ctx: AppContext, body: string) => {
+export const setBody = (ctx: RequestCtx, body: any) => {
     ctx.response.body = body;
     ctx.response.ready = true;
 };
 
-export const setHeader = (ctx: AppContext, key: string, value: string) => {
+export const setHeader = (ctx: RequestCtx, key: string, value: string) => {
     ctx.response.headers[key] = value;
 };
 
-export const setStatus = (ctx: AppContext, status: number) => {
+export const setStatus = (ctx: RequestCtx, status: number) => {
     ctx.response.status = status;
     ctx.response.ready = true;
 };
 
-export const pathPart = (ctx: AppContext, index: number): string => {
+export const pathPart = (ctx: RequestCtx, index: number): string => {
     index++;
     let request = ctx.request;
     if (!request) {
@@ -29,7 +30,7 @@ export const pathPart = (ctx: AppContext, index: number): string => {
     return parts[index];
 };
 
-export const pathParam = (ctx: AppContext, key: string): string => {
+export const pathParam = (ctx: RequestCtx, key: string): string => {
     let request = ctx.request;
     if (!request) {
         return "";
@@ -43,7 +44,7 @@ export const pathParam = (ctx: AppContext, key: string): string => {
     return param;
 };
 
-export const getCookie = (ctx: AppContext, key: string): Cookie | null => {
+export const getCookie = (ctx: RequestCtx, key: string): Cookie | null => {
     let request = ctx.request;
     if (!request) {
         return null;
@@ -62,7 +63,7 @@ export const getCookie = (ctx: AppContext, key: string): Cookie | null => {
     return null;
 };
 
-export const setCookie = (ctx: AppContext, cookie: Cookie) => {
+export const setCookie = (ctx: RequestCtx, cookie: Cookie) => {
     let response = ctx.response;
     let cookieString = `${cookie.key}=${cookie.value}`;
 
@@ -92,3 +93,7 @@ export const setCookie = (ctx: AppContext, cookie: Cookie) => {
 
     response.headers['Set-Cookie'] = cookieString;
 };
+
+export const comp = (someComponent: JSX.Element): string => {
+    return renderToString(someComponent);
+}

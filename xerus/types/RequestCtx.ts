@@ -1,7 +1,7 @@
 import type { MockResponse } from "./MockResponse"
 
 
-export type AppContext = {
+export type RequestCtx = {
     request: Request | null,
     response: MockResponse
 }
