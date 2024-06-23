@@ -156,7 +156,15 @@ apiRouter.get("/users", async (ctx: XerusCtx) => {
 })
 ```
 
-at `localhost:8080` you'll see:
+at `localhost:8080/api/users` you'll see:
 ```json
 [{"name":"Alice"},{"name":"Bob"}]
 ```
+
+Take note, we do:
+```ts
+apiRouter.get('/users' ....
+```
+instead of:
+```ts
+apiRouter.get('/api/users' ......
