@@ -147,6 +147,10 @@ type User = {
     name: string
 }
 
+apiRouter.use(async (ctx: XerusCtx) => {
+    console.log('i only print on routes prefixed with "/api"')
+})
+
 apiRouter.get("/users", async (ctx: XerusCtx) => {
     const users: User[] = [
         { name: "Alice" },
