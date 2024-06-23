@@ -33,9 +33,9 @@ Xerus is built off of a few core types and classes. Here are their definitions a
 
 ## Xerus
 
-`Xerus` is a class which serves as a container for all `Router` types in your app. `Router`'s are stashed inside an object at, `Xerus.routers`.
+`Xerus` is a class which serves as a container for all `Router`'s in your app. `Router`'s are stashed inside an object at, `this.routers`.
 
-When creating a new instance of Xerus, a `Router`:
+When creating a new instance of Xerus, a `Router` is mapped to the key `'/'` at `this.routers`:
 ```ts
 export class Xerus {
 
