@@ -11,7 +11,9 @@ export class Xerus {
 
     constructor() {
         this.middleware = []
-        this.routers = {"/": new Router('/')}
+        this.routers = {
+            "/": new Router('/')
+        }
         this.appContext = async (): Promise<AppContext> => {
             return {
                 request: null,

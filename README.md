@@ -33,29 +33,32 @@ Xerus is built off of a few core types and classes. Here are their definitions a
 
 ## Xerus
 
-Xerus is a class which serves as a container for all routers.
+`Xerus` is a class which serves as a container for all `Router` types in your app. `Router`'s are stashed inside an object at, `Xerus.routers`.
 
-When creating a new instance of Xerus, a generic router for all routes is created within:
+When creating a new instance of Xerus, a `Router`:
 ```ts
 export class Xerus {
 
     routers: {[key: string]: Router}
-    middleware: MiddlewareFunc[]
-    appContext: () => Promise<AppContext>
+    // ...other properties
 
     constructor() {
-        this.middleware = []
-        this.routers = {"/": new Router('/')}
-        this.appContext = async (): Promise<AppContext> => {
-            return {
-                request: null,
-                response: {
-                    status: 200,
-                    body: '',
-                    headers: {},
-                    ready: false
-                }
-            }
+        this.routers = {
+            "/": new Router('/') // generic router created
         }
+        // ...other Xerus init processes
     }
+
+    //...Xerus methods
+```
+
+You can use the generic router
+Let's take a look at `Xerus.get`:
+```ts
+export class Xerus {
+    //...
+    get(path: string, handler: HandlerFunc) {
+        this.routers['/'].get(path, handler)
+    }
+}
 ```
