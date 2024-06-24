@@ -16,7 +16,7 @@ And replace your `index.ts` with an `index.tsx`:
 mv index.ts index.tsx
 ```
 
-Then throw this in the `scripts` section of your package.json for quick hot-reload:
+Then throw this in the `scripts` section of your `package.json` for quick hot-reload:
 ```json
 "scripts": {
     "dev": "bun --hot run ./index.tsx" // don't forget, we are using .tsx, not .ts
@@ -66,6 +66,11 @@ app.get("/api/users", async (ctx: XerusCtx) => {
 
 app.run(8080)
 ```
+To serve on `localhost:8080`:
+```bash
+bun run dev
+```
+
 
 ## Features
 
