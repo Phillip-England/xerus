@@ -1,22 +1,35 @@
 {
   "name": "xerus",
   "version": "0.0.1",
-  "devDependencies": {
-    "@types/bun": "latest"
+  "author": {
+    "name": "Phillip England",
+    "email": "phillip.mark.england@gmail.com"
   },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phillip-england/xerus"
   },
-  "license": "MIT",
-  "scripts": {
-    "dev": "bun --hot run ./index.tsx"
-  },
-  "type": "module",
-  "types": "src/index.ts",
+  "main": "dist/export.js",
+  "module": "dist/export.js",
   "dependencies": {
     "react": "^18.3.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "react-dom": "^18.3.1"
-  }
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.2"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun --hot run ./index.tsx",
+    "build": "tsc",
+    "prepublishOnly": "bun run build"
+  },
+  "type": "module",
+  "types": "dist/export.d.ts"
 }

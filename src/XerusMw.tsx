@@ -6,7 +6,7 @@ import type { XerusCtx } from "./XerusCtx";
 export class XerusMw {
 
     static async serveStaticFiles(ctx: XerusCtx) {
-        let request = ctx.req;
+        let request = ctx.xerusReq?.req;
         if (!request) {
             return;
         }
@@ -15,14 +15,14 @@ export class XerusMw {
             let filePath: string = path.replace('/static', 'static');
             let file: BunFile = await Bun.file(filePath);
             if (await file.exists()) {
-                ctx.res.setHeader('Content-Type', file.type);
-                ctx.res.setBody(file)
+                ctx.setHeader('Content-Type', file.type);
+                ctx.setBody(file)
             }
         }
     }
 
     static async serveFavicon(ctx: XerusCtx) {
-        let request = ctx.req;
+        let request = ctx.xerusReq?.req;
         if (!request) {
             return;
         }
@@ -31,8 +31,8 @@ export class XerusMw {
             let filePath: string = path.replace('/favicon.ico', 'favicon.ico');
             let file: BunFile = await Bun.file(filePath);
             if (await file.exists()) {
-                ctx.res.setHeader('Content-Type', file.type);
-                ctx.res.setBody(file)
+                ctx.setHeader('Content-Type', file.type);
+                ctx.setBody(file)
             }
         }
     }

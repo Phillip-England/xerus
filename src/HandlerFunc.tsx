@@ -1,4 +1,4 @@
-import type { RequestCtx } from "./XerusCtx";
+import type { XerusCtx } from "./XerusCtx";
 
 
-export type HandlerFunc = (ctx: RequestCtx) => Promise<void>
+export type HandlerFunc = (ctx: XerusCtx) => Promise<void>

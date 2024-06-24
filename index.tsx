@@ -1,7 +1,7 @@
-import { renderToString } from "react-dom/server"
 import { Xerus } from "./src/Xerus"
 import { XerusMw } from "./src/XerusMw"
 import type { XerusCtx } from "./src/XerusCtx"
+import React from "react"
 
 const app = new Xerus()
 
