@@ -17,6 +17,8 @@ export class Router {
     updateDynamicRoutes: { [key: string]: Route };
     deleteRoutes: { [key: string]: Route };
     deleteDynamicRoutes: { [key: string]: Route };
+    putRoutes: { [key: string]: Route };
+    putDynamicRoutes: { [key: string]: Route };
 
     constructor(prefix: string) {
         this.prefix = prefix;
@@ -31,6 +33,8 @@ export class Router {
         this.updateDynamicRoutes = {};
         this.deleteRoutes = {};
         this.deleteDynamicRoutes = {};
+        this.putRoutes = {};
+        this.putDynamicRoutes = {};
     }
 
     use(middleware: MiddlewareFunc) {
@@ -63,6 +67,10 @@ export class Router {
 
     update(path: string, handler: HandlerFunc) {
         this.addRoute(this.updateRoutes, this.updateDynamicRoutes, path, 'UPDATE', handler);
+    }
+
+    put(path: string, handler: HandlerFunc) {
+        this.addRoute(this.putRoutes, this.putDynamicRoutes, path, 'PUT', handler);
     }
 
     private findRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, searchPath: string): Route | null {

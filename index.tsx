@@ -1,43 +1,55 @@
 import { Xerus } from "./src/Xerus"
 import { XerusMw } from "./src/XerusMw"
-import type { XerusCtx } from "./src/XerusCtx"
-import React from "react"
+import { ServiceFunc } from "./src/ServiceFunc"
+import { readdir } from 'node:fs/promises'
+import { Dirent } from 'node:fs'
+import { HandleFile } from "./src/HandleFile"
 
 const app = new Xerus()
 
 app.global(XerusMw.serveStaticFiles)
 app.global(XerusMw.serveFavicon)
 
-const SomeComponent = (props: {
-    text: string
-}) => {
-    return (
-        <>  
-            <h1>{props.text}</h1>
-            <a href='/'>Home</a>
-            <a href='/about'>About</a>
-        </>
-    )
+const fileBasedRoutingService: ServiceFunc = async (app: Xerus) => {
+    try {
+        const systemFiles: Dirent[] = await readdir('./app', {
+            withFileTypes: true,
+            recursive: true,
+        })
+        const files: HandleFile[] = []
+        for (const file of systemFiles) {
+            if (file.isFile()) {
+                files.push(new HandleFile(file))
+            }
+        }
+        for (const file of files) {
+            const module = await import(file.absolutePath)
+            if (module.Handle) {
+                const handle = module.Handle
+                if (handle.get) {
+                    app.get(file.endpointPath, handle.get)
+                }
+                if (handle.post) {
+                    app.post(file.endpointPath, handle.post)
+                }
+                if (handle.put) {
+                    app.put(file.endpointPath, handle.put)
+                }
+                if (handle.delete) {
+                    app.delete(file.endpointPath, handle.delete)
+                }
+            }
+        }
+    } catch (e) {
+        console.log('./app directory does not exist')
+        process.exit(1)
+    }
 }
 
-app.get("/", async (ctx: XerusCtx) => {
-	ctx.jsx(200, <SomeComponent text="/" />)
-})
+await fileBasedRoutingService(app)
 
-app.get("/about", async (ctx: XerusCtx) => {
-	ctx.jsx(200, <SomeComponent text='/about' />)
-})
 
-type User = {
-    name: string
-}
 
-app.get("/api/users", async (ctx: XerusCtx) => {
-    const users: User[] = [
-        { name: "Alice" },
-        { name: "Bob" }
-    ]
-    ctx.json(200, users)
-})
+
 
 app.run(8080)

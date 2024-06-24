@@ -42,6 +42,10 @@ export class Xerus {
         this.routers['/'].post(path, handler)
     }
 
+    put(path: string, handler: HandlerFunc) {
+        this.routers['/'].put(path, handler)
+    }
+
     patch(path: string, handler: HandlerFunc) {
         this.routers['/'].patch(path, handler)
     }
@@ -144,5 +148,6 @@ export class Xerus {
             return new Response('Not Found', {status: 404})
         }
     }
+
 
 }
