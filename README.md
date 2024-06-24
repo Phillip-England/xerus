@@ -6,13 +6,22 @@ An Express-like framework for Bun.
 
 With bun 1.1.12 or greater installed, run:
 ```bash
-bun create phillip-england/xerus <app-name>
-cd <app-name>
-bun install
-bun run dev
+mkdir <app-name>
+bun init
+bun install xerus
 ```
 
-visit `localhost:8080/`
+And replace your `index.ts` with an `index.tsx`:
+```bash
+mv index.ts index.tsx
+```
+
+Then throw this in the `scripts` section of your package.json for quick hot-reload:
+```json
+"scripts": {
+    "dev": "bun --hot run ./index.tsx" // don't forget, we are using .tsx, not .ts
+},
+```
 
 ## Quickstart
 
@@ -66,7 +75,7 @@ A simple Hello, World application:
 ```ts
 let app = new Xerus();
 
-app.get('/', async (ctx: RequestCtx) => {
+app.get('/', async (ctx: XerusCtx) => {
     ctx.html(200, "<h1>Hello, World!</h1>")
 })
 
@@ -86,11 +95,11 @@ Maybe we want all routes to say hi? Boom:
 ```ts
 let app = new Xerus();
 
-app.global(async (ctx: RequestCtx) => {
+app.global(async (ctx: XerusCtx) => {
     console.log('hi')
 })
 
-app.get('/', async (ctx: RequestCtx) => {
+app.get('/', async (ctx: XerusCtx) => {
     ctx.html(200, "<h1>Hello, World!</h1>")
 })
 
