@@ -7,6 +7,7 @@ An Express-like framework for Bun.
 With bun 1.1.12 or greater installed, run:
 ```bash
 mkdir <app-name>
+cd <app-name>
 bun init
 bun install xerus
 ```
