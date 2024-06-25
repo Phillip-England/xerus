@@ -1,8 +1,6 @@
-import { XerusCtx } from "./XerusCtx";
 import type { HandlerFunc } from "./HandlerFunc";
-import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Router } from "./Router";
-import type { XerusRequest } from "./XerusRequest";
+import { XerusCtx, type MiddlewareFunc, type PluginFunc, type XerusRequest } from "./export";
 
 export class Xerus {
 
@@ -24,6 +22,10 @@ export class Xerus {
         this.xerusCtx = async (request: Request): Promise<XerusCtx> => {
             return new XerusCtx(request)
         }
+    }
+
+    plugin(plugin: PluginFunc) {
+        plugin(this)
     }
 
     global(middleware: MiddlewareFunc) {
@@ -56,6 +58,10 @@ export class Xerus {
 
     delete(path: string, handler: HandlerFunc) {
         this.routers['/'].delete(path, handler)
+    }
+
+    option(path: string, handler: HandlerFunc) {
+        this.routers['/'].option(path, handler)
     }
 
     pullRouter(prefix: string): Router {

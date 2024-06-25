@@ -17,6 +17,8 @@ export class Router {
     updateDynamicRoutes: { [key: string]: Route };
     deleteRoutes: { [key: string]: Route };
     deleteDynamicRoutes: { [key: string]: Route };
+    optionRoutes: { [key: string]: Route };
+    optionDynamicRoutes: { [key: string]: Route };
     putRoutes: { [key: string]: Route };
     putDynamicRoutes: { [key: string]: Route };
 
@@ -33,6 +35,8 @@ export class Router {
         this.updateDynamicRoutes = {};
         this.deleteRoutes = {};
         this.deleteDynamicRoutes = {};
+        this.optionRoutes = {};
+        this.optionDynamicRoutes = {};
         this.putRoutes = {};
         this.putDynamicRoutes = {};
     }
@@ -71,6 +75,10 @@ export class Router {
 
     put(path: string, handler: HandlerFunc) {
         this.addRoute(this.putRoutes, this.putDynamicRoutes, path, 'PUT', handler);
+    }
+
+    option(path: string, handler: HandlerFunc) {
+        this.addRoute(this.optionRoutes, this.optionDynamicRoutes, path, 'OPTION', handler);
     }
 
     private findRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, searchPath: string): Route | null {

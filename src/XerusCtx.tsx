@@ -1,7 +1,8 @@
-import type { Cookie } from "./Cookie";
+
+import { renderToString } from "react-dom/server"
 import { XerusRequest } from "./XerusRequest";
 import { XerusResponse } from "./XerusResponse";
-import { renderToString } from "react-dom/server"
+import type { Cookie } from "./Cookie";
 
 
 export class XerusCtx {

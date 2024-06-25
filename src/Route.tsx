@@ -1,4 +1,4 @@
-import type { HandlerFunc } from "./HandlerFunc";
+import type { HandlerFunc } from "./export";
 
 export class Route {
     prefix: string;

@@ -1,5 +1,5 @@
 import React from "react";
-import { XerusCtx } from "../src/XerusCtx";
+import { XerusCtx } from "../../src/export";
 
 
 

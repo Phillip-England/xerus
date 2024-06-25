@@ -1,4 +1,4 @@
-import type { Cookie } from "./Cookie";
+import type { Cookie } from "./export";
 
 
 export class XerusRequest {

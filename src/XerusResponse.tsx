@@ -1,5 +1,4 @@
 import type { Cookie } from "./Cookie";
-import type { XerusCtx } from "./XerusCtx";
 
 export class XerusResponse {
     status: number;
