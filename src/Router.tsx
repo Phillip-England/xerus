@@ -2,8 +2,6 @@ import type { HandlerFunc } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Route } from "./Route";
 
-
-
 export class Router {
     prefix: string;
     middleware: MiddlewareFunc[];
@@ -47,8 +45,14 @@ export class Router {
 
     private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: HandlerFunc) {
         if (path.includes(':')) {
+            if (dynamicRouteCollection[path]) {
+                throw new Error(`[Router] Error: ${method} dynamic route ${path} already exists.`);
+            }
             dynamicRouteCollection[path] = new Route(this.prefix, path, method, handler);
         } else {
+            if (routeCollection[path]) {
+                throw new Error(`[Router] Error: ${method} route ${path} already exists.`);
+            }
             routeCollection[path] = new Route(this.prefix, path, method, handler);
         }
     }
@@ -111,21 +115,26 @@ export class Router {
         } else if (path.startsWith(prefix) && this.prefix != "/") {
             searchPath = path.slice(prefix.length);
         } else {
-            searchPath = path
+            searchPath = path;
         }
+        
         switch (method) {
             case 'GET':
-                return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath);
+                return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath)
             case 'POST':
-                return this.findRoute(this.postRoutes, this.postDynamicRoutes, searchPath);
+                return this.findRoute(this.postRoutes, this.postDynamicRoutes, searchPath)
             case 'PATCH':
-                return this.findRoute(this.patchRoutes, this.patchDynamicRoutes, searchPath);
+                return this.findRoute(this.patchRoutes, this.patchDynamicRoutes, searchPath)
             case 'DELETE':
-                return this.findRoute(this.deleteRoutes, this.deleteDynamicRoutes, searchPath);
+                return this.findRoute(this.deleteRoutes, this.deleteDynamicRoutes, searchPath)
             case 'UPDATE':
-                return this.findRoute(this.updateRoutes, this.updateDynamicRoutes, searchPath);
+                return this.findRoute(this.updateRoutes, this.updateDynamicRoutes, searchPath)
+            case 'PUT':
+                return this.findRoute(this.putRoutes, this.putDynamicRoutes, searchPath)
+            case 'OPTION':
+                return this.findRoute(this.optionRoutes, this.optionDynamicRoutes, searchPath)
             default:
-                return null;
+                return null
         }
     }
 }

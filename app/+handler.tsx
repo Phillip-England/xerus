@@ -1,6 +1,6 @@
 import React from "react";
 import { XerusCtx } from "../src/export";
-import { HandlerFile } from "../plugins/FileBasedRouter";
+import { HandlerFile } from "../src/FileBasedRouter";
 
 
 const handler = new HandlerFile();
