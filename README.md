@@ -36,7 +36,7 @@ app.global(XerusMw.serveFavicon)
 const router = new FileBasedRouter(app)
 await router.mount('./app')
 
-app.run(8080)
+await app.run(8080)
 ```
 
 `./app/+handler.tsx`
@@ -85,11 +85,11 @@ app.get('/', async (ctx: XerusCtx) => {
     ctx.jsx(200, <TitleText title='Page' text='home'/>)
 })
 
-app.run(8080)
+await app.run(8080)
 ```
 
 ### Middleware
-Maybe we want all routes to say hi? 💥:
+Maybe we want all routes to say hi? boom💥:
 
 ```ts
 let app = new Xerus();
@@ -102,36 +102,11 @@ app.get('/', async (ctx: XerusCtx) => {
     ctx.html(200, "<h1>Hello, World!</h1>")
 })
 
-app.run(8080)
-```
-
-### JSX
-Strings are lame:
-
-```tsx
-const app = new Xerus()
-
-const SomeComponent = (props: {
-    text: string
-}) => {
-    return (
-        <>  
-            <h1>{props.text}</h1>
-            <a href='/'>Home</a>
-            <a href='/about'>About</a>
-        </>
-    )
-}
-
-app.get("/", async (ctx: XerusCtx) => {
-	ctx.html(200, renderToString(<SomeComponent text="Home" />))
-})
-
-app.run(8080)
+await app.run(8080)
 ```
 
 ### Static Files / Favicon
-Serving static files and `/favicon.ico` is easy:
+To serve static files from `./static` and favicon from `./favicon.ico`:
 
 ```ts
 const app = new Xerus()
@@ -140,15 +115,12 @@ app.global(XerusMw.serveStaticFiles)
 app.global(XerusMw.serveFavicon)
 ```
 
-Now all files located in `/static` will be available on the server.
-
 ### Routers
 What if you want to apply a middleware to only *certain* routes? That's what `Router` is for.
 
 Spawn a `Router`:
 ```ts
 const app = new Xerus()
-
 let apiRouter = app.spawnRouter('/api')
 
 type User = {
@@ -156,30 +128,46 @@ type User = {
 }
 
 apiRouter.use(async (ctx: XerusCtx) => {
-    console.log('I only print on routes prefixed with "/api"')
-})
-
-apiRouter.get("/users", async (ctx: XerusCtx) => {
-    const users: User[] = [
+    console.log('stash data inside ctx.data within middleware')
+    ctx.data.users = [
         { name: "Alice" },
         { name: "Bob" }
     ]
-    ctx.json(200, users)
 })
+
+apiRouter.get("/users", async (ctx: XerusCtx) => {
+    console.log('use ctx.data.users within handler')
+    ctx.json(200, ctx.data.users as User[])
+})
+
+await app.run(8080)
 ```
 
-at `localhost:8080/api/users` you'll see:
-```json
-[{"name":"Alice"},{"name":"Bob"}]
+Test using:
+```bash
+curl -X POST localhost:8080/api/users
 ```
 
-Take note, we do:
-```ts
-apiRouter.get('/users' ....
-```
-instead of:
-```ts
-apiRouter.get('/api/users' ......
+### App-Level Middleware
+You may find yourself in a situation where you need a middleware to only apply on routes at the app level, but not on *ALL* routes. In this case, you can use `app.use` instead of `app.global`:
+
+```tsx
+const app = new Xerus()
+const adminRoute = app.spawnRoute('/')
+
+app.use(async (ctx: XerusCtx) => {
+    console.log('I only print on routes added to `app`')
+})
+
+app.get('/', async (ctx: XerusCtx) => {
+    ctx.html(200, "<h1>Hello, World!</h1>")
+})
+
+adminRouter.get("/", async (ctx: XerusCtx) => {
+    ctx.html(200, "<h1>Hello, Admin!</h1>")
+})
+
+await app.run(8080)
 ```
 
 ### Dynamic Paths
@@ -200,10 +188,10 @@ const SomeComponent = (props: {
 
 app.get("/users/:id", async (ctx: XerusCtx) => {
     let id = ctx.pathPart(1)
-	ctx.html(200, renderToString(<SomeComponent text={id} />))
+	ctx.jsx(200, <SomeComponent text={id} />)
 })
 
-app.run(8080)
+await app.run(8080)
 ```
 
 `ctx.pathPart` enables you to access pieces of the path as if they were parts of an array.
@@ -227,8 +215,8 @@ const SomeComponent = (props: {
 
 app.get("/", async (ctx: XerusCtx) => {
     let someParam = ctx.pathParam('someParam') // returns "" if no param exists
-	ctx.html(200, renderToString(<SomeComponent text="Home" />))
+	ctx.jsx(200, <SomeComponent text="Home" />)
 })
 
-app.run(8080)
+await app.run(8080)
 ```

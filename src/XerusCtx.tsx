@@ -8,10 +8,12 @@ import type { Cookie } from "./Cookie";
 export class XerusCtx {
     xerusReq: XerusRequest | null;
     xerusRes: XerusResponse;
+    data: {[key: string]: any} = {}
 
     constructor(request: Request) {
         this.xerusReq = new XerusRequest(request);
         this.xerusRes = new XerusResponse();
+        this.data = {}
     }
 
     getCookie(key: string): Cookie | null {
