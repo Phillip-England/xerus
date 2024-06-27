@@ -43,52 +43,45 @@ export class Xerus {
     }
 
     get(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].getRoutes[path]) {
-            throw new Error(`[Xerus] Error: GET route ${path} already exists.`)
+        if (!this.routers['/'].getRoutes[path]) {
+            this.routers['/'].get(path, handler)
         }
-        this.routers['/'].get(path, handler)
     }
 
     post(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].postRoutes[path]) {
-            throw new Error(`[Xerus] Error: POST route ${path} already exists.`)
+        if (!this.routers['/'].postRoutes[path]) {
+            this.routers['/'].post(path, handler)
         }
-        this.routers['/'].post(path, handler)
     }
 
     put(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].putRoutes[path]) {
-            throw new Error(`[Xerus] Error: PUT route ${path} already exists.`)
+        if (!this.routers['/'].putRoutes[path]) {
+            this.routers['/'].put(path, handler)
         }
-        this.routers['/'].put(path, handler)
     }
 
     patch(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].patchRoutes[path]) {
-            throw new Error(`[Xerus] Error: PATCH route ${path} already exists.`)
+        if (!this.routers['/'].patchRoutes[path]) {
+            this.routers['/'].patch(path, handler)
         }
-        this.routers['/'].patch(path, handler)
     }
 
     update(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].updateRoutes[path]) {
-            throw new Error(`[Xerus] Error: UPDATE route ${path} already exists.`)
+        if (!this.routers['/'].updateRoutes[path]) {
+            this.routers['/'].update(path, handler)
         }
-        this.routers['/'].update(path, handler)
     }
 
     delete(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].deleteRoutes[path]) {
-            throw new Error(`[Xerus] Error: DELETE route ${path} already exists.`)
+        if (!this.routers['/'].deleteRoutes[path]) {
+            this.routers['/'].delete(path, handler)
         }
-        this.routers['/'].delete(path, handler)
     }
 
     option(path: string, handler: HandlerFunc) {
-        if (this.routers['/'].optionRoutes[path]) {
-            throw new Error(`[Xerus] Error: OPTION route ${path} already exists.`)
+        if (!this.routers['/'].optionRoutes[path]) {
+            this.routers['/'].option(path, handler)
         }
-        this.routers['/'].option(path, handler)
     }
 
     pullRouter(prefix: string): Router {

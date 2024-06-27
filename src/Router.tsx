@@ -44,15 +44,9 @@ export class Router {
     }
 
     private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: HandlerFunc) {
-        if (path.includes(':')) {
-            if (dynamicRouteCollection[path]) {
-                throw new Error(`[Router] Error: ${method} dynamic route ${path} already exists.`);
-            }
+        if (path.includes(':') && !dynamicRouteCollection[path]) {
             dynamicRouteCollection[path] = new Route(this.prefix, path, method, handler);
-        } else {
-            if (routeCollection[path]) {
-                throw new Error(`[Router] Error: ${method} route ${path} already exists.`);
-            }
+        } else if (!routeCollection[path]) {
             routeCollection[path] = new Route(this.prefix, path, method, handler);
         }
     }
