@@ -5,6 +5,7 @@ import { Route } from "./Route";
 export class Router {
     prefix: string;
     middleware: MiddlewareFunc[];
+    routes: { [key: string]: Route };
     getRoutes: { [key: string]: Route };
     getDynamicRoutes: { [key: string]: Route };
     postRoutes: { [key: string]: Route };
@@ -23,6 +24,7 @@ export class Router {
     constructor(prefix: string) {
         this.prefix = prefix;
         this.middleware = [];
+        this.routes = {};
         this.getRoutes = {};
         this.getDynamicRoutes = {};
         this.postRoutes = {};
@@ -46,8 +48,10 @@ export class Router {
     private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: HandlerFunc) {
         if (path.includes(':') && !dynamicRouteCollection[path]) {
             dynamicRouteCollection[path] = new Route(this.prefix, path, method, handler);
+            this.routes[path] = dynamicRouteCollection[path];
         } else if (!routeCollection[path]) {
             routeCollection[path] = new Route(this.prefix, path, method, handler);
+            this.routes[path] = routeCollection[path];
         } else {
             throw new Error(`Route already exists for ${method} ${path}`);
         }
@@ -104,16 +108,18 @@ export class Router {
         return route;
     }
 
-    route(prefix: string, path: string, method: string): Route | null {
-        let searchPath: string;
+    getSearchPath(prefix: string, path: string): string {
         if (prefix === this.prefix && this.prefix != "/") {
-            searchPath = "/";
+            return "/";
         } else if (path.startsWith(prefix) && this.prefix != "/") {
-            searchPath = path.slice(prefix.length);
+            return path.slice(prefix.length);
         } else {
-            searchPath = path;
+            return path;
         }
-        
+    }
+
+    route(prefix: string, path: string, method: string): Route | null {
+        let searchPath = this.getSearchPath(prefix, path);
         switch (method) {
             case 'GET':
                 return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath)

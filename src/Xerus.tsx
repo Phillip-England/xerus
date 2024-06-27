@@ -143,10 +143,58 @@ export class Xerus {
         await sleep(100)
     }
 
+    async requestIs405(router: Router, method: string, path: string): Promise<boolean> {
+        if (!router.routes[path]) {
+            return false
+        }
+        switch (method) {
+            case "GET":
+                if (router.getRoutes[path] || router.getDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "POST":
+                if (router.postRoutes[path] || router.postDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "PUT":
+                if (router.putRoutes[path] || router.putDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "PATCH":
+                if (router.patchRoutes[path] || router.patchDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "UPDATE":
+                if (router.updateRoutes[path] || router.updateDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "DELETE":
+                if (router.deleteRoutes[path] || router.deleteDynamicRoutes[path]) {
+                    return false
+                }
+                break
+            case "OPTION":
+                if (router.optionRoutes[path] || router.optionDynamicRoutes[path]) {
+                    return false
+                }
+                break
+        }
+        return true
+    }
+
     async handleRequest(request: Request, path: string): Promise<Response> {
         const method = request.method
         const router = this.pullRouter(path)
         const route = router.route(router.prefix, path, method)
+        let is405 = await this.requestIs405(router, method, router.getSearchPath(router.prefix, path))
+        if (is405) {
+            return new Response("Method Not Allowed", { status: 405 })
+        }
         let ctx = await this.xerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
         xerusReq.req = request
@@ -182,7 +230,7 @@ export class Xerus {
         if (ctx.xerusRes.ready) {
             return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
         } else {
-            return new Response("Xerus: failed to return a response from middleware or handler", { status: 500 })
+            return new Response("Xerus: failed to return a response from Xerus.notFoundHandler", { status: 500 })
         }
     }
 

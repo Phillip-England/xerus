@@ -131,12 +131,16 @@ test('🔖routing - GET custom 404 can be implemented', async () => {
     await app.stop();
 })
 
-// test('🔖routing - DELETE 405 method not allowed works', async () => {
-//     const app = getApp()
-//     const res = await client.delete("/");
-//     expect(res.status).toBe(405);
-//     app.stop()
-// })
+test('🔖routing - DELETE 405 method not allowed works', async () => {
+    const app = getApp()
+    app.get("/", async (ctx: XerusCtx) => {
+        ctx.json(200, JSON.stringify({message: "hello world"}));
+    });
+    await app.run(8080)
+    const res = await client.delete("/");
+    expect(res.status).toBe(405);
+    await app.stop()
+})
 
 
 
