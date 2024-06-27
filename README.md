@@ -1,6 +1,10 @@
 # Xerus
 
-An Express-like framework for Bun.
+A backend framework for Bun. Features include:
+1. Manual Routing
+2. File-Based Routing
+3. JSX Support
+4. Easy Query Params / Dynamic Paths
 
 ## Installation
 
