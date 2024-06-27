@@ -60,6 +60,10 @@ To serve on `localhost:8080`:
 bun run dev
 ```
 
+To test the POST route:
+```bash
+curl -X POST localhost:8080
+```
 
 ## Features
 
