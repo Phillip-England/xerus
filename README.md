@@ -6,8 +6,8 @@ An Express-like framework for Bun.
 
 With bun 1.1.12 or greater installed, run:
 ```bash
-mkdir <app-name>
-cd <app-name>
+mkdir myapp
+cd myapp
 bun init
 bun install xerus
 ```
@@ -50,7 +50,6 @@ handler.get = async (ctx: XerusCtx) => {
 handler.post = async (ctx: XerusCtx) => {
     ctx.json(200, {message: "hello world"})
 }
-
 
 export default handler;
 ```
