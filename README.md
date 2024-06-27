@@ -1,10 +1,6 @@
 # Xerus
 
-A backend framework for Bun. Features include:
-1. Manual Routing
-2. File-Based Routing
-3. JSX Support
-4. Easy Query Params / Dynamic Paths
+A backend framework for Bun focused on ease of use and productivity. Xerus comes with JSX support and file based routing out of the box.
 
 ## Installation
 
@@ -21,10 +17,10 @@ And replace your `index.ts` with an `index.tsx`:
 mv index.ts index.tsx
 ```
 
-Then throw this in the `scripts` section of your `package.json` for quick hot-reload:
+For hot-reload, place this in the `scripts` section of your `package.json`:
 ```json
 "scripts": {
-    "dev": "bun --hot run ./index.tsx" // don't forget, we are using .tsx, not .ts
+    "dev": "bun --hot run ./index.tsx"
 },
 ```
 
@@ -58,7 +54,7 @@ handler.post = async (ctx: XerusCtx) => {
 export default handler;
 ```
 
-To serve on `localhost:8080`:
+To serve:
 ```bash
 bun run dev
 ```
@@ -70,8 +66,8 @@ curl -X POST localhost:8080
 
 ## Features
 
-### Simple Routing
-A simple Hello, World application:
+### Manual Routing
+A Hello, World application:
 
 ```ts
 let app = new Xerus();
@@ -96,8 +92,6 @@ Then serve using:
 ```bash
 bun run dev
 ```
-
-now visit `localhost:8080/`
 
 ### Middleware
 Maybe we want all routes to say hi? Boom:

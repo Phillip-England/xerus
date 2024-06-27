@@ -144,6 +144,7 @@ export class Xerus {
                 return response
             }
         }
+        console.log("🚀 Xerus is running on port", port)
         this.server = Bun.serve(options);
     }
 
