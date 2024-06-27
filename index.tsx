@@ -10,4 +10,4 @@ app.global(XerusMw.serveFavicon)
 const router = new FileBasedRouter(app)
 await router.mount('./app')
 
-app.run(8080)
+await app.run(8080)

@@ -9,5 +9,9 @@ handler.get = async (ctx: XerusCtx) => {
     ctx.jsx(200, <h1>hello world</h1>)
 }
 
+handler.post = async (ctx: XerusCtx) => {
+    ctx.json(200, {message: "hello world"})
+}
+
 
 export default handler;

@@ -1,4 +1,4 @@
-import { sleep } from "bun";
+import { $, sleep } from "bun";
 import type { HandlerFunc } from "./HandlerFunc";
 import { Router } from "./Router";
 import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
@@ -6,6 +6,7 @@ import { Result } from "./Result";
 
 export class Xerus {
     routers: { [key: string]: Router }
+    routes: { [key: string]: HandlerFunc }
     middleware: MiddlewareFunc[]
     globalMiddleware: MiddlewareFunc[]
     xerusCtx: (request: Request) => Promise<XerusCtx>
@@ -21,6 +22,7 @@ export class Xerus {
         }
         this.noLogPathPrefixes = ["/favicon.ico", "/static"]
         this.middleware = []
+        this.routes = {}
         this.globalMiddleware = []
         this.routers = {
             "/": new Router('/')
@@ -44,45 +46,56 @@ export class Xerus {
         this.middleware.push(middleware)
     }
 
+    getSearchPath(path: string): string {
+        return this.routers['/'].getSearchPath('/', path)
+    }
+
     get(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].getRoutes[path]) {
             this.routers['/'].get(path, handler)
+            this.routes[path] = handler
         }
     }
 
     post(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].postRoutes[path]) {
             this.routers['/'].post(path, handler)
+            this.routes[path] = handler
         }
     }
 
     put(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].putRoutes[path]) {
             this.routers['/'].put(path, handler)
+            this.routes[path] = handler
         }
     }
 
     patch(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].patchRoutes[path]) {
             this.routers['/'].patch(path, handler)
+            this.routes[path] = handler
         }
     }
 
     update(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].updateRoutes[path]) {
             this.routers['/'].update(path, handler)
+            this.routes[path] = handler
         }
     }
 
     delete(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].deleteRoutes[path]) {
             this.routers['/'].delete(path, handler)
+            this.routes[path] = handler
         }
     }
 
     option(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].optionRoutes[path]) {
             this.routers['/'].option(path, handler)
+            this.routes[path] = handler
         }
     }
 
@@ -109,8 +122,7 @@ export class Xerus {
         }
     }
 
-    run(port: number) {
-        // Stop the server if it's already running
+    async run(port: number) {
         if (this.server) {
             this.server.stop();
         }

@@ -26,47 +26,35 @@ Then throw this in the `scripts` section of your `package.json` for quick hot-re
 
 ## Quickstart
 
-Hello world example:
-```ts
+`./index.tsx`
+```tsx
 const app = new Xerus()
 
 app.global(XerusMw.serveStaticFiles)
 app.global(XerusMw.serveFavicon)
 
-const SomeComponent = (props: {
-    text: string
-}) => {
-    return (
-        <>  
-            <h1>{props.text}</h1>
-            <a href='/'>Home</a>
-            <a href='/about'>About</a>
-        </>
-    )
-}
-
-app.get("/", async (ctx: XerusCtx) => {
-	ctx.html(200, renderToString(<SomeComponent text="/" />))
-})
-
-app.get("/about", async (ctx: XerusCtx) => {
-	ctx.html(200, renderToString(<SomeComponent text='/about' />))
-})
-
-type User = {
-    name: string
-}
-
-app.get("/api/users", async (ctx: XerusCtx) => {
-    const users: User[] = [
-        { name: "Alice" },
-        { name: "Bob" }
-    ]
-    ctx.json(200, users)
-})
+const router = new FileBasedRouter(app)
+await router.mount('./app')
 
 app.run(8080)
 ```
+
+`./app/+handler.tsx`
+```tsx
+const handler = new HandlerFile();
+
+handler.get = async (ctx: XerusCtx) => {
+    ctx.jsx(200, <h1>hello world</h1>)
+}
+
+handler.post = async (ctx: XerusCtx) => {
+    ctx.json(200, {message: "hello world"})
+}
+
+
+export default handler;
+```
+
 To serve on `localhost:8080`:
 ```bash
 bun run dev
@@ -81,8 +69,17 @@ A simple Hello, World application:
 ```ts
 let app = new Xerus();
 
+const TitleText = (props: {title: string, text: string}): JSX.Element => {
+    return (
+        <div>
+            <h1>{title}</h1>
+            <p>{text}</p>
+        </div>
+    )
+}
+
 app.get('/', async (ctx: XerusCtx) => {
-    ctx.html(200, "<h1>Hello, World!</h1>")
+    ctx.jsx(200, <TitleText title='Page' text='home'/>)
 })
 
 app.run(8080)

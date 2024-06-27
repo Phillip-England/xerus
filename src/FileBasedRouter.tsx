@@ -94,7 +94,8 @@ export class FileBasedRouter {
                         break;
                 }
             } catch (error: any) {
-                console.error(error.message);
+                // 405 error is handled by the router
+                // just skip
             }
         };
 
