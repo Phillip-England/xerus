@@ -1,4 +1,4 @@
-import { Router, type HandlerFunc, type PluginFunc, type Xerus } from "./export";
+import { Router, type HandlerFunc, type Xerus } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";

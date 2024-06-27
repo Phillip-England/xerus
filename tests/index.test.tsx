@@ -29,7 +29,7 @@ test('🔖routing - GET hello world JSX', async () => {
     const res = await client.get("/");
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<h1>hello world</h1>");
-    app.stop()
+    await app.stop()
 })
 
 test('🔖routing - GET no duplicate routes', async () => {
@@ -45,7 +45,7 @@ test('🔖routing - GET no duplicate routes', async () => {
         expect(e.message).toContain("GET");
         expect(e.message).toContain("already exists");
     }
-    app.stop()
+    await app.stop()
 })
 
 test('🔖routing - POST hello world JSON', async () => {
@@ -57,7 +57,7 @@ test('🔖routing - POST hello world JSON', async () => {
     const res = await client.post("/", "");
     expect(res.status).toBe(200);
     expect(await res.json()).toBe("{\"message\":\"hello world\"}");
-    app.stop()
+    await app.stop()
 })
 
 test('🔖routing - POST no duplicate routes', async () => {
@@ -73,7 +73,7 @@ test('🔖routing - POST no duplicate routes', async () => {
         expect(e.message).toContain("POST");
         expect(e.message).toContain("already exists");
     }
-    app.stop()
+    await app.stop()
 })
 
 test('🔖routing - GET default 404 works', async () => {
@@ -81,22 +81,21 @@ test('🔖routing - GET default 404 works', async () => {
     await app.run(8080)
     const res = await client.get("/non-existing-route");
     expect(res.status).toBe(404);
-    app.stop()
+    await app.stop()
 })
 
 test('🔖routing - GET custom 404 can be implemented', async () => {
     const app = getApp();
     const data = JSON.stringify({ message: "custom 404" });
-    await app.setCustom404(async (ctx: XerusCtx) => {
+    app.setCustom404(async (ctx: XerusCtx) => {
         ctx.json(404, data);
     });
-    await sleep(1000)
     await app.run(8080)
     const res = await client.get("/non-existing-route");
     expect(res.status).toBe(404);
     let json = await res.json();
     expect(json).toEqual(data);
-    app.stop();
+    await app.stop();
 })
 
 // test('🔖routing - DELETE 405 method not allowed works', async () => {

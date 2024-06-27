@@ -1,6 +1,7 @@
+import { sleep } from "bun";
 import type { HandlerFunc } from "./HandlerFunc";
 import { Router } from "./Router";
-import { XerusCtx, type MiddlewareFunc, type PluginFunc, type XerusRequest } from "./export";
+import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 
 export class Xerus {
     routers: { [key: string]: Router }
@@ -8,9 +9,9 @@ export class Xerus {
     globalMiddleware: MiddlewareFunc[]
     xerusCtx: (request: Request) => Promise<XerusCtx>
     noLogPathPrefixes: string[]
-    notFoundHandler: HandlerFunc | null
+    notFoundHandler: HandlerFunc
     useLogger: boolean
-    server: any // Store the server instance
+    server: any
 
     constructor() {
         this.notFoundHandler = async (ctx: XerusCtx) => {
@@ -28,10 +29,6 @@ export class Xerus {
         }
         this.useLogger = true
         this.server = null
-    }
-
-    plugin(plugin: PluginFunc) {
-        plugin(this)
     }
 
     global(middleware: MiddlewareFunc) {
@@ -133,11 +130,12 @@ export class Xerus {
         this.server = Bun.serve(options);
     }
 
-    stop() {
+    async stop() {
         if (this.server) {
             this.server.stop();
             this.server = null;
         }
+        await sleep(100)
     }
 
     async handleRequest(request: Request, path: string): Promise<Response> {
@@ -175,16 +173,11 @@ export class Xerus {
                 return new Response("Xerus: failed to return a response from handler", { status: 500 })
             }
         }
-        if (this.notFoundHandler) {
-            await this.notFoundHandler(ctx)
-            if (ctx.xerusRes.ready) {
-                return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
-            } else {
-                return new Response("Xerus: failed to return a response from middleware or handler", { status: 500 })
-            }
-
+        await this.notFoundHandler(ctx)
+        if (ctx.xerusRes.ready) {
+            return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
         } else {
-            return new Response('Not Found', { status: 404 })
+            return new Response("Xerus: failed to return a response from middleware or handler", { status: 500 })
         }
     }
 
