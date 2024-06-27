@@ -88,13 +88,8 @@ app.get('/', async (ctx: XerusCtx) => {
 app.run(8080)
 ```
 
-Then serve using:
-```bash
-bun run dev
-```
-
 ### Middleware
-Maybe we want all routes to say hi? Boom:
+Maybe we want all routes to say hi? 💥:
 
 ```ts
 let app = new Xerus();
