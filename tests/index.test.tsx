@@ -3,6 +3,7 @@ import { Xerus, XerusCtx } from "../src/export";
 import React from "react";
 import { TestClient } from "./TestClient";
 import { $, sleep } from "bun";
+import { Result } from "../src/Result";
 
 // TESTING VISION (TRUST)
 // T - Test
@@ -19,6 +20,37 @@ const getApp = (): Xerus => {
 }
 
 const client = new TestClient();
+
+test('🔖err-handling - Result Class works as expected', async () => {
+    const ok = Result.ok(5);
+    const err = Result.err("error");
+    expect(ok.isOk()).toBe(true);
+    expect(ok.isErr()).toBe(false);
+    expect(ok.unwrap()).toBe(5);
+    expect(() => ok.unwrapErr()).toThrowError();
+    expect(err.isOk()).toBe(false);
+    expect(err.isErr()).toBe(true);
+    expect(() => err.unwrap()).toThrowError();
+    expect(err.unwrapErr()).toBe("error");
+})
+
+test('🔖err-handling - Result Class async new works as expected', async () => {
+    const ok = await Result.new(Promise.resolve(5));
+    const err = await Result.new(Promise.reject("error"));
+    expect(ok.isOk()).toBe(true);
+    expect(ok.isErr()).toBe(false);
+    expect(ok.unwrap()).toBe(5);
+    expect(() => ok.unwrapErr()).toThrowError();
+    expect(err.isOk()).toBe(false);
+    expect(err.isErr()).toBe(true);
+    expect(() => err.unwrap()).toThrowError();
+    expect(err.unwrapErr()).toBe("error");
+})
+
+test('🔖err-handling - can use Result to get instance of Xerus (or other classes)', async () => {
+    const app = await Xerus.new()
+    expect(app.isOk()).toBe(true);
+})
 
 test('🔖routing - GET hello world JSX', async () => {
     const app = getApp()
@@ -37,6 +69,7 @@ test('🔖routing - GET no duplicate routes', async () => {
     app.get("/", async (ctx: XerusCtx) => {
         ctx.jsx(200, <h1>hello world</h1>);
     });
+    let error;
     try {
         app.get("/", async (ctx: XerusCtx) => {
             ctx.jsx(200, <h1>hello world</h1>);

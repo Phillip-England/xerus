@@ -2,6 +2,7 @@ import { sleep } from "bun";
 import type { HandlerFunc } from "./HandlerFunc";
 import { Router } from "./Router";
 import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
+import { Result } from "./Result";
 
 export class Xerus {
     routers: { [key: string]: Router }
@@ -30,6 +31,10 @@ export class Xerus {
         this.useLogger = true
         this.server = null
     }
+
+    static async new(): Promise<Result<Xerus, Error>> {
+        return await Result.new(new Xerus())
+    } 
 
     global(middleware: MiddlewareFunc) {
         this.globalMiddleware.push(middleware)

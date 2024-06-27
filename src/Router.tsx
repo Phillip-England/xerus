@@ -48,6 +48,8 @@ export class Router {
             dynamicRouteCollection[path] = new Route(this.prefix, path, method, handler);
         } else if (!routeCollection[path]) {
             routeCollection[path] = new Route(this.prefix, path, method, handler);
+        } else {
+            throw new Error(`Route already exists for ${method} ${path}`);
         }
     }
 
