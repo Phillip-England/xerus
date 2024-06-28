@@ -9,17 +9,13 @@ export class Xerus {
     routes: { [key: string]: HandlerFunc }
     middleware: MiddlewareFunc[]
     globalMiddleware: MiddlewareFunc[]
-    xerusCtx: (request: Request) => Promise<XerusCtx>
     noLogPathPrefixes: string[]
-    notFoundHandler: HandlerFunc
+    notFoundHandler: HandlerFunc | null
     useLogger: boolean
     server: any
 
     constructor() {
-        this.notFoundHandler = async (ctx: XerusCtx) => {
-            ctx.xerusRes.setStatus(404)
-            ctx.xerusRes.setBody("Not Found")
-        }
+        this.notFoundHandler = null
         this.noLogPathPrefixes = ["/favicon.ico", "/static"]
         this.middleware = []
         this.routes = {}
@@ -27,16 +23,9 @@ export class Xerus {
         this.routers = {
             "/": new Router('/')
         }
-        this.xerusCtx = async (request: Request): Promise<XerusCtx> => {
-            return new XerusCtx(request)
-        }
         this.useLogger = true
         this.server = null
     }
-
-    static async new(): Promise<Result<Xerus, Error>> {
-        return await Result.new(new Xerus())
-    } 
 
     global(middleware: MiddlewareFunc) {
         this.globalMiddleware.push(middleware)
@@ -208,7 +197,7 @@ export class Xerus {
         if (is405) {
             return new Response("Method Not Allowed", { status: 405 })
         }
-        let ctx = await this.xerusCtx(request)
+        let ctx = new XerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
         xerusReq.req = request
         for (let middleware of this.globalMiddleware) {
@@ -239,7 +228,11 @@ export class Xerus {
                 return new Response("Xerus: failed to return a response from handler", { status: 500 })
             }
         }
-        await this.notFoundHandler(ctx)
+        if (this.notFoundHandler === null) {
+            return new Response("Not Found", { status: 404 })
+        } else {
+            await this.notFoundHandler(ctx)
+        }
         if (ctx.xerusRes.ready) {
             return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
         } else {

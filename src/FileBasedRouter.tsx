@@ -7,11 +7,15 @@ export class FileBasedRouter {
     app: Xerus;
     handlerFiles: File[];
     routerFiles: File[];
+    handlerFileNames: string[];
+    routerFileNames: string[];
 
     constructor(app: Xerus) {
         this.app = app;
         this.handlerFiles = [];
         this.routerFiles = [];
+        this.handlerFileNames = ['+handler.tsx', '+handler.ts']
+        this.routerFileNames = ['+handler.tsx', '+handler.ts']
     }
 
     async mount(dirname: string) {
@@ -21,10 +25,11 @@ export class FileBasedRouter {
         });
         for (const file of systemFiles) {
             if (file.isFile()) {
-                if (file.name === '+handler.tsx') {
+                console.log(file.name)
+                if (this.handlerFileNames.includes(file.name)) {
                     this.handlerFiles.push(new File(file));
                 }
-                if (file.name === '+router.tsx') {
+                if (this.routerFileNames.includes(file.name)) {
                     this.routerFiles.push(new File(file));
                 }
             }

@@ -28,6 +28,7 @@
   "scripts": {
     "dev": "bun --hot run ./index.tsx",
     "build": "tsc",
+    "bundle": "bun build ./client/index.ts --outdir ../static --watch",
     "prepublishOnly": "bun run build"
   },
   "type": "module",
