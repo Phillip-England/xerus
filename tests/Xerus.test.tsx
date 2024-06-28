@@ -69,6 +69,7 @@
 //     expect(res.status).toBe(404);
 //     const json = await res.json();
 //     expect(json).toEqual(data);
+//     await app.stop()
 // });
 
 // test('🧪manual-routing - DELETE 405 method not allowed works', async () => {

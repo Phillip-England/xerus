@@ -1,0 +1,21 @@
+import type { HandlerFunc } from "./export";
+
+export class HandlerFile {
+    get: HandlerFunc | null = null;
+    post: HandlerFunc | null = null;
+    put: HandlerFunc | null = null;
+    delete: HandlerFunc | null = null;
+    patch: HandlerFunc | null = null;
+    options: HandlerFunc | null = null;
+    update: HandlerFunc | null = null;
+
+    constructor() {
+        this.get = null;
+        this.post = null;
+        this.put = null;
+        this.delete = null;
+        this.patch = null;
+        this.options = null;
+        this.update = null;
+    }
+}

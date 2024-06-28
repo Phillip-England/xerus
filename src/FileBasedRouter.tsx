@@ -1,4 +1,4 @@
-import { Router, type HandlerFunc, type Xerus } from "./export";
+import { HandlerFile, Router, type HandlerFunc, type Xerus } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
@@ -33,41 +33,52 @@ export class FileBasedRouter {
                 }
             }
         }
-        console.log(this.handlerFiles)
         await this.initHandlers();
     }
 
     async initHandlers() {
         for (const h of this.handlerFiles) {
-            if (h.relativePath == "/+handler.tsx") {
+            if (h.relativePath == "/+handler.tsx" || h.relativePath == "/+handler.ts") {
                 let handlerModule = await import(h.absolutePath);
                 if (!handlerModule) {
                     continue;
                 }
                 let handler: HandlerFile = handlerModule.default;
-                this.hookHandlersToRouters(this.app, handler);
+                this.hookHandlersToRouters(this.app, handler, h);
             }
         }
-        for (const r of this.routerFiles) {
-            for (const h of this.handlerFiles) {
+        for (const h of this.handlerFiles) {
+            let handlerModule = await import(h.absolutePath);
+            if (!handlerModule) {
+                continue;
+            }
+            let handler: HandlerFile = handlerModule.default;
+            if (!handler) {
+                continue;
+            }
+            if (h.relativePath == "/+handler.tsx" || h.relativePath == "/+handler.ts") {
+                continue;
+            }
+            let counter = 0;
+            do {
+                let r = this.routerFiles[counter]
                 let routerModule = await import(r.absolutePath);
-                let handlerModule = await import(h.absolutePath);
-                if (!routerModule || !handlerModule) {
+                if (!routerModule) {
                     continue;
                 }
                 let router: Router = routerModule.default;
-                let handler: HandlerFile = handlerModule.default;
-                if (!handler || !router) {
+                if (!router) {
                     continue;
                 }
                 let routerPrefix = router.prefix;
                 let handlerContainsPrefix = h.relativePath.startsWith(routerPrefix);
                 if (handlerContainsPrefix) {
-                    this.hookHandlersToRouters(router, handler);
-                } else {
-                    this.hookHandlersToRouters(this.app, handler);
+                    this.hookHandlersToRouters(router, handler, h);
+                    return
                 }
-            }
+                counter++;
+            } while (counter < this.routerFiles.length);
+            this.hookHandlersToRouters(this.app, handler, h);
         }
         for (const r of this.routerFiles) {
             let routerModule = await import(r.absolutePath);
@@ -82,7 +93,7 @@ export class FileBasedRouter {
         }
     }
 
-    async hookHandlersToRouters(router: Router | Xerus, handler: HandlerFile) {
+    async hookHandlersToRouters(router: Router | Xerus, handler: HandlerFile, file: File) {
         const registerRoute = (method: string, path: string, handlerFunc: HandlerFunc) => {
             try {
                 switch (method) {
@@ -113,47 +124,28 @@ export class FileBasedRouter {
                 // just skip
             }
         };
-
+        console.log(file)
         if (handler.get) {
-            registerRoute('GET', '/', handler.get);
+            registerRoute('GET', file.endpointPath, handler.get);
         }
         if (handler.post) {
-            registerRoute('POST', '/', handler.post);
+            registerRoute('POST', file.endpointPath, handler.post);
         }
         if (handler.put) {
-            registerRoute('PUT', '/', handler.put);
+            registerRoute('PUT', file.endpointPath, handler.put);
         }
         if (handler.delete) {
-            registerRoute('DELETE', '/', handler.delete);
+            registerRoute('DELETE', file.endpointPath, handler.delete);
         }
         if (handler.patch) {
-            registerRoute('PATCH', '/', handler.patch);
+            registerRoute('PATCH', file.endpointPath, handler.patch);
         }
         if (handler.options) {
-            registerRoute('OPTION', '/', handler.options);
+            registerRoute('OPTION', file.endpointPath, handler.options);
         }
         if (handler.update) {
-            registerRoute('UPDATE', '/', handler.update);
+            registerRoute('UPDATE', file.endpointPath, handler.update);
         }
     }
 }
 
-export class HandlerFile {
-    get: HandlerFunc | null = null;
-    post: HandlerFunc | null = null;
-    put: HandlerFunc | null = null;
-    delete: HandlerFunc | null = null;
-    patch: HandlerFunc | null = null;
-    options: HandlerFunc | null = null;
-    update: HandlerFunc | null = null;
-
-    constructor() {
-        this.get = null;
-        this.post = null;
-        this.put = null;
-        this.delete = null;
-        this.patch = null;
-        this.options = null;
-        this.update = null;
-    }
-}

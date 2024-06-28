@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server"
 import { XerusRequest } from "./XerusRequest";
 import { XerusResponse } from "./XerusResponse";
 import type { Cookie } from "./Cookie";
+import { ERR_BODY_OVERWRITE } from "./XerusErr";
 
 
 export class XerusCtx {
@@ -61,21 +62,47 @@ export class XerusCtx {
     }
 
     html(status: number, body: any) {
+        if (this.bodyIsSet()) {
+            throw new Error(ERR_BODY_OVERWRITE);
+        }
         this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(body.trim());
     }
 
     json(status: number, body: any) {
+        if (this.bodyIsSet()) {
+            throw new Error(ERR_BODY_OVERWRITE);
+        }
         this.xerusRes.setHeader("Content-Type", "application/json");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(JSON.stringify(body));
     }
 
     jsx(status: number, body: any) {
+        if (this.bodyIsSet()) {
+            throw new Error(ERR_BODY_OVERWRITE);
+        }
         this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(renderToString(body));
+    }
+
+    text(status: number, body: any) {
+        if (this.bodyIsSet()) {
+            throw new Error(ERR_BODY_OVERWRITE);
+        }
+        this.xerusRes.setHeader("Content-Type", "text/plain");
+        this.xerusRes.setStatus(status);
+        this.xerusRes.setBody(body);
+    }
+
+    clearBody() {
+        this.xerusRes.body = ""
+    }
+
+    bodyIsSet(): boolean {
+        return this.xerusRes.body !== "";
     }
 
 }
