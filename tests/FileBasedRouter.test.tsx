@@ -2,9 +2,9 @@ import { test, expect } from "bun:test";
 import { Xerus,  XerusCtx,  XerusMw } from "../src/export";
 import React from "react";
 import { TestClient } from "./TestClient";
-import { $ } from "bun";
+import { $, sleep } from "bun";
 import { FileBasedRouter } from "../src/FileBasedRouter";
-import { ERR_BODY_OVERWRITE } from "../src/XerusErr";
+import { ERR_BODY_OVERWRITE, ERR_NO_BODY } from "../src/XerusErr";
 
 const c = new TestClient();
 const app = new Xerus()
@@ -53,9 +53,9 @@ test('🧪file-routing - error thrown if you try to write response body when alr
     expect(text).toBe(ERR_BODY_OVERWRITE)
 })
 
-
-
-
-
-
-
+test('🧪file-routing - failed to write response body', async () => {
+    const res = await c.get("/error/no-body");
+    expect(res.status).toBe(500);
+    let text = await res.text()
+    expect(text).toBe(ERR_NO_BODY)
+})

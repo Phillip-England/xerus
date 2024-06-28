@@ -3,6 +3,7 @@ import type { HandlerFunc } from "./HandlerFunc";
 import { Router } from "./Router";
 import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 import { Result } from "./Result";
+import { ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
 
 export class Xerus {
     routers: { [key: string]: Router }
@@ -195,7 +196,7 @@ export class Xerus {
         const route = router.route(router.prefix, path, method)
         let is405 = await this.requestIs405(router, method, router.getSearchPath(router.prefix, path))
         if (is405) {
-            return new Response("Method Not Allowed", { status: 405 })
+            return new Response(ERR_METHOD_NOT_ALLOWED, { status: 405 })
         }
         let ctx = new XerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
@@ -225,18 +226,18 @@ export class Xerus {
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
             } else {
-                return new Response("Xerus: failed to return a response from handler", { status: 500 })
+                return new Response(ERR_NO_BODY, { status: 500 })
             }
         }
         if (this.notFoundHandler === null) {
-            return new Response("Not Found", { status: 404 })
+            return new Response(ERR_NOT_FOUND, { status: 404 })
         } else {
             await this.notFoundHandler(ctx)
         }
         if (ctx.xerusRes.ready) {
             return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
         } else {
-            return new Response("Xerus: failed to return a response from Xerus.notFoundHandler", { status: 500 })
+            return new Response(ERR_NO_BODY, { status: 500 })
         }
     }
 
