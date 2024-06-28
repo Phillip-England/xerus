@@ -4,16 +4,6 @@ import React from "react";
 import { TestClient } from "./TestClient";
 import { $ } from "bun";
 
-
-// await $`fuser -k 8080/tcp`
-
-// TESTING VISION (TRUST)
-// T - Test
-// R - Revise
-// U - Understand
-// S - Slow Down
-// T - Test Again
-
 const client = new TestClient();
 const app = new Xerus();
 app.useLogger = false
