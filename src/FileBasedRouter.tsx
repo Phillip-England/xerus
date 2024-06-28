@@ -33,6 +33,16 @@ export class FileBasedRouter {
     }
 
     async initHandlers() {
+        for (const h of this.handlerFiles) {
+            if (h.relativePath == "/+handler.tsx") {
+                let handlerModule = await import(h.absolutePath);
+                if (!handlerModule) {
+                    continue;
+                }
+                let handler: HandlerFile = handlerModule.default;
+                this.hookHandlersToRouters(this.app, handler);
+            }
+        }
         for (const r of this.routerFiles) {
             for (const h of this.handlerFiles) {
                 let routerModule = await import(r.absolutePath);
