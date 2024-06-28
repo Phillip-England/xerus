@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { Xerus, XerusCtx, XerusMw } from "../src/export";
+import { Xerus,  XerusMw } from "../src/export";
 import React from "react";
 import { TestClient } from "./TestClient";
 import { $ } from "bun";
@@ -13,7 +13,7 @@ app.global(XerusMw.serveStaticFiles)
 app.global(XerusMw.serveFavicon)
 
 const router = new FileBasedRouter(app)
-await router.mount('./app')
+await router.mount('./tests/app')
 
 await app.run(8080)
 

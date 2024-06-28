@@ -63,7 +63,7 @@ export class XerusCtx {
     html(status: number, body: any) {
         this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
-        this.xerusRes.setBody(body);
+        this.xerusRes.setBody(body.trim());
     }
 
     json(status: number, body: any) {

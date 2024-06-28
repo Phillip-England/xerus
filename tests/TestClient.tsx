@@ -5,7 +5,7 @@
 export class TestClient {
     baseURL: string
 
-    constructor(baseURL: string = "localhost:8080") {
+    constructor(baseURL: string = "http://localhost:8080") {
         this.baseURL = baseURL;
     }
 

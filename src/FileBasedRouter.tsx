@@ -25,15 +25,15 @@ export class FileBasedRouter {
         });
         for (const file of systemFiles) {
             if (file.isFile()) {
-                console.log(file.name)
                 if (this.handlerFileNames.includes(file.name)) {
-                    this.handlerFiles.push(new File(file));
+                    this.handlerFiles.push(new File(file, dirname));
                 }
                 if (this.routerFileNames.includes(file.name)) {
-                    this.routerFiles.push(new File(file));
+                    this.routerFiles.push(new File(file, dirname));
                 }
             }
         }
+        console.log(this.handlerFiles)
         await this.initHandlers();
     }
 

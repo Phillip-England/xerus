@@ -7,12 +7,13 @@ export class File {
     relativePath: string
     absolutePath: string
 
-    constructor(file: Dirent) {
+    constructor(file: Dirent, mountTo: string) {
         this.file = file
         this.endpointPath = ''
         this.relativePath = ''
         this.absolutePath = ''
-        let pathSegment = file.parentPath.replace('app', '')
+        mountTo = mountTo.replace('./', '')
+        let pathSegment = file.parentPath.replace(mountTo, '')
         if (pathSegment === '') {
             pathSegment = '/'
             this.endpointPath = pathSegment
@@ -21,6 +22,6 @@ export class File {
             this.endpointPath = pathSegment
             this.relativePath = pathSegment + '/' + file.name
         }
-        this.absolutePath = path.resolve("./app" + this.relativePath)
+        this.absolutePath = path.resolve(mountTo + this.relativePath)
     }
 }

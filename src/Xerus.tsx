@@ -134,7 +134,7 @@ export class Xerus {
             }
         }
         console.log("🚀 Xerus is running on port", port)
-        this.server = Bun.serve(options);
+        this.server = await Bun.serve(options);
     }
 
     async stop() {
