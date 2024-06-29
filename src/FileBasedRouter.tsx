@@ -11,6 +11,8 @@ export class FileBasedRouter {
     routerFiles: File[];
     handlerFileNames: string[];
     routerFileNames: string[];
+    errNoRootHandlerFile: Function;
+    errUnknownAppFile: Function;
 
     constructor(app: Xerus) {
         this.app = app;
@@ -18,6 +20,9 @@ export class FileBasedRouter {
         this.routerFiles = [];
         this.handlerFileNames = ['+handler.tsx', '+handler.ts']
         this.routerFileNames = ['+router.tsx', '+router.ts']
+        this.errNoRootHandlerFile = (dirname: string) => `no root handler file found at ${dirname}`;
+        this.errUnknownAppFile = (fileName: string) => `unknown app file found: ${fileName}`;
+        
     }
 
     async mount(dirname: string) {
@@ -37,20 +42,24 @@ export class FileBasedRouter {
             if (file.isFile()) {
                 if (this.handlerFileNames.includes(file.name)) {
                     this.handlerFiles.push(new File(file, dirname));
+                    continue
                 }
                 if (this.routerFileNames.includes(file.name)) {
                     this.routerFiles.push(new File(file, dirname));
+                    continue
                 }
+                throw new Error(this.errUnknownAppFile(file.name));
             }
         }
         let foundRootHandler = false;
+        let foundUnknownAppFile = false;
         for (const h of this.handlerFiles) {
             if (this.handlerFileNames.includes(h.relativePath)) {
                 foundRootHandler = true;
             }
         }
         if (!foundRootHandler) {
-            throw new Error(ERR_NO_ROOT_HANDLER_FILE(dirname));
+            throw new Error(this.errNoRootHandlerFile(dirname));
         }
     }
 

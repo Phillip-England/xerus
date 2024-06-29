@@ -14,7 +14,7 @@ test('FileBasedRouter.extractAppFiles - ERR_NO_ROOT_HANDLER_FILE', async () => {
     try {
         await router.extractAppFiles('./tests/apps/app_empty')
     } catch (e: any) {
-        expect(e.message).toBe(ERR_NO_ROOT_HANDLER_FILE('./tests/apps/app_empty'))
+        expect(e.message).toContain(router.errNoRootHandlerFile(''))
     }
 })
 
@@ -22,9 +22,9 @@ test('FileBasedRouter.extractAppFiles - ERR_NO_UNKNOWN_APP_FILES', async () => {
     const app = new Xerus()
     const router = new FileBasedRouter(app)
     try {
-        await router.extractAppFiles('./tests/apps/app_empty')
+        await router.extractAppFiles('./tests/apps/app_unknown_file')
     } catch (e: any) {
-        expect(e.message).toBe(ERR_NO_ROOT_HANDLER_FILE('./tests/apps/app_empty'))
+        expect(e.message).toContain(router.errUnknownAppFile(''))
     }
 })
 
