@@ -11,6 +11,8 @@ export class FileBasedRouter {
     routerFiles: File[];
     handlerFileNames: string[];
     routerFileNames: string[];
+    errNoAppFile: Function;
+    errAppDirNotFound: Function;
     errNoRootHandlerFile: Function;
     errUnknownAppFile: Function;
 
@@ -20,6 +22,8 @@ export class FileBasedRouter {
         this.routerFiles = [];
         this.handlerFileNames = ['+handler.tsx', '+handler.ts']
         this.routerFileNames = ['+router.tsx', '+router.ts']
+        this.errNoAppFile = (dirname: string) => `no +app.ts file found at: ${dirname}`;
+        this.errAppDirNotFound = (dirname: string) => `app directory does not exist: ${dirname}`;
         this.errNoRootHandlerFile = (dirname: string) => `no root handler file found at ${dirname}`;
         this.errUnknownAppFile = (fileName: string) => `unknown app file found: ${fileName}`;
         
@@ -33,10 +37,15 @@ export class FileBasedRouter {
     }
 
     async extractAppFiles(dirname: string) {
-        const systemFiles: Dirent[] = await readdir(dirname, {
-            withFileTypes: true,
-            recursive: true,
-        });
+        let systemFiles: Dirent[];
+        try {
+            systemFiles = await readdir(dirname, {
+                withFileTypes: true,
+                recursive: true,
+            });
+        } catch(e: unknown) {
+            throw new Error(this.errAppDirNotFound(dirname))
+        }
         for (let i = 0; i < systemFiles.length; i++) {
             let file = systemFiles[i]
             if (file.isFile()) {
@@ -52,9 +61,8 @@ export class FileBasedRouter {
             }
         }
         let foundRootHandler = false;
-        let foundUnknownAppFile = false;
         for (const h of this.handlerFiles) {
-            if (this.handlerFileNames.includes(h.relativePath)) {
+            if (this.handlerFileNames.includes(h.file.name)) {
                 foundRootHandler = true;
             }
         }

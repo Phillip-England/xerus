@@ -8,25 +8,42 @@ import { ERR_BODY_OVERWRITE, ERR_GENERIC, ERR_NO_BODY, ERR_NO_ROOT_HANDLER_FILE 
 
 
 
-test('FileBasedRouter.extractAppFiles - ERR_NO_ROOT_HANDLER_FILE', async () => {
+test('⚠️: app directory does not exist', async () => {
     const app = new Xerus()
     const router = new FileBasedRouter(app)
     try {
-        await router.extractAppFiles('./tests/apps/app_empty')
+        await router.extractAppFiles('./apps/app_non_existent')
     } catch (e: any) {
-        expect(e.message).toContain(router.errNoRootHandlerFile(''))
+        expect(e.message).toContain(router.errAppDirNotFound(''))
     }
 })
 
-test('FileBasedRouter.extractAppFiles - ERR_NO_UNKNOWN_APP_FILES', async () => {
+test('⚠️: +app.ts file not found in app root', async () => {
     const app = new Xerus()
     const router = new FileBasedRouter(app)
     try {
-        await router.extractAppFiles('./tests/apps/app_unknown_file')
+        await router.extractAppFiles('./apps/app_empty')
+    } catch (e: any) {
+        expect(e.message).toContain(router.errNoAppFile(''))
+    }
+})
+
+test('⚠️: unknown file found in app', async () => {
+    const app = new Xerus()
+    const router = new FileBasedRouter(app)
+    try {
+        await router.extractAppFiles('./apps/app_unknown_file')
     } catch (e: any) {
         expect(e.message).toContain(router.errUnknownAppFile(''))
     }
 })
+
+test('FileBasedRouter.extractAppFiles - finding a single handler', async () => {
+    const app = new Xerus()
+    const router = new FileBasedRouter(app)
+    await router.extractAppFiles('./apps/app_simple')
+    expect(router.handlerFiles.length).toBe(1)
+})  
 
 
 // const c = new TestClient();
