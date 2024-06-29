@@ -1,6 +1,6 @@
 import type { HandlerFunc } from "./export";
 
-export class HandlerFile {
+export class Handler {
     get: HandlerFunc | null = null;
     post: HandlerFunc | null = null;
     put: HandlerFunc | null = null;
