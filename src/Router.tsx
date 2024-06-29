@@ -1,6 +1,7 @@
 import type { HandlerFunc } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Route } from "./Route";
+import { ERR_DBG } from "./XerusErr";
 
 export class Router {
     prefix: string;
@@ -120,6 +121,7 @@ export class Router {
 
     route(prefix: string, path: string, method: string): Route | null {
         let searchPath = this.getSearchPath(prefix, path);
+        // console.log(ERR_DBG, path, prefix)
         switch (method) {
             case 'GET':
                 return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath)

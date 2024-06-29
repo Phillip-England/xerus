@@ -1,7 +1,9 @@
-import { HandlerFile, Router, type HandlerFunc, type Xerus } from "./export";
+import { HandlerFile, Router, Xerus, type HandlerFunc } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
+import { XerusTrace } from "./XerusTrace";
+import { ERR_NO_ROOT_HANDLER_FILE } from "./XerusErr";
 
 export class FileBasedRouter {
     app: Xerus;
@@ -15,15 +17,23 @@ export class FileBasedRouter {
         this.handlerFiles = [];
         this.routerFiles = [];
         this.handlerFileNames = ['+handler.tsx', '+handler.ts']
-        this.routerFileNames = ['+handler.tsx', '+handler.ts']
+        this.routerFileNames = ['+router.tsx', '+router.ts']
     }
 
     async mount(dirname: string) {
+        await this.extractAppFiles(dirname)
+        await this.hookRootHandler();
+        await this.initHandlers();
+        await this.mountRouters(dirname)
+    }
+
+    async extractAppFiles(dirname: string) {
         const systemFiles: Dirent[] = await readdir(dirname, {
             withFileTypes: true,
             recursive: true,
         });
-        for (const file of systemFiles) {
+        for (let i = 0; i < systemFiles.length; i++) {
+            let file = systemFiles[i]
             if (file.isFile()) {
                 if (this.handlerFileNames.includes(file.name)) {
                     this.handlerFiles.push(new File(file, dirname));
@@ -33,10 +43,32 @@ export class FileBasedRouter {
                 }
             }
         }
-        await this.initHandlers();
+        let foundRootHandler = false;
+        for (const h of this.handlerFiles) {
+            if (this.handlerFileNames.includes(h.relativePath)) {
+                foundRootHandler = true;
+            }
+        }
+        if (!foundRootHandler) {
+            throw new Error(ERR_NO_ROOT_HANDLER_FILE(dirname));
+        }
     }
 
-    async initHandlers() {
+    async mountRouters(dirname: string) {
+        for (const r of this.routerFiles) {
+            let routerModule = await import(r.absolutePath);
+            if (!routerModule) {
+                continue;
+            }
+            let router: Router = routerModule.default;
+            if (!router) {
+                continue;
+            }
+            this.app.mountRouters(router);
+        } 
+    }
+
+    async hookRootHandler() {
         for (const h of this.handlerFiles) {
             if (h.relativePath == "/+handler.tsx" || h.relativePath == "/+handler.ts") {
                 let handlerModule = await import(h.absolutePath);
@@ -44,9 +76,13 @@ export class FileBasedRouter {
                     continue;
                 }
                 let handler: HandlerFile = handlerModule.default;
-                this.hookHandlersToRouters(this.app, handler, h);
+                this.hookHandlersToApp(this.app, handler, h);
             }
         }
+    }
+
+    async initHandlers() {
+
         for (const h of this.handlerFiles) {
             let handlerModule = await import(h.absolutePath);
             if (!handlerModule) {
@@ -59,8 +95,12 @@ export class FileBasedRouter {
             if (h.relativePath == "/+handler.tsx" || h.relativePath == "/+handler.ts") {
                 continue;
             }
+
             let counter = 0;
             do {
+                if (counter >= this.routerFiles.length) {
+                    break;
+                }
                 let r = this.routerFiles[counter]
                 let routerModule = await import(r.absolutePath);
                 if (!routerModule) {
@@ -73,79 +113,63 @@ export class FileBasedRouter {
                 let routerPrefix = router.prefix;
                 let handlerContainsPrefix = h.relativePath.startsWith(routerPrefix);
                 if (handlerContainsPrefix) {
-                    this.hookHandlersToRouters(router, handler, h);
+                    this.hookHandlersToRouter(router, handler, h);
                     return
                 }
                 counter++;
             } while (counter < this.routerFiles.length);
-            this.hookHandlersToRouters(this.app, handler, h);
-        }
-        for (const r of this.routerFiles) {
-            let routerModule = await import(r.absolutePath);
-            if (!routerModule) {
-                continue;
-            }
-            let router: Router = routerModule.default;
-            if (!router) {
-                continue;
-            }
-            this.app.mountRouters(router);
+            this.hookHandlersToApp(this.app, handler, h);
         }
     }
 
-    async hookHandlersToRouters(router: Router | Xerus, handler: HandlerFile, file: File) {
-        const registerRoute = (method: string, path: string, handlerFunc: HandlerFunc) => {
-            try {
-                switch (method) {
-                    case 'GET':
-                        router.get(path, handlerFunc);
-                        break;
-                    case 'POST':
-                        router.post(path, handlerFunc);
-                        break;
-                    case 'PATCH':
-                        router.patch(path, handlerFunc);
-                        break;
-                    case 'DELETE':
-                        router.delete(path, handlerFunc);
-                        break;
-                    case 'UPDATE':
-                        router.update(path, handlerFunc);
-                        break;
-                    case 'PUT':
-                        router.put(path, handlerFunc);
-                        break;
-                    case 'OPTION':
-                        router.option(path, handlerFunc);
-                        break;
-                }
-            } catch (error: any) {
-                // 405 error is handled by the router
-                // just skip
-            }
-        };
-        console.log(file)
+    async hookHandlersToApp(app: Xerus, handler: HandlerFile, file: File) {
         if (handler.get) {
-            registerRoute('GET', file.endpointPath, handler.get);
+            app.get(file.endpointPath, handler.get);
         }
         if (handler.post) {
-            registerRoute('POST', file.endpointPath, handler.post);
+            app.post(file.endpointPath, handler.post);
         }
         if (handler.put) {
-            registerRoute('PUT', file.endpointPath, handler.put);
+            app.put(file.endpointPath, handler.put);
         }
         if (handler.delete) {
-            registerRoute('DELETE', file.endpointPath, handler.delete);
+            app.delete(file.endpointPath, handler.delete);
         }
         if (handler.patch) {
-            registerRoute('PATCH', file.endpointPath, handler.patch);
+            app.patch(file.endpointPath, handler.patch);
         }
-        if (handler.options) {
-            registerRoute('OPTION', file.endpointPath, handler.options);
+        if (handler.option) {
+            app.option(file.endpointPath, handler.option);
         }
         if (handler.update) {
-            registerRoute('UPDATE', file.endpointPath, handler.update);
+            app.update(file.endpointPath, handler.update);
         }
     }
+
+    async hookHandlersToRouter(router: Router, handler: HandlerFile, file: File) {
+        if (handler.get) {
+            router.get(file.endpointPath, handler.get);
+        }
+        if (handler.post) {
+            router.post(file.endpointPath, handler.post);
+        }
+        if (handler.put) {
+            router.put(file.endpointPath, handler.put);
+        }
+        if (handler.delete) {
+            router.delete(file.endpointPath, handler.delete);
+        }
+        if (handler.patch) {
+            router.patch(file.endpointPath, handler.patch);
+        }
+        if (handler.option) {
+            router.option(file.endpointPath, handler.option);
+        }
+        if (handler.update) {
+            router.update(file.endpointPath, handler.update);
+        }
+    }
+
+
 }
 

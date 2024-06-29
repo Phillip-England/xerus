@@ -6,7 +6,7 @@ export class HandlerFile {
     put: HandlerFunc | null = null;
     delete: HandlerFunc | null = null;
     patch: HandlerFunc | null = null;
-    options: HandlerFunc | null = null;
+    option: HandlerFunc | null = null;
     update: HandlerFunc | null = null;
 
     constructor() {
@@ -15,7 +15,7 @@ export class HandlerFile {
         this.put = null;
         this.delete = null;
         this.patch = null;
-        this.options = null;
+        this.option = null;
         this.update = null;
     }
 }

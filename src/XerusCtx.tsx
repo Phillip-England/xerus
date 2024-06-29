@@ -47,7 +47,7 @@ export class XerusCtx {
         return this.xerusReq.pathPart(index);
     }
 
-    pathParam(key: string): string {
+    query(key: string): string {
         if (!this.xerusReq) {
             return "";
         }
@@ -103,6 +103,14 @@ export class XerusCtx {
 
     bodyIsSet(): boolean {
         return this.xerusRes.body !== "";
+    }
+
+    store(key: string, value: any) {
+        this.data[key] = value;
+    }
+
+    get(key: string): any {
+        return this.data[key];
     }
 
 }

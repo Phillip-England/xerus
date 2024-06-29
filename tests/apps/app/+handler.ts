@@ -1,5 +1,5 @@
-import { HandlerFile } from "../../src/export";
-import { XerusCtx } from "../../src/XerusCtx";
+import { HandlerFile } from "../../../src/export";
+import { XerusCtx } from "../../../src/XerusCtx";
 
 
 const handler = new HandlerFile();

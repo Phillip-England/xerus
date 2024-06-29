@@ -4,6 +4,7 @@ import { Router } from "./Router";
 import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 import { Result } from "./Result";
 import { ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
+import { XerusTrace } from "./XerusTrace";
 
 export class Xerus {
     routers: { [key: string]: Router }
@@ -40,49 +41,49 @@ export class Xerus {
         return this.routers['/'].getSearchPath('/', path)
     }
 
-    get(path: string, handler: HandlerFunc) {
+    async get(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].getRoutes[path]) {
             this.routers['/'].get(path, handler)
             this.routes[path] = handler
         }
     }
 
-    post(path: string, handler: HandlerFunc) {
+    async post(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].postRoutes[path]) {
             this.routers['/'].post(path, handler)
             this.routes[path] = handler
         }
     }
 
-    put(path: string, handler: HandlerFunc) {
+    async put(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].putRoutes[path]) {
             this.routers['/'].put(path, handler)
             this.routes[path] = handler
         }
     }
 
-    patch(path: string, handler: HandlerFunc) {
+    async patch(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].patchRoutes[path]) {
             this.routers['/'].patch(path, handler)
             this.routes[path] = handler
         }
     }
 
-    update(path: string, handler: HandlerFunc) {
+    async update(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].updateRoutes[path]) {
             this.routers['/'].update(path, handler)
             this.routes[path] = handler
         }
     }
 
-    delete(path: string, handler: HandlerFunc) {
+    async delete(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].deleteRoutes[path]) {
             this.routers['/'].delete(path, handler)
             this.routes[path] = handler
         }
     }
 
-    option(path: string, handler: HandlerFunc) {
+    async option(path: string, handler: HandlerFunc) {
         if (!this.routers['/'].optionRoutes[path]) {
             this.routers['/'].option(path, handler)
             this.routes[path] = handler
