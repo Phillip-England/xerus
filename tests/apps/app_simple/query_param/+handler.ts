@@ -8,4 +8,4 @@ export const handler = new HandlerExport()
 handler.get = new Handler(async (ctx: XerusCtx) => {
     let param = ctx.query('some_value')
     ctx.text(200, `${param}`)
-}, ...handler.mw())
+})

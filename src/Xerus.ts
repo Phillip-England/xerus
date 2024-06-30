@@ -2,7 +2,6 @@ import { $, sleep } from "bun";
 import type { Handler } from "./HandlerFunc";
 import { Router } from "./Router";
 import { Route, XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
-import { Result } from "./Result";
 import { ERR_DBG, ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
 import { XerusTrace } from "./XerusTrace";
 
@@ -144,7 +143,7 @@ export class Xerus {
     }
 
     async executeHandlerLevelMiddleware(ctx: XerusCtx, route: Route | null): Promise<Response | null> {
-        if (route && route.handler && route.handler.handlerFunc) {
+        if (route && route.handler) {
             for (let i = 0; i < route.handler.middleware.length; i++) {
                 let mw: MiddlewareFunc = route.handler.middleware[i]
                 await mw(ctx)

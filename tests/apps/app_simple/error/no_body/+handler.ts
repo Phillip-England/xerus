@@ -5,4 +5,4 @@ export const handler = new HandlerExport()
 
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-}, ...handler.mw())
+})

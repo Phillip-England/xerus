@@ -20,12 +20,4 @@ export class HandlerExport {
         this.update = null;
     }
 
-    use(middlewareFunc: MiddlewareFunc) {
-        this.middleware.push(middlewareFunc);
-    }
-
-    mw(...middleware: MiddlewareFunc[]): MiddlewareFunc[] {
-        return [...this.middleware, ...middleware]
-    }
-
 }

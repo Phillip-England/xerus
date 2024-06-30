@@ -6,10 +6,11 @@ export type HandlerFunc = (ctx: XerusCtx) => Promise<void>
 
 export class Handler {
     middleware: MiddlewareFunc[] = [];
-    handlerFunc: HandlerFunc | null = null;
+    handlerFunc: HandlerFunc;
 
     constructor(handlerFunc: HandlerFunc, ...middleware: MiddlewareFunc[]) {
         this.handlerFunc = handlerFunc;
         this.middleware = middleware;
     }
+
 }
