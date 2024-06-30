@@ -67,7 +67,7 @@ const postHandlerMiddleware = async (ctx: XerusCtx) => {
 }
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-    ctx.text(200, `${ctx.get('methodkey')} ${gtx.get('somekey')}`)
+    ctx.text(200, `${ctx.get('methodkey')} ${ctx.get('somekey')}`)
 }, ...handler.mw(getHandlerMiddleware))
 
 handler.post = new Handler(async (ctx: XerusCtx) => {
@@ -94,7 +94,7 @@ GET Hello, World!
 
 Test the POST route using:
 ```bash
-curl -X POST lostlhost:8080
+curl -X POST localhost:8080
 ```
 
 You should see:
