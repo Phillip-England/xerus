@@ -67,15 +67,37 @@ const postHandlerMiddleware = async (ctx: XerusCtx) => {
 }
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-    ctx.text(200, `${ctx.get('methodkey')} ${gtx.get('somekey')}`) // `GET Hello, World!`
+    ctx.text(200, `${ctx.get('methodkey')} ${gtx.get('somekey')}`)
 }, ...handler.mw(getHandlerMiddleware))
 
 handler.post = new Handler(async (ctx: XerusCtx) => {
-    ctx.json(200, {'message': `${ctx.get('methodkey')} ${ctx.get('somekey')}`}) // {'message': 'POST Hello, World!'}
+    ctx.json(200, {'message': `${ctx.get('methodkey')} ${ctx.get('somekey')}`})
 }, ...handler.mw(postHandlerMiddleware))
 ```
 
 ### Serving
 ```bash
 bun run dev
+```
+
+### Testing
+
+Test the GET route using:
+```bash
+curl localhost:8080
+```
+
+You should see:
+```bash
+GET Hello, World!
+```
+
+Test the POST route using:
+```bash
+curl -X POST lostlhost:8080
+```
+
+You should see:
+```bash
+POST {'message': 'POST Hello, World!'}
 ```
