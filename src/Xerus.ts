@@ -1,7 +1,7 @@
 import { $, sleep } from "bun";
 import type { Handler } from "./HandlerFunc";
 import { Router } from "./Router";
-import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
+import { Route, XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 import { Result } from "./Result";
 import { ERR_DBG, ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
 import { XerusTrace } from "./XerusTrace";
@@ -116,12 +116,32 @@ export class Xerus {
         let ctx = new XerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
         xerusReq.req = request
+        let response = await this.executeAppLevelMiddleware(ctx)
+        if (response) {
+            return response
+        }
+        response = await this.executeHandlerLevelMiddleware(ctx, route)
+        if (response) {
+            return response
+        }
+        response = await this.executeHandler(ctx, route)
+        if (response) {
+            return response
+        }
+        return await this.handle404(ctx)
+    }
+
+    async executeAppLevelMiddleware(ctx: XerusCtx): Promise<Response | null> {
         for (let middleware of this.middleware) {
             await middleware(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
             }
         }
+        return null
+    }
+
+    async executeHandlerLevelMiddleware(ctx: XerusCtx, route: Route | null): Promise<Response | null> {
         if (route && route.handler && route.handler.handlerFunc) {
             for (let i = 0; i < route.handler.middleware.length; i++) {
                 let mw: MiddlewareFunc = route.handler.middleware[i]
@@ -130,6 +150,12 @@ export class Xerus {
                     return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
                 }
             }
+        }
+        return null
+    }
+
+    async executeHandler(ctx: XerusCtx, route: Route | null): Promise<Response | null> {
+        if (route && route.handler && route.handler.handlerFunc) {
             await route.handler.handlerFunc(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
@@ -137,6 +163,10 @@ export class Xerus {
                 return new Response(ERR_NO_BODY, { status: 500 })
             }
         }
+        return null
+    }
+
+    async handle404(ctx: XerusCtx): Promise<Response> {
         if (this.notFoundHandler === null || !this.notFoundHandler.handlerFunc) {
             return new Response(ERR_NOT_FOUND, { status: 404 })
         } else {
