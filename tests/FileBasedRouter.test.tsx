@@ -22,7 +22,7 @@ test('🧪: failing to have a +init.ts in your app root will err', async () => {
     let dirname = './apps/app_empty'
     try {
         let files = await router.getFiles(dirname)
-        await router.parseFiles(files, dirname)
+        await router.registerFiles(files, dirname)
         await router.assertInitFileExists(dirname)
     } catch (e: any) {
         expect(e.message).toContain(router.errNoAppFile(''))
@@ -35,7 +35,7 @@ test('🧪: failing to have a +handler.ts in your app root will err', async () =
     let dirname = './apps/app_simple'
     try {
         let files = await router.getFiles(dirname)
-        await router.parseFiles(files, dirname)
+        await router.registerFiles(files, dirname)
         await router.assertRootHandlerExists(dirname)
     } catch (e: any) {
         expect(e.message).toContain(router.errNoAppFile(''))
@@ -48,7 +48,7 @@ test('🧪: having an unknown file in the app will result in an err', async () =
     let dirname = './apps/app_unknown_file'
     try {
         let files = await router.getFiles(dirname)
-        await router.parseFiles(files, dirname)
+        await router.registerFiles(files, dirname)
         await router.assertNoUnknownFiles(dirname)
     } catch (e: any) {
         expect(e.message).toContain(router.errNoAppFile(''))
@@ -60,7 +60,7 @@ test('🧪: a +handler.ts without an export named \'handler\' will err', async (
     const router = new FileBasedRouter(app)
     let dirname = './apps/app_bad_handler'
     let files = await router.getFiles(dirname)
-    await router.parseFiles(files, dirname)
+    await router.registerFiles(files, dirname)
     await router.assertRootHandlerExists(dirname);
     try {
         let handlerFile = await router.getRootHandlerFile()
@@ -74,15 +74,15 @@ test('🧪: can access root handler and it\'s exports', async () => {
     const router = new FileBasedRouter(app)
     let dirname = './apps/app_simple'
     let files = await router.getFiles(dirname)
-    await router.parseFiles(files, dirname)
+    await router.registerFiles(files, dirname)
     await router.assertInitFileExists(dirname);
     await router.assertRootHandlerExists(dirname);
     await router.assertNoUnknownFiles(dirname);
-    let handlerFile = await router.getRootHandlerFile()
-    expect(handlerFile).toBeDefined()
-    expect(handlerFile.endpointPath).toBe('/')
-    expect(handlerFile.relativePath).toBe('/+handler.ts')
-    let handler = await router.getHandlerFromHandlerFile(handlerFile)
+    let hf = await router.getRootHandlerFile()
+    expect(hf).toBeDefined()
+    expect(hf.file.endpointPath).toBe('/')
+    expect(hf.file.relativePath).toBe('/+handler.ts')
+    let handler = await hf.getHandler()
     expect(handler).toBeDefined()
     expect(handler.get).toBeDefined()
     expect(handler.post).toBeDefined()
