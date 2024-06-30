@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
 import { XerusTrace } from "./XerusTrace";
-import { ERR_NO_ROOT_HANDLER_FILE } from "./XerusErr";
+import { ERR_DBG, ERR_NO_ROOT_HANDLER_FILE } from "./XerusErr";
 
 export class FileBasedRouter {
     app: Xerus;
@@ -112,6 +112,9 @@ export class FileBasedRouter {
         for (let i = 0; i < this.routerFiles.length; i++) {
             let rf = this.routerFiles[i]
             let children = await rf.getChildRouterFiles()
+            if (rf.file.endpointPath == "/admin/home") {
+                console.log(ERR_DBG)
+            }
             for (let j = 0; j < children.length; j++) {
                 let child = children[j]
                 let re = await child.getRouterExport()

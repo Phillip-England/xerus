@@ -1,9 +1,8 @@
 import React from "react";
-import { XerusCtx } from "../src/export";
-import { HandlerFile } from "../src/FileBasedRouter";
+import { HandlerExport, XerusCtx } from "../src/export";
 
 
-const handler = new HandlerFile();
+export const handler = new HandlerExport();
 
 handler.get = async (ctx: XerusCtx) => {
     ctx.html(200, /*html*/`
@@ -37,5 +36,3 @@ handler.post = async (ctx: XerusCtx) => {
     ctx.json(200, {message: "hello world"})
 }
 
-
-export default handler;
