@@ -1,18 +1,16 @@
 import { $, sleep } from "bun";
-import type { HandlerFunc } from "./HandlerFunc";
+import type { Handler } from "./HandlerFunc";
 import { Router } from "./Router";
 import { XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 import { Result } from "./Result";
-import { ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
+import { ERR_DBG, ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
 import { XerusTrace } from "./XerusTrace";
 
 export class Xerus {
-    routers: { [key: string]: Router }
-    routes: { [key: string]: HandlerFunc }
+    router: Router
     middleware: MiddlewareFunc[]
-    globalMiddleware: MiddlewareFunc[]
     noLogPathPrefixes: string[]
-    notFoundHandler: HandlerFunc | null
+    notFoundHandler: Handler | null
     useLogger: boolean
     server: any
 
@@ -20,97 +18,13 @@ export class Xerus {
         this.notFoundHandler = null
         this.noLogPathPrefixes = ["/favicon.ico", "/static"]
         this.middleware = []
-        this.routes = {}
-        this.globalMiddleware = []
-        this.routers = {
-            "/": new Router('/')
-        }
+        this.router = new Router()
         this.useLogger = true
         this.server = null
     }
 
-    global(middleware: MiddlewareFunc) {
-        this.globalMiddleware.push(middleware)
-    }
-
     use(middleware: MiddlewareFunc) {
         this.middleware.push(middleware)
-    }
-
-    getSearchPath(path: string): string {
-        return this.routers['/'].getSearchPath('/', path)
-    }
-
-    async get(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].getRoutes[path]) {
-            this.routers['/'].get(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async post(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].postRoutes[path]) {
-            this.routers['/'].post(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async put(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].putRoutes[path]) {
-            this.routers['/'].put(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async patch(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].patchRoutes[path]) {
-            this.routers['/'].patch(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async update(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].updateRoutes[path]) {
-            this.routers['/'].update(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async delete(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].deleteRoutes[path]) {
-            this.routers['/'].delete(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    async option(path: string, handler: HandlerFunc) {
-        if (!this.routers['/'].optionRoutes[path]) {
-            this.routers['/'].option(path, handler)
-            this.routes[path] = handler
-        }
-    }
-
-    pullRouter(prefix: string): Router {
-        for (let key in this.routers) {
-            if (key === "/") {
-                continue
-            }
-            if (prefix.startsWith(key)) {
-                return this.routers[key]
-            }
-        }
-        return this.routers['/']
-    }
-
-    spawnRouter(prefix: string): Router {
-        let router = new Router(prefix)
-        return router
-    }
-
-    mountRouters(...routers: Router[]) {
-        for (let router of routers) {
-            this.routers[router.prefix] = router
-        }
     }
 
     async run(port: number) {
@@ -148,7 +62,7 @@ export class Xerus {
     }
 
     async requestIs405(router: Router, method: string, path: string): Promise<boolean> {
-        if (!router.routes[path]) {
+        if (!router.routes.includes(path)) {
             return false
         }
         switch (method) {
@@ -193,47 +107,41 @@ export class Xerus {
 
     async handleRequest(request: Request, path: string): Promise<Response> {
         const method = request.method
-        const router = this.pullRouter(path)
-        const route = router.route(router.prefix, path, method)
-        let is405 = await this.requestIs405(router, method, router.getSearchPath(router.prefix, path))
+        const router = this.router
+        const route = router.getRoute(path, method)
+        let is405 = await this.requestIs405(router, method, path)
         if (is405) {
             return new Response(ERR_METHOD_NOT_ALLOWED, { status: 405 })
         }
         let ctx = new XerusCtx(request)
         let xerusReq = ctx.xerusReq as XerusRequest
         xerusReq.req = request
-        for (let middleware of this.globalMiddleware) {
+        for (let middleware of this.middleware) {
             await middleware(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
             }
         }
-        if (router.prefix === "/") {
-            for (let middleware of this.middleware) {
-                await middleware(ctx)
+        if (route && route.handler && route.handler.handlerFunc) {
+            console.log(route)
+            for (let i = 0; i < route.handler.middleware.length; i++) {
+                let mw: MiddlewareFunc = route.handler.middleware[i]
+                await mw(ctx)
                 if (ctx.xerusRes.ready) {
                     return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
                 }
             }
-        }
-        for (let middleware of router.middleware) {
-            await middleware(ctx)
-            if (ctx.xerusRes.ready) {
-                return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
-            }
-        }
-        if (route) {
-            route.handler(ctx)
+            await route.handler.handlerFunc(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
             } else {
                 return new Response(ERR_NO_BODY, { status: 500 })
             }
         }
-        if (this.notFoundHandler === null) {
+        if (this.notFoundHandler === null || !this.notFoundHandler.handlerFunc) {
             return new Response(ERR_NOT_FOUND, { status: 404 })
         } else {
-            await this.notFoundHandler(ctx)
+            await this.notFoundHandler.handlerFunc(ctx)
         }
         if (ctx.xerusRes.ready) {
             return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
@@ -242,7 +150,7 @@ export class Xerus {
         }
     }
 
-    async setCustom404(handler: HandlerFunc) {
+    async setCustom404(handler: Handler) {
         this.notFoundHandler = handler
     }
 

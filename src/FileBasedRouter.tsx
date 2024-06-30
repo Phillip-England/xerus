@@ -1,15 +1,14 @@
-import { HandlerExport, HandlerFile, Router, RouterExport, RouterFile, Xerus, type HandlerFunc } from "./export";
+import { HandlerExport, HandlerFile, Router, Xerus, type HandlerFunc } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
 import { XerusTrace } from "./XerusTrace";
 import { ERR_DBG, ERR_NO_ROOT_HANDLER_FILE } from "./XerusErr";
+import type { InitExport } from "./InitExport";
 
 export class FileBasedRouter {
     app: Xerus;
     handlerFiles: HandlerFile[];
-    routerFileNames: string[];
-    routerFiles: RouterFile[];
     handlerFileNames: string[];
     appInitFiles: File[];
     appInitFileNames: string[];
@@ -20,22 +19,24 @@ export class FileBasedRouter {
     errUnknownAppFile: Function;
     errHandlerFileMissingHandlerModule: Function;
     errHandlerFileMissingHandlerClass: Function;
+    errInitFileMissingInitModule: Function;
+    errInitFileMissingInitFunc: Function;
 
     constructor(app: Xerus) {
         this.app = app;
         this.handlerFiles = [];
         this.handlerFileNames = ['+handler.ts']
-        this.routerFiles = [];
-        this.routerFileNames = ['+router.ts']
         this.appInitFiles = [];
         this.appInitFileNames = ['+init.ts']
-        this.goodFileNames = [...this.handlerFileNames, ...this.routerFileNames, ...this.appInitFileNames]
+        this.goodFileNames = [...this.handlerFileNames,  ...this.appInitFileNames]
         this.errNoAppFile = (dirname: string) => `no +init.ts file found at: ${dirname}`;
         this.errAppDirNotFound = (dirname: string) => `app directory does not exist: ${dirname}`;
         this.errNoRootHandlerFile = (dirname: string) => `no +handler.ts file found at ${dirname}`;
         this.errUnknownAppFile = (fileName: string) => `unknown app file found: ${fileName}`;
         this.errHandlerFileMissingHandlerModule = (fileName: string) => `handler file missing handler module: ${fileName}`;
         this.errHandlerFileMissingHandlerClass = (fileName: string) => `handler file missing handler class: ${fileName}`;
+        this.errInitFileMissingInitModule = (fileName: string) => `init file missing init module: ${fileName}`;
+        this.errInitFileMissingInitFunc = (fileName: string) => `init file missing init function: ${fileName}`;
         
     }
 
@@ -44,8 +45,8 @@ export class FileBasedRouter {
         await this.assertInitFileExists(dirname);
         await this.assertRootHandlerExists(dirname);
         await this.assertNoUnknownFiles(dirname);
-        await this.initHandlers();
-        await this.mountRouters(dirname)
+        await this.applyInitFunc(this.app);
+        await this.hookHandlersToApp(this.app);
     }
 
     async getFiles(dirname: string): Promise<Dirent[]> {
@@ -67,10 +68,6 @@ export class FileBasedRouter {
             if (file.isFile()) {
                 if (this.handlerFileNames.includes(file.name)) {
                     this.handlerFiles.push(new HandlerFile(new File(file, dirname)));
-                    continue
-                }
-                if (this.routerFileNames.includes(file.name)) {
-                    this.routerFiles.push(await new RouterFile(new File(file, dirname)));
                     continue
                 }
                 if (this.appInitFileNames.includes(file.name)) {
@@ -108,127 +105,26 @@ export class FileBasedRouter {
         }
     }
 
-    async executeRouterFileInheritance() {
-        for (let i = 0; i < this.routerFiles.length; i++) {
-            let rf = this.routerFiles[i]
-            let children = await rf.getChildRouterFiles()
-            if (rf.file.endpointPath == "/admin/home") {
-                console.log(ERR_DBG)
-            }
-            for (let j = 0; j < children.length; j++) {
-                let child = children[j]
-                let re = await child.getRouterExport()
-                if (!re.doesInherit) {
-                    break
-                }
-                re.inheritOnMountOf(await rf.getRouterExport())
-            }
+    async applyInitFunc(app: Xerus) {
+        let initFile = this.appInitFiles[0]
+        let initExport: InitExport
+        try {
+            initExport = await initFile.getExport('init')
+        } catch (e: any) {
+            throw new Error(this.errInitFileMissingInitModule(initFile.details.name))
         }
+        if (!initExport) {
+            throw new Error(this.errInitFileMissingInitFunc(initFile.details.name))
+        }
+        await initExport(app)
+        return initExport
     }
 
-    async mountRouterFiles() {
-        for (let i = 0; i < this.routerFiles.length; i++) {
-            let rf: RouterFile = this.routerFiles[i] as RouterFile;
-            let re: RouterExport = await rf.getRouterExport();
-            await re.mount(this.app, rf.file.endpointPath);
+    async hookHandlersToApp(app: Xerus) {
+        for (let hf of this.handlerFiles) {
+            await hf.hookToApp(app)
         }
     }
-
-    async getRootHandlerFile(): Promise<HandlerFile> {
-        return this.handlerFiles[0] as HandlerFile;
-    }
-
-    async initHandlers() {
-        for (const hf of this.handlerFiles) {
-            let handler: HandlerExport = await hf.getHandlerExport();
-            let counter = 0;
-            do {
-                if (counter >= this.routerFiles.length) {
-                    break;
-                }
-                let r = this.routerFiles[counter]
-                let routerModule = await import(r.file.absolutePath);
-                if (!routerModule) {
-                    continue;
-                }
-                let router: Router = routerModule.default;
-                if (!router) {
-                    continue;
-                }
-                let routerPrefix = router.prefix;
-                let handlerContainsPrefix = hf.file.relativePath.startsWith(routerPrefix);
-                if (handlerContainsPrefix) {
-                    this.hookHandlersToRouter(router, handler, hf);
-                    return
-                }
-                counter++;
-            } while (counter < this.routerFiles.length);
-            this.hookHandlersToApp(this.app, handler, hf);
-        }
-    }
-
-    async hookHandlersToApp(app: Xerus, handler: HandlerExport, hf: HandlerFile) {
-        if (handler.get) {
-            app.get(hf.file.endpointPath, handler.get);
-        }
-        if (handler.post) {
-            app.post(hf.file.endpointPath, handler.post);
-        }
-        if (handler.put) {
-            app.put(hf.file.endpointPath, handler.put);
-        }
-        if (handler.delete) {
-            app.delete(hf.file.endpointPath, handler.delete);
-        }
-        if (handler.patch) {
-            app.patch(hf.file.endpointPath, handler.patch);
-        }
-        if (handler.option) {
-            app.option(hf.file.endpointPath, handler.option);
-        }
-        if (handler.update) {
-            app.update(hf.file.endpointPath, handler.update);
-        }
-    }
-
-    async hookHandlersToRouter(router: Router, handler: HandlerExport, hf: HandlerFile) {
-        if (handler.get) {
-            router.get(hf.file.endpointPath, handler.get);
-        }
-        if (handler.post) {
-            router.post(hf.file.endpointPath, handler.post);
-        }
-        if (handler.put) {
-            router.put(hf.file.endpointPath, handler.put);
-        }
-        if (handler.delete) {
-            router.delete(hf.file.endpointPath, handler.delete);
-        }
-        if (handler.patch) {
-            router.patch(hf.file.endpointPath, handler.patch);
-        }
-        if (handler.option) {
-            router.option(hf.file.endpointPath, handler.option);
-        }
-        if (handler.update) {
-            router.update(hf.file.endpointPath, handler.update);
-        }
-    }
-
-    async mountRouters(dirname: string) {
-        for (const r of this.routerFiles) {
-            let routerModule = await import(r.file.absolutePath);
-            if (!routerModule) {
-                continue;
-            }
-            let router: Router = routerModule.default;
-            if (!router) {
-                continue;
-            }
-            this.app.mountRouters(router);
-        } 
-    }
-
 
 }
 

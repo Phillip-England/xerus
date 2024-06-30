@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { RouterFile, Xerus,  XerusCtx,  XerusMw } from "../src/export";
+import {  Xerus,  XerusCtx,  XerusMw } from "../src/export";
 import React from "react";
 import { TestClient } from "./TestClient";
 import { $, sleep } from "bun";
@@ -61,16 +61,16 @@ test('🧪: a +handler.ts without an export named \'handler\' will err', async (
     let dirname = './apps/app_bad_handler'
     let files = await router.getFiles(dirname)
     await router.registerFiles(files, dirname)
-    await router.assertRootHandlerExists(dirname);
     try {
-        let handlerFile = await router.getRootHandlerFile()
+        await router.assertRootHandlerExists(dirname);
     } catch (e: any) {
         expect(e.message).toContain(router.errHandlerFileMissingHandlerClass(''))
     }
 })
 
-test('🧪: can access root handler and it\'s exports', async () => {
+test(`🧪: basic routing works`, async () => {
     const app = new Xerus()
+    const client = new TestClient()
     const router = new FileBasedRouter(app)
     let dirname = './apps/app_simple'
     let files = await router.getFiles(dirname)
@@ -78,148 +78,15 @@ test('🧪: can access root handler and it\'s exports', async () => {
     await router.assertInitFileExists(dirname);
     await router.assertRootHandlerExists(dirname);
     await router.assertNoUnknownFiles(dirname);
-    let hf = await router.getRootHandlerFile()
-    expect(hf).toBeDefined()
-    expect(hf.file.endpointPath).toBe('/')
-    expect(hf.file.relativePath).toBe('/+handler.ts')
-    let handler = await hf.getHandlerExport()
-    expect(handler).toBeDefined()
-    expect(handler.get).toBeDefined()
-    expect(handler.post).toBeDefined()
-    expect(handler.put).toBeDefined()
-    expect(handler.delete).toBeDefined()
+    await router.applyInitFunc(app)
+    await router.hookHandlersToApp(app)
+    await app.run(8080)
+    const res = await client.get("/")
+    let text = await res.text()
+    expect(text).toBe("PATH: GLOBAL MIDDLEWARE middleware: / GET: /")
+    console.log(text)
 })
 
-test('🧪: +router.ts files inherit the functionality of their parents properly', async () => {
-    const app = new Xerus()
-    app.global(async (ctx: XerusCtx) => {
-        ctx.store('somekey', '/global')
-    })
-    const router = new FileBasedRouter(app)
-    let dirname = './apps/app_simple'
-    let files = await router.getFiles(dirname)
-    await router.registerFiles(files, dirname)
-    await router.assertInitFileExists(dirname);
-    await router.assertRootHandlerExists(dirname);
-    await router.assertNoUnknownFiles(dirname);
-    await router.executeRouterFileInheritance()
-    let foundAdmin = false
-    let foundAdminHome = false
-    let foundAdminNoInherit = false
-    let foundAdminNoInheritDoInherit = false
-    expect(router.routerFiles.length).toBe(4)
-    await router.mountRouterFiles()
-    for (let i = 0; i < router.routerFiles.length; i++) {
-        let rf = router.routerFiles[i]
-        let routerExport = await rf.getRouterExport()
-        let mockReq = new Request('http://localhost:8080/admin', { method: 'GET' })
-        expect(routerExport).toBeDefined()
-        switch (rf.file.endpointPath) {
-            case '/admin':
-                foundAdmin = true
-                let router = app.routers['/admin']
-                expect(router).toBeDefined()
-                expect(router.middleware.length).toBe(2)
-                let globalmw = router.middleware[0]
-                let mw1 = router.middleware[1]
-                expect(globalmw).toBeDefined()
-                expect(mw1).toBeDefined()
-                let ctx = new XerusCtx(mockReq)
-                for (let i = 0; i < router.middleware.length; i++) {
-                    await router.middleware[i](ctx)
-                    let val = await ctx.get('somekey')
-                    switch (i) {
-                        case 0:
-                            expect(val).toBe('/global')
-                            break;
-                        case 1:
-                            expect(val).toBe('/admin/+router.ts')
-                            break;
-                    }
-                }
-                break;
-            case '/admin/home':
-                foundAdminHome = true
-                let router2 = app.routers['/admin/home']
-                expect(router2).toBeDefined()
-                expect(router2.middleware.length).toBe(3)
-                let r2globalmw = router2.middleware[0]
-                let r2mw1 = router2.middleware[1]
-                let r2mw2 = router2.middleware[2]
-                expect(r2globalmw).toBeDefined()
-                expect(r2mw1).toBeDefined()
-                expect(r2mw2).toBeDefined()
-                let ctx2 = new XerusCtx(mockReq)
-                for (let i = 0; i < router2.middleware.length; i++) {
-                    await router2.middleware[i](ctx2)
-                    let val = await ctx2.get('somekey')
-                    switch (i) {
-                        case 0:
-                            expect(val).toBe('/global')
-                            break;
-                        case 1:
-                            expect(val).toBe('/admin/+router.ts')
-                            break;
-                        case 2:
-                            expect(val).toBe('/admin/home/+router.ts')
-                            break;
-                    }
-                }
-
-                break;
-            case '/admin/noinherit':
-                foundAdminNoInherit = true
-                let router3 = app.routers['/admin/noinherit']
-                expect(router3).toBeDefined()
-                expect(router3.middleware.length).toBe(2)
-                let r3globalmw = router3.middleware[0]
-                expect(r3globalmw).toBeDefined()
-                let ctx3 = new XerusCtx(mockReq)
-                for (let i = 0; i < router3.middleware.length; i++) {
-                    await router3.middleware[i](ctx3)
-                    let val = await ctx3.get('somekey')
-                    switch (i) {
-                        case 0:
-                            expect(val).toBe('/global')
-                            break;
-                        case 1:
-                            expect(val).toBe('/admin/noinherit/+router.ts')
-                            break;
-                    }
-                }
-                
-                break;
-            case '/admin/noinherit/doinherit':
-                foundAdminNoInheritDoInherit = true
-                let router4 = app.routers['/admin/noinherit/doinherit']
-                expect(router4).toBeDefined()
-                expect(router4.middleware.length).toBe(3)
-                let r4globalmw = router4.middleware[0]
-                expect(r4globalmw).toBeDefined()
-                let ctx4 = new XerusCtx(mockReq)
-                for (let i = 0; i < router4.middleware.length; i++) {
-                    await router4.middleware[i](ctx4)
-                    let val = await ctx4.get('somekey')
-                    switch (i) {
-                        case 0:
-                            expect(val).toBe('/global')
-                            break;
-                        case 1:
-                            expect(val).toBe('/admin/noinherit/+router.ts')
-                            break;
-                        case 2:
-                            expect(val).toBe('/admin/noinherit/doinherit/+router.ts')
-                            break;
-                    }
-                }
-                break;
-        }
-    }
-    expect(foundAdmin).toBe(true)
-    expect(foundAdminHome).toBe(true)
-    expect(foundAdminNoInherit).toBe(true)
-    expect(foundAdminNoInheritDoInherit).toBe(true)
-})
 
 // test('🧪: +router.ts files properly imprint on their +handler.ts children', async () => {
 //     const app = new Xerus()

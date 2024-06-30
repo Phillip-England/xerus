@@ -1,13 +1,14 @@
-import type { HandlerFunc } from "./export";
+import type { Handler, MiddlewareFunc } from "./export";
 
 export class HandlerExport {
-    get: HandlerFunc | null = null;
-    post: HandlerFunc | null = null;
-    put: HandlerFunc | null = null;
-    delete: HandlerFunc | null = null;
-    patch: HandlerFunc | null = null;
-    option: HandlerFunc | null = null;
-    update: HandlerFunc | null = null;
+    middleware: MiddlewareFunc[] = [];
+    get: Handler | null = null;
+    post: Handler | null = null;
+    put: Handler | null = null;
+    delete: Handler | null = null;
+    patch: Handler | null = null;
+    option: Handler | null = null;
+    update: Handler | null = null;
 
     constructor() {
         this.get = null;
@@ -18,4 +19,13 @@ export class HandlerExport {
         this.option = null;
         this.update = null;
     }
+
+    use(middlewareFunc: MiddlewareFunc) {
+        this.middleware.push(middlewareFunc);
+    }
+
+    mw(...middleware: MiddlewareFunc[]): MiddlewareFunc[] {
+        return [...this.middleware, ...middleware]
+    }
+
 }

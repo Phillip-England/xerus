@@ -1,12 +1,9 @@
-import type { HandlerFunc } from "./HandlerFunc";
+import type { Handler } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Route } from "./Route";
-import { ERR_DBG } from "./XerusErr";
 
 export class Router {
-    prefix: string;
-    middleware: MiddlewareFunc[];
-    routes: { [key: string]: Route };
+    routes: string[];
     getRoutes: { [key: string]: Route };
     getDynamicRoutes: { [key: string]: Route };
     postRoutes: { [key: string]: Route };
@@ -22,10 +19,8 @@ export class Router {
     putRoutes: { [key: string]: Route };
     putDynamicRoutes: { [key: string]: Route };
 
-    constructor(prefix: string) {
-        this.prefix = prefix;
-        this.middleware = [];
-        this.routes = {};
+    constructor() {
+        this.routes = [];
         this.getRoutes = {};
         this.getDynamicRoutes = {};
         this.postRoutes = {};
@@ -42,47 +37,43 @@ export class Router {
         this.putDynamicRoutes = {};
     }
 
-    use(middleware: MiddlewareFunc) {
-        this.middleware.push(middleware);
-    }
-
-    private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: HandlerFunc) {
+    private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: Handler) {
         if (path.includes(':') && !dynamicRouteCollection[path]) {
-            dynamicRouteCollection[path] = new Route(this.prefix, path, method, handler);
-            this.routes[path] = dynamicRouteCollection[path];
+            dynamicRouteCollection[path] = new Route(path, method, handler);
+            this.routes.push(path)
         } else if (!routeCollection[path]) {
-            routeCollection[path] = new Route(this.prefix, path, method, handler);
-            this.routes[path] = routeCollection[path];
+            routeCollection[path] = new Route(path, method, handler);
+            this.routes.push(path);
         } else {
             throw new Error(`Route already exists for ${method} ${path}`);
         }
     }
 
-    get(path: string, handler: HandlerFunc) {
+    get(path: string, handler: Handler) {
         this.addRoute(this.getRoutes, this.getDynamicRoutes, path, 'GET', handler);
     }
 
-    post(path: string, handler: HandlerFunc) {
+    post(path: string, handler: Handler) {
         this.addRoute(this.postRoutes, this.postDynamicRoutes, path, 'POST', handler);
     }
 
-    patch(path: string, handler: HandlerFunc) {
+    patch(path: string, handler: Handler) {
         this.addRoute(this.patchRoutes, this.patchDynamicRoutes, path, 'PATCH', handler);
     }
 
-    delete(path: string, handler: HandlerFunc) {
+    delete(path: string, handler: Handler) {
         this.addRoute(this.deleteRoutes, this.deleteDynamicRoutes, path, 'DELETE', handler);
     }
 
-    update(path: string, handler: HandlerFunc) {
+    update(path: string, handler: Handler) {
         this.addRoute(this.updateRoutes, this.updateDynamicRoutes, path, 'UPDATE', handler);
     }
 
-    put(path: string, handler: HandlerFunc) {
+    put(path: string, handler: Handler) {
         this.addRoute(this.putRoutes, this.putDynamicRoutes, path, 'PUT', handler);
     }
 
-    option(path: string, handler: HandlerFunc) {
+    option(path: string, handler: Handler) {
         this.addRoute(this.optionRoutes, this.optionDynamicRoutes, path, 'OPTION', handler);
     }
 
@@ -109,34 +100,22 @@ export class Router {
         return route;
     }
 
-    getSearchPath(prefix: string, path: string): string {
-        if (prefix === this.prefix && this.prefix != "/") {
-            return "/";
-        } else if (path.startsWith(prefix) && this.prefix != "/") {
-            return path.slice(prefix.length);
-        } else {
-            return path;
-        }
-    }
-
-    route(prefix: string, path: string, method: string): Route | null {
-        let searchPath = this.getSearchPath(prefix, path);
-        // console.log(ERR_DBG, path, prefix)
+    getRoute(path: string, method: string): Route | null {
         switch (method) {
             case 'GET':
-                return this.findRoute(this.getRoutes, this.getDynamicRoutes, searchPath)
+                return this.findRoute(this.getRoutes, this.getDynamicRoutes, path)
             case 'POST':
-                return this.findRoute(this.postRoutes, this.postDynamicRoutes, searchPath)
+                return this.findRoute(this.postRoutes, this.postDynamicRoutes, path)
             case 'PATCH':
-                return this.findRoute(this.patchRoutes, this.patchDynamicRoutes, searchPath)
+                return this.findRoute(this.patchRoutes, this.patchDynamicRoutes, path)
             case 'DELETE':
-                return this.findRoute(this.deleteRoutes, this.deleteDynamicRoutes, searchPath)
+                return this.findRoute(this.deleteRoutes, this.deleteDynamicRoutes, path)
             case 'UPDATE':
-                return this.findRoute(this.updateRoutes, this.updateDynamicRoutes, searchPath)
+                return this.findRoute(this.updateRoutes, this.updateDynamicRoutes, path)
             case 'PUT':
-                return this.findRoute(this.putRoutes, this.putDynamicRoutes, searchPath)
+                return this.findRoute(this.putRoutes, this.putDynamicRoutes, path)
             case 'OPTION':
-                return this.findRoute(this.optionRoutes, this.optionDynamicRoutes, searchPath)
+                return this.findRoute(this.optionRoutes, this.optionDynamicRoutes, path)
             default:
                 return null
         }
