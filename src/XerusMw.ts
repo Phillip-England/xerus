@@ -6,6 +6,7 @@ import type { XerusCtx } from "./XerusCtx";
 export class XerusMw {
 
     static async serveStaticFiles(ctx: XerusCtx) {
+        await XerusMw.serveFavicon(ctx)
         let request = ctx.xerusReq?.req;
         if (!request) {
             return;

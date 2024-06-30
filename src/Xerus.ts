@@ -23,8 +23,10 @@ export class Xerus {
         this.server = null
     }
 
-    use(middleware: MiddlewareFunc) {
-        this.middleware.push(middleware)
+    use(...middleware: MiddlewareFunc[]) {
+        for (let m of middleware) {
+            this.middleware.push(m)
+        }
     }
 
     async run(port: number) {

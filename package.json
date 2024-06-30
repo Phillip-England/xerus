@@ -30,7 +30,8 @@
     "build": "tsc",
     "bundle": "bun build ./client/index.ts --outdir ../static --watch",
     "kill": "sudo lsof -t -i :8080 | xargs sudo kill -9",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "cat": "grep -rh '' ./src > output.txt"
   },
   "type": "module",
   "types": "dist/export.d.ts"
