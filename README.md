@@ -14,6 +14,7 @@ bun install xerus
 ## Quickstart
 
 ### Entrypoint
+
 `./index.ts`
 ```ts
 const app = new Xerus()
@@ -33,7 +34,7 @@ export const init = async (app: Xerus) => {
 }
 ```
 
-### Handler for "/"
+### Creating Handlers
 `./app/+handler.ts`
 ```ts
 export const handler = new HandlerExport()
@@ -54,10 +55,14 @@ const postHandlerMiddleware = async (ctx: XerusCtx) => {
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
     ctx.text(200, `${ctx.get('methodkey')} ${gtx.get('somekey')}`) // `GET Hello, World!`
-}, ...handler.mw())
+}, ...handler.mw(getHandlerMiddleware))
 
 handler.post = new Handler(async (ctx: XerusCtx) => {
     ctx.json(200, {'message': `${ctx.get('methodkey')} ${ctx.get('somekey')}`}) // {'message': 'POST Hello, World!'}
-}, ...handler.mw())
+}, ...handler.mw(postHandlerMiddleware))
+```
 
+### Serving
+```bash
+bun run --hot index.ts
 ```
