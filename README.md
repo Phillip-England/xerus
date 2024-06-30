@@ -28,7 +28,7 @@ Responsible for basic application initialization. Gives you the opporunity to do
 ```ts
 const app = new Xerus()
 app.use(XerusMw.serveStaticFiles)
-const router = new FileBasedRouters(app)
+const router = new FileBasedRouter(app)
 await router.mount('./app')
 await app.run(8080)
 ```
