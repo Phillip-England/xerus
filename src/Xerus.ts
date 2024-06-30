@@ -123,7 +123,6 @@ export class Xerus {
             }
         }
         if (route && route.handler && route.handler.handlerFunc) {
-            console.log(route)
             for (let i = 0; i < route.handler.middleware.length; i++) {
                 let mw: MiddlewareFunc = route.handler.middleware[i]
                 await mw(ctx)

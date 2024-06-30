@@ -61,36 +61,40 @@ export class XerusCtx {
         return this.xerusReq.getHeader(key);
     }
 
-    html(status: number, body: any) {
-        if (this.bodyIsSet()) {
-            throw new Error(ERR_BODY_OVERWRITE);
+    html(status: number, body: any, ignoreBodyCheck: boolean = false) {
+        if (this.bodyIsSet() && !ignoreBodyCheck) {
+            this.text(500, ERR_BODY_OVERWRITE, true);
+            return
         }
         this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(body.trim());
     }
 
-    json(status: number, body: any) {
-        if (this.bodyIsSet()) {
-            throw new Error(ERR_BODY_OVERWRITE);
+    json(status: number, body: any, ignoreBodyCheck: boolean = false) {
+        if (this.bodyIsSet() && !ignoreBodyCheck) {
+            this.text(500, ERR_BODY_OVERWRITE, true);
+            return
         }
         this.xerusRes.setHeader("Content-Type", "application/json");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(JSON.stringify(body));
     }
 
-    jsx(status: number, body: any) {
-        if (this.bodyIsSet()) {
-            throw new Error(ERR_BODY_OVERWRITE);
+    jsx(status: number, body: any, ignoreBodyCheck: boolean = false) {
+        if (this.bodyIsSet() && !ignoreBodyCheck) {
+            this.text(500, ERR_BODY_OVERWRITE, true);
+            return
         }
         this.xerusRes.setHeader("Content-Type", "text/html");
         this.xerusRes.setStatus(status);
         this.xerusRes.setBody(renderToString(body));
     }
 
-    text(status: number, body: any) {
-        if (this.bodyIsSet()) {
-            throw new Error(ERR_BODY_OVERWRITE);
+    text(status: number, body: any, ignoreBodyCheck: boolean = false) {
+        if (this.bodyIsSet() && !ignoreBodyCheck) {
+            this.text(500, ERR_BODY_OVERWRITE, true);
+            return
         }
         this.xerusRes.setHeader("Content-Type", "text/plain");
         this.xerusRes.setStatus(status);
