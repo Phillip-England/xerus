@@ -90,6 +90,21 @@ test('🧪: can access root handler and it\'s exports', async () => {
     expect(handler.delete).toBeDefined()
 })
 
+test('🧪: if +router.ts has a child router.ts, an err will occur', async () => {
+    const app = new Xerus()
+    const router = new FileBasedRouter(app)
+    let dirname = './apps/app_simple'
+    let files = await router.getFiles(dirname)
+    await router.registerFiles(files, dirname)
+    await router.assertInitFileExists(dirname);
+    await router.assertRootHandlerExists(dirname);
+    await router.assertNoUnknownFiles(dirname);
+    for (let i = 0; i < router.routerFiles.length; i++) {
+        let rf = router.routerFiles[i]
+        let handlerFiles = await rf.getChildHandlerFiles()
+    }
+})
+
 
 // test('FileBasedRouter.extractAppFiles - finding a single handler', async () => {
 //     const app = new Xerus()

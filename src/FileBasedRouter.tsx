@@ -1,4 +1,4 @@
-import { Handler, HandlerFile, Router, Xerus, type HandlerFunc } from "./export";
+import { Handler, HandlerFile, Router, RouterFile, Xerus, type HandlerFunc } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
@@ -9,7 +9,7 @@ export class FileBasedRouter {
     app: Xerus;
     handlerFiles: HandlerFile[];
     routerFileNames: string[];
-    routerFiles: File[];
+    routerFiles: RouterFile[];
     handlerFileNames: string[];
     appInitFiles: File[];
     appInitFileNames: string[];
@@ -70,7 +70,7 @@ export class FileBasedRouter {
                     continue
                 }
                 if (this.routerFileNames.includes(file.name)) {
-                    this.routerFiles.push(new File(file, dirname));
+                    this.routerFiles.push(new RouterFile(new File(file, dirname)));
                     continue
                 }
                 if (this.appInitFileNames.includes(file.name)) {
@@ -113,15 +113,15 @@ export class FileBasedRouter {
     }
 
     async initHandlers() {
-        for (const h of this.handlerFiles) {
-            let handler: Handler = await h.getHandler();
+        for (const hf of this.handlerFiles) {
+            let handler: Handler = await hf.getHandler();
             let counter = 0;
             do {
                 if (counter >= this.routerFiles.length) {
                     break;
                 }
                 let r = this.routerFiles[counter]
-                let routerModule = await import(r.absolutePath);
+                let routerModule = await import(r.file.absolutePath);
                 if (!routerModule) {
                     continue;
                 }
@@ -130,14 +130,14 @@ export class FileBasedRouter {
                     continue;
                 }
                 let routerPrefix = router.prefix;
-                let handlerContainsPrefix = h.file.relativePath.startsWith(routerPrefix);
+                let handlerContainsPrefix = hf.file.relativePath.startsWith(routerPrefix);
                 if (handlerContainsPrefix) {
-                    this.hookHandlersToRouter(router, handler, h);
+                    this.hookHandlersToRouter(router, handler, hf);
                     return
                 }
                 counter++;
             } while (counter < this.routerFiles.length);
-            this.hookHandlersToApp(this.app, handler, h);
+            this.hookHandlersToApp(this.app, handler, hf);
         }
     }
 
@@ -191,7 +191,7 @@ export class FileBasedRouter {
 
     async mountRouters(dirname: string) {
         for (const r of this.routerFiles) {
-            let routerModule = await import(r.absolutePath);
+            let routerModule = await import(r.file.absolutePath);
             if (!routerModule) {
                 continue;
             }
