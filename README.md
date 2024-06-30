@@ -23,6 +23,7 @@ Go ahead and update the `scripts` section of your `package.json` for hot reload:
 
 ### Entrypoint
 Responsible for basic application initialization. Gives you the opporunity to do any work you would like to complete prior to the `FileBasedRouter` being initialized.
+
 `./index.ts`
 ```ts
 const app = new Xerus()
