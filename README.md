@@ -12,7 +12,7 @@ bun install xerus
 ```
 
 ## Hot Reload
-Go ahead and update the `scripts` of your `package.json` for hot reload:
+Go ahead and update the `scripts` section of your `package.json` for hot reload:
 ```json
   "scripts": {
     "dev": "bun --hot run ./index.ts",
@@ -22,7 +22,7 @@ Go ahead and update the `scripts` of your `package.json` for hot reload:
 ## Quickstart
 
 ### Entrypoint
-
+Responsible for basic application initialization. Gives you the opporunity to do any work you would like to complete prior to the `FileBasedRouter` being initialized.
 `./index.ts`
 ```ts
 const app = new Xerus()
