@@ -1,6 +1,15 @@
 # Xerus
 Xerus is a meta-framework for the Bun runtime. Xerus is centered on a file-based routing system, along with a few reactive primitives for client-side interactions.
 
+## Installation
+
+```bash
+mkdir mkdir myapp
+cd myapp
+bun init
+bun install xerus
+```
+
 ## Quickstart
 
 ### Entrypoint
