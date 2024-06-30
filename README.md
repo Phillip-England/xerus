@@ -34,6 +34,8 @@ await app.run(8080)
 ```
 
 ### App Initilization
+Allows you the chance to set up global middleware.
+
 `./app/+init.ts`
 ```ts
 export const init = async (app: Xerus) => {
@@ -44,6 +46,8 @@ export const init = async (app: Xerus) => {
 ```
 
 ### Creating Handlers
+Place a handler in the root of your application for the `/` path.
+
 `./app/+handler.ts`
 ```ts
 export const handler = new HandlerExport()
