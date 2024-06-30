@@ -5,10 +5,12 @@ import type { Xerus } from "./Xerus"
 export class RouterExport {
     onMount: (app: Xerus, router: Router) => Promise<void>
     childOnMounts: Array<(app: Xerus, router: Router) => Promise<void>>;
+    doesInherit: boolean
 
-    constructor(onMount: (app: Xerus, router: Router) => Promise<void>) {
+    constructor(doesInherit: boolean, onMount: (app: Xerus, router: Router) => Promise<void>) {
         this.onMount = onMount
         this.childOnMounts = []
+        this.doesInherit = doesInherit
     }
 
     inheritOnMountOf(routerExport: RouterExport) {
@@ -17,6 +19,9 @@ export class RouterExport {
 
     mount(app: Xerus, prefix: string) {
         let router = app.spawnRouter(prefix)
+        for (let gmw of app.globalMiddleware) {
+            router.middleware.push(gmw)
+        }
         for (let childOnMount of this.childOnMounts) {
             childOnMount(app, router)
         }

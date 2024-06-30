@@ -1,4 +1,4 @@
-import { HandlerExport, HandlerFile, Router, RouterFile, Xerus, type HandlerFunc } from "./export";
+import { HandlerExport, HandlerFile, Router, RouterExport, RouterFile, Xerus, type HandlerFunc } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
@@ -70,7 +70,7 @@ export class FileBasedRouter {
                     continue
                 }
                 if (this.routerFileNames.includes(file.name)) {
-                    this.routerFiles.push(await RouterFile.new(new File(file, dirname)));
+                    this.routerFiles.push(await new RouterFile(new File(file, dirname)));
                     continue
                 }
                 if (this.appInitFileNames.includes(file.name)) {
@@ -108,13 +108,16 @@ export class FileBasedRouter {
         }
     }
 
-    async prepareRouterFileInheritance() {
+    async executeRouterFileInheritance() {
         for (let i = 0; i < this.routerFiles.length; i++) {
             let rf = this.routerFiles[i]
             let children = await rf.getChildRouterFiles()
             for (let j = 0; j < children.length; j++) {
                 let child = children[j]
                 let re = await child.getRouterExport()
+                if (!re.doesInherit) {
+                    break
+                }
                 re.inheritOnMountOf(await rf.getRouterExport())
             }
         }
@@ -123,7 +126,7 @@ export class FileBasedRouter {
     async mountRouterFiles() {
         for (let i = 0; i < this.routerFiles.length; i++) {
             let rf: RouterFile = this.routerFiles[i] as RouterFile;
-            let re = await rf.getRouterExport();
+            let re: RouterExport = await rf.getRouterExport();
             await re.mount(this.app, rf.file.endpointPath);
         }
     }

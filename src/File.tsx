@@ -32,18 +32,18 @@ export class File {
             this.relativePath = pathSegment + '/' + file.name
         }
         this.absolutePath = path.resolve(mountTo + this.relativePath)
-        this.errFailedToLoadModule = (fileName: string) => `handler file missing handler module: ${fileName}`;
+        this.errFailedToLoadModule = (absolutePath: string) => `failed to load module at: ${absolutePath}`;
         this.errFailedToLoadFiles = (dirname: string) => `failed to load files at and below: ${dirname}`;
     }
 
     async getExport(exportName: string): Promise<any> {
         let tsModule = await import(this.absolutePath);
         if (!tsModule) {
-            throw new Error(this.errFailedToLoadModule(this.details.name));
+            throw new Error(this.errFailedToLoadModule(this.absolutePath));
         }
         let exported: any | undefined = tsModule[exportName];
         if (!exported) {
-            throw new Error(this.errFailedToLoadModule(this.details.name));
+            throw new Error(this.errFailedToLoadModule(this.absolutePath));
         }
         return exported;
     }
@@ -71,26 +71,9 @@ export class File {
 
 export class RouterFile {
     file: File
-    routerExport: RouterExport | undefined
 
     constructor(file: File) {
         this.file = file
-        this.routerExport = undefined
-    }
-
-    static async new(file: File): Promise<RouterFile> {
-        let rf = new RouterFile(file)
-        rf.routerExport = await rf.getRouterExport()
-        return rf
-    }
-
-    async getRouter(): Promise<Router> {
-        return await this.file.getExport('router') as Router;
-    }
-
-    async mount(app: Xerus) {
-        let router = await this.getRouter();
-        app.mountRouters(router);
     }
 
     async getChildRouterFiles(): Promise<RouterFile[]> {
@@ -105,7 +88,7 @@ export class RouterFile {
                 filteredFiles.push(cf);
             }
         }
-        let routerFilesPromises: Promise<RouterFile>[] = filteredFiles.map(async (file) => await RouterFile.new(file));
+        let routerFilesPromises: Promise<RouterFile>[] = filteredFiles.map(async (file) => await new RouterFile(file));
         let routerFiles: RouterFile[] = await Promise.all(routerFilesPromises);
         return routerFiles;
     }

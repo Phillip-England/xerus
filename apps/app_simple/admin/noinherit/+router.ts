@@ -4,10 +4,10 @@ import { Xerus } from "../../../../src/Xerus"
 import { XerusCtx } from "../../../../src/XerusCtx"
 
 
-export const router = new RouterExport(true, async (app: Xerus, router: Router) => {
+export const router = new RouterExport(false, async (app: Xerus, router: Router) => {
     
     router.use(async (ctx: XerusCtx) => {
-        ctx.store('somekey', '/admin/home/+router.ts')
+        ctx.store('somekey', '/admin/noinherit/+router.ts')
     })
 
 })
