@@ -1,10 +1,11 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { Xerus } from './Xerus';
 
 export class XerusTrace {
     constructor() {}
 
-    async log(text: string) {
+    static async log(text: any) {
         const dirPath = path.resolve('./logs');
         const filePath = path.resolve(dirPath, 'trace.txt');
         try {
@@ -13,35 +14,6 @@ export class XerusTrace {
         } catch (error) {
             console.error('Error writing to trace log:', error);
         }
-    }
-
-    async funcTitle(text: string) {
-        await this.log(`==============================================`)
-        await this.log(`FUNC CALL: ${text}`)
-        await this.newLine()
-    }
-
-    async funcEnd() {
-        await this.log(`==============================================`)
-    }
-
-    async funcEndInto(funcName: string) {
-        await this.log(`EXITING INTO: ${funcName}`)
-        await this.log(`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
-    }
-
-    async funcBranchInto(funcName: string) {
-        await this.log(`BRANCHING INTO: ${funcName}`)
-        await this.log(`----------------------------------------------`)
-    }
-
-    async newLine() {
-        await this.log('')
-    }
-
-    async err(err: string) {
-        await this.log(`ERROR: ${err}`)
-        throw new Error(err)
     }
 
     static async clear() {

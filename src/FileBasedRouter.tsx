@@ -1,4 +1,4 @@
-import { Handler, HandlerFile, Router, RouterFile, Xerus, type HandlerFunc } from "./export";
+import { HandlerExport, HandlerFile, Router, RouterFile, Xerus, type HandlerFunc } from "./export";
 import { readdir } from 'node:fs/promises';
 import { Dirent } from 'node:fs';
 import { File } from "./File";
@@ -70,7 +70,7 @@ export class FileBasedRouter {
                     continue
                 }
                 if (this.routerFileNames.includes(file.name)) {
-                    this.routerFiles.push(new RouterFile(new File(file, dirname)));
+                    this.routerFiles.push(await RouterFile.new(new File(file, dirname)));
                     continue
                 }
                 if (this.appInitFileNames.includes(file.name)) {
@@ -108,13 +108,33 @@ export class FileBasedRouter {
         }
     }
 
+    async prepareRouterFileInheritance() {
+        for (let i = 0; i < this.routerFiles.length; i++) {
+            let rf = this.routerFiles[i]
+            let children = await rf.getChildRouterFiles()
+            for (let j = 0; j < children.length; j++) {
+                let child = children[j]
+                let re = await child.getRouterExport()
+                re.inheritOnMountOf(await rf.getRouterExport())
+            }
+        }
+    }
+
+    async mountRouterFiles() {
+        for (let i = 0; i < this.routerFiles.length; i++) {
+            let rf: RouterFile = this.routerFiles[i] as RouterFile;
+            let re = await rf.getRouterExport();
+            await re.mount(this.app, rf.file.endpointPath);
+        }
+    }
+
     async getRootHandlerFile(): Promise<HandlerFile> {
         return this.handlerFiles[0] as HandlerFile;
     }
 
     async initHandlers() {
         for (const hf of this.handlerFiles) {
-            let handler: Handler = await hf.getHandler();
+            let handler: HandlerExport = await hf.getHandlerExport();
             let counter = 0;
             do {
                 if (counter >= this.routerFiles.length) {
@@ -141,7 +161,7 @@ export class FileBasedRouter {
         }
     }
 
-    async hookHandlersToApp(app: Xerus, handler: Handler, hf: HandlerFile) {
+    async hookHandlersToApp(app: Xerus, handler: HandlerExport, hf: HandlerFile) {
         if (handler.get) {
             app.get(hf.file.endpointPath, handler.get);
         }
@@ -165,7 +185,7 @@ export class FileBasedRouter {
         }
     }
 
-    async hookHandlersToRouter(router: Router, handler: Handler, hf: HandlerFile) {
+    async hookHandlersToRouter(router: Router, handler: HandlerExport, hf: HandlerFile) {
         if (handler.get) {
             router.get(hf.file.endpointPath, handler.get);
         }

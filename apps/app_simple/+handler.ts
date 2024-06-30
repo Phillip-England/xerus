@@ -1,8 +1,8 @@
-import { Handler } from "../../src/Handler"
+import { HandlerExport } from "../../src/HandlerExport"
 import { XerusCtx } from "../../src/XerusCtx"
 
 
-export const handler = new Handler()
+export const handler = new HandlerExport()
 
 handler.get = async (ctx: XerusCtx) => {}
 

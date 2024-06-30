@@ -1,9 +1,10 @@
 import { Dirent } from 'fs';
 import * as path from 'path';
-import type { Handler } from './Handler';
+import type { HandlerExport } from './HandlerExport';
 import type { Xerus } from './Xerus';
 import type { Router } from './Router';
 import { readdir } from 'node:fs/promises';
+import type { RouterExport } from './RouterExport';
 
 
 export class File {
@@ -70,9 +71,17 @@ export class File {
 
 export class RouterFile {
     file: File
+    routerExport: RouterExport | undefined
 
     constructor(file: File) {
         this.file = file
+        this.routerExport = undefined
+    }
+
+    static async new(file: File): Promise<RouterFile> {
+        let rf = new RouterFile(file)
+        rf.routerExport = await rf.getRouterExport()
+        return rf
     }
 
     async getRouter(): Promise<Router> {
@@ -84,42 +93,45 @@ export class RouterFile {
         app.mountRouters(router);
     }
 
-    async getChildHandlerFiles(): Promise<HandlerFile[]> {
+    async getChildRouterFiles(): Promise<RouterFile[]> {
         let childFiles = await this.file.getChildFiles();
+        let filteredFiles = [];
         for (let i = 0; i < childFiles.length; i++) {
-            let cf = childFiles[i]
+            let cf = childFiles[i];
             if (cf.absolutePath == this.file.absolutePath) {
-                continue // skip self
+                continue; // skip self
+            }
+            if (cf.details.name === '+router.ts') {
+                filteredFiles.push(cf);
             }
         }
-        // let filteredFiles: File[] = []
-        // for (const file of childFiles) {
-        //     if (file.details.name === '+handler.ts') {
-        //         filteredFiles.push(file)
-        //     }
-        // }
-        // let handlerFiles: HandlerFile[] = filteredFiles.map((file) => new HandlerFile(file))
-        // return handlerFiles;
-        return []
+        let routerFilesPromises: Promise<RouterFile>[] = filteredFiles.map(async (file) => await RouterFile.new(file));
+        let routerFiles: RouterFile[] = await Promise.all(routerFilesPromises);
+        return routerFiles;
+    }
+
+    async getRouterExport(): Promise<RouterExport> {
+        return await this.file.getExport('router') as RouterExport;
     }
 
 }
 
 
-
 export class HandlerFile {
     file: File
+    routerFile: RouterFile | undefined
 
     constructor(file: File) {
         this.file = file
+        this.routerFile = undefined
     }
 
-    async getHandler(): Promise<Handler> {
-        return await this.file.getExport('handler') as Handler;
+    async getHandlerExport(): Promise<HandlerExport> {
+        return await this.file.getExport('handler') as HandlerExport;
     }
 
     async hookToApp(app: Xerus) {
-        let handler = await this.getHandler();
+        let handler = await this.getHandlerExport();
         if (handler.get) {
             app.get(this.file.endpointPath, handler.get);
         }
@@ -144,7 +156,7 @@ export class HandlerFile {
     }
 
     async hookToRouter(router: Router) {
-        let handler = await this.getHandler();
+        let handler = await this.getHandlerExport();
         if (handler.get) {
             router.get(this.file.endpointPath, handler.get);
         }

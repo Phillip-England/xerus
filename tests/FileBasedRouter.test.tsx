@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { Xerus,  XerusCtx,  XerusMw } from "../src/export";
+import { RouterFile, Xerus,  XerusCtx,  XerusMw } from "../src/export";
 import React from "react";
 import { TestClient } from "./TestClient";
 import { $, sleep } from "bun";
@@ -82,7 +82,7 @@ test('🧪: can access root handler and it\'s exports', async () => {
     expect(hf).toBeDefined()
     expect(hf.file.endpointPath).toBe('/')
     expect(hf.file.relativePath).toBe('/+handler.ts')
-    let handler = await hf.getHandler()
+    let handler = await hf.getHandlerExport()
     expect(handler).toBeDefined()
     expect(handler.get).toBeDefined()
     expect(handler.post).toBeDefined()
@@ -90,7 +90,7 @@ test('🧪: can access root handler and it\'s exports', async () => {
     expect(handler.delete).toBeDefined()
 })
 
-test('🧪: if +router.ts has a child router.ts, an err will occur', async () => {
+test('🧪: +router.ts files inherit the functionality of their parents', async () => {
     const app = new Xerus()
     const router = new FileBasedRouter(app)
     let dirname = './apps/app_simple'
@@ -99,10 +99,36 @@ test('🧪: if +router.ts has a child router.ts, an err will occur', async () =>
     await router.assertInitFileExists(dirname);
     await router.assertRootHandlerExists(dirname);
     await router.assertNoUnknownFiles(dirname);
-    for (let i = 0; i < router.routerFiles.length; i++) {
-        let rf = router.routerFiles[i]
-        let handlerFiles = await rf.getChildHandlerFiles()
-    }
+    await router.prepareRouterFileInheritance()
+    expect(router.routerFiles.length).toBe(2)
+    let routerFile1: RouterFile = router.routerFiles[0]
+    let routerFile2: RouterFile = router.routerFiles[1]
+    expect(routerFile1.file.endpointPath).toBe('/admin')
+    expect(routerFile2.file.endpointPath).toBe('/admin/home')
+    expect(routerFile2.routerExport?.childOnMounts.length).toBe(1)
+    await router.mountRouterFiles()
+    let router1 = app.routers['/admin']
+    let router2 = app.routers['/admin/home']
+    expect(router1).toBeDefined()
+    expect(router2).toBeDefined()
+    expect(router1.middleware.length).toBe(1)
+    expect(router2.middleware.length).toBe(2)
+    let router1Middleware = router1.middleware[0]
+    let router2Middleware1 = router2.middleware[0]
+    let router2Middleware2 = router2.middleware[1]
+    expect(router1Middleware).toBeDefined()
+    expect(router2Middleware1).toBeDefined()
+    expect(router2Middleware2).toBeDefined()
+    let mockReq = new Request('http://localhost:8080/admin/home', { method: 'GET' })
+    let mockCtx = new XerusCtx(mockReq)
+    await router1Middleware(mockCtx)
+    expect(mockCtx.get('somekey')).toBe('somevalue')
+    let anotherCtx = new XerusCtx(mockReq)
+    await router2Middleware1(anotherCtx)
+    expect(anotherCtx.get('somekey')).toBe('somevalue')
+    await router2Middleware2(anotherCtx)
+    expect(anotherCtx.get('somekey')).toBe('someoverwrittenvalue')
+
 })
 
 
