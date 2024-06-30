@@ -11,6 +11,14 @@ bun init
 bun install xerus
 ```
 
+## Hot Reload
+Go ahead and update the `scripts` of your `package.json` for hot reload:
+```json
+  "scripts": {
+    "dev": "bun --hot run ./index.ts",
+  }
+```
+
 ## Quickstart
 
 ### Entrypoint
@@ -64,5 +72,5 @@ handler.post = new Handler(async (ctx: XerusCtx) => {
 
 ### Serving
 ```bash
-bun run --hot index.ts
+bun run dev
 ```
