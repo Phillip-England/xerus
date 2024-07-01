@@ -75,7 +75,7 @@ handler.get = new Handler(async (ctx: XerusCtx) => {
 export const handler = new HandlerExport()
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-    ctx.text(200, ctx.param('name'))
+    ctx.text(200, ctx.query('name'))
 })
 ```
 
