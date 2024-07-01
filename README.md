@@ -72,22 +72,12 @@ bun run dev
 
 Test the GET route using:
 ```bash
-curl localhost:8080
-```
-
-You should see:
-```bash
-Hello, World!
+curl localhost:8080 ## Hello, World!
 ```
 
 Test the POST route using:
 ```bash
-curl -X POST localhost:8080
-```
-
-You should see:
-```json
-{'message': 'Hello, World!'}
+curl -X POST localhost:8080 ## {"message": "Hello, World!"}
 ```
 
 ## Middleware
