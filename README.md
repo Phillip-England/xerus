@@ -15,7 +15,7 @@ bun install xerus
 Go ahead and update the `scripts` section of your `package.json` for hot reload:
 ```json
   "scripts": {
-    "dev": "bun --hot run ./index.ts",
+    "dev": "bun --hot run ./index.ts"
   }
 ```
 
