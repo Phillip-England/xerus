@@ -12,9 +12,8 @@ export const IconToggle = () => {
 
 }
 
-export const Layout = (jsx: JSX.Element) => {
-    let strElement = renderToString(jsx)
-    return `
+export const Layout = ({ children }: { children: React.ReactNode }) => {
+    return (
         <html>
             <head>
                 <meta charSet="UTF-8" />
@@ -22,9 +21,9 @@ export const Layout = (jsx: JSX.Element) => {
                 <title>Document</title>
             </head>
             <body>
-                <div id="root">${strElement}</div>
+                {children}
                 <script src="/static/index.js"></script>
             </body>
         </html>
-    `
-}
+    );
+};

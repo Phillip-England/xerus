@@ -138,13 +138,11 @@ test('🧪file-routing - dynamic paths', async () => {
     expect(text).toBe("123")
 })
 
-test('🧪file-routing - +middleware.ts', async () => {
+test('🧪file-routing - +middleware.ts are hooked without err', async () => {
     const app = new Xerus()
     const router = new FileBasedRouter(app)
     let dirname = './tests/apps/app_simple'
     await router.registerFiles(await router.getFiles(dirname), dirname)
     await router.hookMiddlewareToHandlers()
-    for (let hf of router.handlerFiles) {
-    }
-    
+
 })
