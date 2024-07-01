@@ -66,7 +66,7 @@ handler.post = new Handler(async (ctx: XerusCtx) => {
 export const handler = new HandlerExport()
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-    ctx.text(200, ctx.pathPart(2))
+    ctx.text(200, ctx.pathPart(1))
 })
 ```
 
