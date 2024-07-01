@@ -85,8 +85,6 @@ bun run dev
 ```
 
 ### Testing
-
-Test the GET route using:
 ```bash
 curl localhost:8080/ ## Hello, World!
 curl -X POST localhost:8080 ## {"message": "Hello, World!"}
@@ -102,7 +100,7 @@ Middleware can be applied to your handlers in 3 different ways, each with their 
 3. +handler.ts middleware (local)
 
 ### +init.ts middleware
-The `init.ts` file is intended to apply **global** middleware. That is, middleware that runs on every handle in the application.
+The `init.ts` file is intended to apply **global** middleware. That is, middleware that runs on every handler in the application.
 
 The following will make every request say hi:
 `./app/+init.ts`
@@ -121,7 +119,7 @@ This enables us to apply middleware to groups of handlers all beneath a particul
 
 **Warning**, each `+handler.ts` can only have one `+middleware.ts` file associated with it at a time. Middleware does not cascade downwards to all child `+handler.ts` files. This may be the expected behaviour.
 
-`./app/admin/+middleware.ts
+`./app/admin/+middleware.ts`
 ```ts
 export const middleware = new MiddlewareExport(async (ctx) => {
     ctx.store('somekey', `Hello, Middleware!`)
