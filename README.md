@@ -1,5 +1,5 @@
 # Xerus
-Xerus is a meta-framework for the Bun runtime. Xerus is centered on a file-based routing system, along with a few reactive primitives for client-side interactions.
+Web Apps with File-Based Routing and Reactive Primitives.
 
 ## Installation
 Bun is a relatively new runtime. This iteration of Xerus was made with Bun 1.1.17. Please run `bun upgrade` if you are not up-to-date.
