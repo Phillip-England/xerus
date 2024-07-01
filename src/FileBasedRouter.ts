@@ -28,7 +28,7 @@ export class FileBasedRouter {
     constructor(app: Xerus) {
         this.app = app;
         this.handlerFiles = [];
-        this.handlerFileNames = ['+handler.ts']
+        this.handlerFileNames = ['+handler.ts', '+handler.tsx']
         this.appInitFiles = [];
         this.appInitFileNames = ['+init.ts']
         this.middlewareFiles = [];

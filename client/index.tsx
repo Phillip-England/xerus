@@ -1,3 +1,7 @@
+import React from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { IconToggle } from '../lib/components/components';
+
 const qs = (selector: string) => document.querySelector(selector)
 const qsa = (selector: string) => document.querySelectorAll(selector)
 
@@ -68,3 +72,9 @@ class Store {
 }
   
 const store = Store.getInstance();
+
+
+
+
+
+hydrateRoot(document.getElementById('root') as Element, <IconToggle />);

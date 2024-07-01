@@ -28,7 +28,7 @@
   "scripts": {
     "dev": "bun --hot run ./index.ts",
     "build": "tsc",
-    "bundle": "bun build ./client/index.ts --outdir ../static --watch",
+    "bundle": "bun build ./client/index.tsx --outdir ./static --watch",
     "kill": "sudo lsof -t -i :8080 | xargs sudo kill -9",
     "prepublishOnly": "bun run build",
     "cat": "grep -rh '' ./src > output.txt"
