@@ -121,6 +121,10 @@ export class Xerus {
         if (response) {
             return response
         }
+        response = await this.executeMiddlewareFileMiddleware(ctx, router, route)
+        if (response) {
+            return response
+        }
         response = await this.executeHandlerLevelMiddleware(ctx, route)
         if (response) {
             return response
@@ -137,6 +141,23 @@ export class Xerus {
             await middleware(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
+            }
+        }
+        return null
+    }
+
+    async executeMiddlewareFileMiddleware(ctx: XerusCtx, router: Router, route: Route | null): Promise<Response | null> {
+        if (route && route.handlerFile.middlewareFile) {
+            let mwFile = route.handlerFile.middlewareFile
+            let mwExport = await mwFile.getMiddlewareExport()
+            let middlewares = mwExport.middleware
+            if (middlewares) {
+                for (let j = 0; j < middlewares.length; j++) {
+                    await middlewares[j](ctx)
+                    if (ctx.xerusRes.ready) {
+                        return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })
+                    }
+                }
             }
         }
         return null

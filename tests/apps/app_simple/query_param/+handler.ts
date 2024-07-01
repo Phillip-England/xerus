@@ -7,5 +7,5 @@ export const handler = new HandlerExport()
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
     let param = ctx.query('some_value')
-    ctx.text(200, `${param}`)
+    ctx.text(200, `${ctx.get('somekey')}${param}`)
 })

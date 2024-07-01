@@ -11,7 +11,7 @@ const app = new Xerus()
 app.use(XerusMw.serveFavicon)
 const router = new FileBasedRouter(app)
 await router.mount('./tests/apps/app_simple')
-app.useLogger = false
+// app.useLogger = false
 await app.run(8080)
 
 test('🧪: pointing to a non-existance app dir will err', async () => {
@@ -80,7 +80,7 @@ test('🧪: a +handler.ts without an export named \'handler\' will err', async (
 test(`🧪: basic routing works`, async () => {
     const res = await c.get("/")
     let text = await res.text()
-    expect(text).toBe("PATH: GLOBAL MIDDLEWARE middleware: / GET: /")
+    expect(text).toBe("012")
 })
 
 test('🧪file-routing - GET basic hello world', async () => {
@@ -128,7 +128,7 @@ test('🧪file-routing - query params', async () => {
     const res = await c.get("/query_param?some_value=hello");
     expect(res.status).toBe(200);
     let text = await res.text()
-    expect(text).toBe("hello")
+    expect(text).toBe("01hello")
 })
 
 test('🧪file-routing - dynamic paths', async () => {
@@ -136,4 +136,15 @@ test('🧪file-routing - dynamic paths', async () => {
     expect(res.status).toBe(200);
     let text = await res.text()
     expect(text).toBe("123")
+})
+
+test('🧪file-routing - +middleware.ts', async () => {
+    const app = new Xerus()
+    const router = new FileBasedRouter(app)
+    let dirname = './tests/apps/app_simple'
+    await router.registerFiles(await router.getFiles(dirname), dirname)
+    await router.hookMiddlewareToHandlers()
+    for (let hf of router.handlerFiles) {
+    }
+    
 })

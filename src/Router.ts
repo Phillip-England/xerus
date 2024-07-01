@@ -1,3 +1,4 @@
+import type { HandlerFile } from "./HandlerFile";
 import type { Handler } from "./HandlerFunc";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Route } from "./Route";
@@ -37,44 +38,44 @@ export class Router {
         this.putDynamicRoutes = {};
     }
 
-    private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, path: string, method: string, handler: Handler) {
-        if (path.includes(':') && !dynamicRouteCollection[path]) {
-            dynamicRouteCollection[path] = new Route(path, method, handler);
-            this.routes.push(path)
-        } else if (!routeCollection[path]) {
-            routeCollection[path] = new Route(path, method, handler);
-            this.routes.push(path);
+    private addRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, hf: HandlerFile, method: string, handler: Handler) {
+        if (hf.file.endpointPath.includes(':') && !dynamicRouteCollection[hf.file.endpointPath]) {
+            dynamicRouteCollection[hf.file.endpointPath] = new Route(hf, method, handler);
+            this.routes.push(hf.file.endpointPath)
+        } else if (!routeCollection[hf.file.endpointPath]) {
+            routeCollection[hf.file.endpointPath] = new Route(hf, method, handler);
+            this.routes.push(hf.file.endpointPath);
         } else {
-            throw new Error(`Route already exists for ${method} ${path}`);
+            throw new Error(`Route already exists for ${method} ${hf.file.endpointPath}`);
         }
     }
 
-    get(path: string, handler: Handler) {
-        this.addRoute(this.getRoutes, this.getDynamicRoutes, path, 'GET', handler);
+    get(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.getRoutes, this.getDynamicRoutes, hf, 'GET', handler);
     }
 
-    post(path: string, handler: Handler) {
-        this.addRoute(this.postRoutes, this.postDynamicRoutes, path, 'POST', handler);
+    post(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.postRoutes, this.postDynamicRoutes, hf, 'POST', handler);
     }
 
-    patch(path: string, handler: Handler) {
-        this.addRoute(this.patchRoutes, this.patchDynamicRoutes, path, 'PATCH', handler);
+    patch(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.patchRoutes, this.patchDynamicRoutes, hf, 'PATCH', handler);
     }
 
-    delete(path: string, handler: Handler) {
-        this.addRoute(this.deleteRoutes, this.deleteDynamicRoutes, path, 'DELETE', handler);
+    delete(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.deleteRoutes, this.deleteDynamicRoutes, hf, 'DELETE', handler);
     }
 
-    update(path: string, handler: Handler) {
-        this.addRoute(this.updateRoutes, this.updateDynamicRoutes, path, 'UPDATE', handler);
+    update(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.updateRoutes, this.updateDynamicRoutes, hf, 'UPDATE', handler);
     }
 
-    put(path: string, handler: Handler) {
-        this.addRoute(this.putRoutes, this.putDynamicRoutes, path, 'PUT', handler);
+    put(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.putRoutes, this.putDynamicRoutes, hf, 'PUT', handler);
     }
 
-    option(path: string, handler: Handler) {
-        this.addRoute(this.optionRoutes, this.optionDynamicRoutes, path, 'OPTION', handler);
+    option(hf: HandlerFile, handler: Handler) {
+        this.addRoute(this.optionRoutes, this.optionDynamicRoutes, hf, 'OPTION', handler);
     }
 
     private findRoute(routeCollection: { [key: string]: Route }, dynamicRouteCollection: { [key: string]: Route }, searchPath: string): Route | null {

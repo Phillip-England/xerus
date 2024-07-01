@@ -1,12 +1,12 @@
-import type { Handler } from "./export";
+import type { Handler, HandlerFile } from "./export";
 
 export class Route {
-    path: string;
+    handlerFile: HandlerFile;
     method: string;
     handler: Handler;
 
-    constructor(path: string, method: string, handler: Handler) {
-        this.path = path;
+    constructor(handlerFile: HandlerFile, method: string, handler: Handler) {
+        this.handlerFile = handlerFile;
         this.method = method;
         this.handler = handler;
     }

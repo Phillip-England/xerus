@@ -5,11 +5,14 @@ import { File } from "./File";
 import { XerusTrace } from "./XerusTrace";
 import { ERR_DBG, ERR_NO_ROOT_HANDLER_FILE } from "./XerusErr";
 import type { InitExport } from "./InitExport";
+import { MiddlewareFile } from "./MiddlewareFile";
 
 export class FileBasedRouter {
     app: Xerus;
     handlerFiles: HandlerFile[];
     handlerFileNames: string[];
+    middlewareFiles: MiddlewareFile[];
+    middlewareFileNames: string[];
     appInitFiles: File[];
     appInitFileNames: string[];
     goodFileNames: string[];
@@ -28,7 +31,9 @@ export class FileBasedRouter {
         this.handlerFileNames = ['+handler.ts']
         this.appInitFiles = [];
         this.appInitFileNames = ['+init.ts']
-        this.goodFileNames = [...this.handlerFileNames,  ...this.appInitFileNames]
+        this.middlewareFiles = [];
+        this.middlewareFileNames = ['+middleware.ts']
+        this.goodFileNames = [...this.handlerFileNames, ...this.middlewareFileNames,  ...this.appInitFileNames]
         this.errNoAppFile = (dirname: string) => `no +init.ts file found at: ${dirname}`;
         this.errAppDirNotFound = (dirname: string) => `app directory does not exist: ${dirname}`;
         this.errNoRootHandlerFile = (dirname: string) => `no +handler.ts file found at ${dirname}`;
@@ -46,6 +51,7 @@ export class FileBasedRouter {
         await this.assertRootHandlerExists(dirname);
         await this.assertNoUnknownFiles(dirname);
         await this.applyInitFunc(this.app);
+        await this.hookMiddlewareToHandlers();
         await this.hookHandlersToApp(this.app);
     }
 
@@ -68,6 +74,10 @@ export class FileBasedRouter {
             if (file.isFile()) {
                 if (this.handlerFileNames.includes(file.name)) {
                     this.handlerFiles.push(new HandlerFile(new File(file, dirname)));
+                    continue
+                }
+                if (this.middlewareFileNames.includes(file.name)) {
+                    this.middlewareFiles.push(new MiddlewareFile(new File(file, dirname)));
                     continue
                 }
                 if (this.appInitFileNames.includes(file.name)) {
@@ -118,6 +128,30 @@ export class FileBasedRouter {
         }
         await initExport(app)
         return initExport
+    }
+
+    async workOnMiddlewareFiles(callback: (mwFile: MiddlewareFile) => Promise<void>) {
+        for (let mwFile of this.middlewareFiles) {
+            await callback(mwFile)
+        }
+    }
+
+    async workOnHandlerFiles(callback: (handlerFile: HandlerFile) => Promise<void>) {
+        for (let handlerFile of this.handlerFiles) {
+            await callback(handlerFile)
+        }
+    }
+
+    async hookMiddlewareToHandlers() {
+        await this.workOnMiddlewareFiles(async (mwFile) => {
+            await this.workOnHandlerFiles(async (handlerFile) => {
+                let mwSlashCount = mwFile.file.absolutePath.split('/').length
+                let handlerSlashCount = handlerFile.file.absolutePath.split('/').length
+                if (mwSlashCount <= handlerSlashCount) {
+                    handlerFile.setMiddlewareFile(mwFile)
+                }
+            })
+        })
     }
 
     async hookHandlersToApp(app: Xerus) {
