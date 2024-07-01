@@ -39,9 +39,11 @@ Allows you the chance to set up global middleware.
 `./app/+init.ts`
 ```ts
 export const init = async (app: Xerus) => {
+    
     app.use(async (ctx: XerusCtx) => {
-        ctx.store('somekey', 'Hello')
+        ctx.store('somekey', 'Hello, World!')
     })
+
 }
 ```
 
@@ -52,27 +54,13 @@ Place a handler in the root of your application for the `/` path.
 ```ts
 export const handler = new HandlerExport()
 
-handler.use(async (ctx: XerusCtx) => {
-    let hello = ctx.get('somekey')
-    console.log(hello) // 'Hello'
-    ctx.store('somekey', `${hello}, World!`)
+handler.get = new Handler(async (ctx: XerusCtx) => {
+    ctx.text(200, ctx.get('somekey'))
 })
 
-const getHandlerMiddleware = async (ctx: XerusCtx) => {
-    ctx.store('methodkey', 'GET')
-}
-
-const postHandlerMiddleware = async (ctx: XerusCtx) => {
-    ctx.store('methodkey', 'POST')
-}
-
-handler.get = new Handler(async (ctx: XerusCtx) => {
-    ctx.text(200, `${ctx.get('methodkey')} ${ctx.get('somekey')}`)
-}, ...handler.mw(getHandlerMiddleware))
-
 handler.post = new Handler(async (ctx: XerusCtx) => {
-    ctx.json(200, {'message': `${ctx.get('methodkey')} ${ctx.get('somekey')}`})
-}, ...handler.mw(postHandlerMiddleware))
+    ctx.json(200, {'message': ctx.get('somekey')})
+})
 ```
 
 ### Serving
@@ -89,7 +77,7 @@ curl localhost:8080
 
 You should see:
 ```bash
-GET Hello, World!
+Hello, World!
 ```
 
 Test the POST route using:
@@ -98,6 +86,26 @@ curl -X POST localhost:8080
 ```
 
 You should see:
-```bash
-POST {'message': 'POST Hello, World!'}
+```json
+{'message': 'Hello, World!'}
+```
+
+## Middleware
+You can apply middleware to handlers using `+middleware.ts` files. For example:
+
+`./app/admin/+middleware.ts
+```ts
+export const middleware = new MiddlewareExport(async (ctx) => {
+    ctx.store('somekey', `Hello, Middleware!`)
+})
+```
+
+`./app/admin/+handler.ts`
+```ts
+export const handler = new HandlerExport()
+
+handler.get = new Handler(async (ctx: XerusCtx) => {
+    console.log(ctx.get('somekey')) // Hello, Middleware! 
+    // ...
+})
 ```
