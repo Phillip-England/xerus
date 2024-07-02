@@ -4,6 +4,7 @@ import { XerusRequest } from "./XerusRequest";
 import { XerusResponse } from "./XerusResponse";
 import type { Cookie } from "./Cookie";
 import { ERR_BODY_OVERWRITE } from "./XerusErr";
+import type { LoadFunc } from "./export";
 
 
 export class XerusCtx {
@@ -116,5 +117,20 @@ export class XerusCtx {
     get(key: string): any {
         return this.data[key];
     }
+
+    setLoadFunc(loadFunc: LoadFunc) {
+        if (!this.xerusReq) {
+            return;
+        }
+        this.xerusReq.loadFunc = loadFunc;
+    }
+
+    async load(): Promise<any> {
+        if (!this.xerusReq) {
+            return async () => null;
+        }
+        return this.xerusReq.loadFunc();
+    }
+
 
 }

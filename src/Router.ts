@@ -1,5 +1,5 @@
 import type { HandlerFile } from "./HandlerFile";
-import type { Handler } from "./HandlerFunc";
+import type { Handler } from "./Handler";
 import type { MiddlewareFunc } from "./MiddlewareFunc";
 import { Route } from "./Route";
 

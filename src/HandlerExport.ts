@@ -1,7 +1,7 @@
-import type { Handler, MiddlewareFunc } from "./export";
+import type { Handler, LoadFunc, MiddlewareFunc } from "./export";
 
 export class HandlerExport {
-    middleware: MiddlewareFunc[] = [];
+    load: LoadFunc
     get: Handler | null = null;
     post: Handler | null = null;
     put: Handler | null = null;
@@ -11,6 +11,7 @@ export class HandlerExport {
     update: Handler | null = null;
 
     constructor() {
+        this.load = async () => null;
         this.get = null;
         this.post = null;
         this.put = null;

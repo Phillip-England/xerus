@@ -1,5 +1,5 @@
+import { Handler } from "../../../../../src/Handler"
 import { HandlerExport } from "../../../../../src/HandlerExport"
-import { Handler } from "../../../../../src/HandlerFunc"
 import { XerusCtx } from "../../../../../src/XerusCtx"
 
 export const handler = new HandlerExport()

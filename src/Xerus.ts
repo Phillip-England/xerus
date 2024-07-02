@@ -1,5 +1,5 @@
 import { $, sleep } from "bun";
-import type { Handler } from "./HandlerFunc";
+import type { Handler, HandlerFunc } from "./Handler";
 import { Router } from "./Router";
 import { Route, XerusCtx, type MiddlewareFunc,  type XerusRequest } from "./export";
 import { ERR_DBG, ERR_METHOD_NOT_ALLOWED, ERR_NO_BODY, ERR_NOT_FOUND } from "./XerusErr";
@@ -178,6 +178,15 @@ export class Xerus {
 
     async executeHandler(ctx: XerusCtx, route: Route | null): Promise<Response | null> {
         if (route && route.handler && route.handler.handlerFunc) {
+            let handlerFunc: HandlerFunc; 
+            if (route.method != "GET") {
+                let exportedHandler = await route.handlerFile.getHandlerExport()
+                let loadFunc = exportedHandler.load
+                if (await loadFunc() != null) {
+                    ctx.setLoadFunc(loadFunc)
+                }
+                handlerFunc = route.handler.handlerFunc
+            }
             await route.handler.handlerFunc(ctx)
             if (ctx.xerusRes.ready) {
                 return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers })

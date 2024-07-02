@@ -1,12 +1,14 @@
-import type { Cookie } from "./export";
+import type { Cookie, LoadFunc } from "./export";
 
 
 export class XerusRequest {
 
     req: Request | null = null;
+    loadFunc: LoadFunc
 
     constructor(request: Request) {
         this.req = request;
+        this.loadFunc = async () => null;
     }
 
     pathPart = (index: number): string => {
