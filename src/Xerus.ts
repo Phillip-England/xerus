@@ -179,13 +179,12 @@ export class Xerus {
     async executeHandler(ctx: XerusCtx, route: Route | null): Promise<Response | null> {
         if (route && route.handler && route.handler.handlerFunc) {
             let handlerFunc: HandlerFunc; 
-            if (route.method != "GET") {
+            if (route.method == "GET") {
                 let exportedHandler = await route.handlerFile.getHandlerExport()
                 let loadFunc = exportedHandler.load
                 if (await loadFunc() != null) {
                     ctx.setLoadFunc(loadFunc)
                 }
-                handlerFunc = route.handler.handlerFunc
             }
             await route.handler.handlerFunc(ctx)
             if (ctx.xerusRes.ready) {
