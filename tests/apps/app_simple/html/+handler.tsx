@@ -6,13 +6,21 @@ import { IconToggle, Layout } from '../../../../lib/components/components'
 
 export const handler = new HandlerExport()
 
-handler.load = async (): Promise<any> => {
-    return "loading!";
+type User = {
+    name: string
+    age: number
 }
 
+handler.load = async (): Promise<User> => {
+    let user: User =  {
+        name: 'John Doe',
+        age: 42
+    }
+    return user
+}
 
 handler.get = new Handler(async (ctx: XerusCtx) => {
-    let data = await ctx.load()
+    let data: User = await ctx.load()
     console.log(data)
     ctx.jsx(200, <Layout><IconToggle/></Layout>)
 })
