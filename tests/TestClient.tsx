@@ -35,28 +35,28 @@ export class TestClient {
 }
 
 
-// export const newTestClients = (amount: number): TestClient[] => {
-//     const clients = [];
-//     for (let i = 0; i < amount; i++) {
-//         clients.push(new TestClient());
-//     }
-//     return clients;
-// }
+export const newTestClients = (amount: number): TestClient[] => {
+    let clients: TestClient[] = [];
+    for (let i = 0; i < amount; i++) {
+        clients.push(new TestClient());
+    }
+    return clients;
+}
 
-// export const runClients = async (clients: TestClient[], fn: (client: TestClient) => Promise<void>) => {
-//     for (let i = 0; i < clients.length; i++) {
-//         await fn(clients[i]);
-//     }
-// }
+export const runClients = async (clients: TestClient[], fn: (client: TestClient) => Promise<void>) => {
+    for (let i = 0; i < clients.length; i++) {
+        await fn(clients[i]);
+    }
+}
 
-// export const runClientsParallel = async (clients: TestClient[], fn: (client: TestClient) => Promise<void>) => {
-//     const promises = clients.map(client => fn(client));
-//     await Promise.all(promises);
-// }
+export const runClientsParallel = async (clients: TestClient[], fn: (client: TestClient) => Promise<void>) => {
+    const promises = clients.map(client => fn(client));
+    await Promise.all(promises);
+}
 
-// export const timer = async (fn: (...args: any[]) => Promise<void>, ...args: any[]): Promise<void> => {
-//     const functionName = fn.name || 'anonymous function';
-//     console.time(`Execution time for ${functionName}`);
-//     await fn(...args);
-//     console.timeEnd(`Execution time for ${functionName}`);
-// };
+export const timer = async (fn: (...args: any[]) => Promise<void>, ...args: any[]): Promise<void> => {
+    const functionName = fn.name || 'anonymous function';
+    console.time(`Execution time for ${functionName}`);
+    await fn(...args);
+    console.timeEnd(`Execution time for ${functionName}`);
+};

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
-import {  Xerus,  XerusCtx,  XerusMw } from "../src/export";
+import {  Xerus,  XerusClient,  XerusCtx,  XerusMw } from "../src/export";
 import React from "react";
-import { TestClient } from "./TestClient";
+import { newTestClients, runClients, runClientsParallel, TestClient } from "./TestClient";
 import { $, sleep } from "bun";
 import { FileBasedRouter } from "../src/FileBasedRouter";
 import { ERR_BODY_OVERWRITE, ERR_NO_BODY } from "../src/XerusErr";
@@ -144,5 +144,16 @@ test('🧪file-routing - +middleware.ts are hooked without err', async () => {
     let dirname = './tests/apps/app_simple'
     await router.registerFiles(await router.getFiles(dirname), dirname)
     await router.hookMiddlewareToHandlers()
-
 })
+
+test('🧪client-generation', async () => {
+    const app = new Xerus()
+    const router = new FileBasedRouter(app)
+    let dirname = './tests/apps/app_simple'
+    await router.mount(dirname)
+    const client = new XerusClient(app)
+    let files = await client.getFiles(dirname)
+    console.log(files)
+})
+
+
