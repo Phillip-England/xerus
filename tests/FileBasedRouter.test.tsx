@@ -154,6 +154,7 @@ test('🧪client-generation', async () => {
     const client = new XerusClient(app)
     let files = await client.getFiles(dirname)
     console.log(files)
+    
 })
 
 
