@@ -1,16 +1,6 @@
 import React from "react"
 import { renderToString } from "react-dom/server"
 
-export const IconToggle = () => {
-    let [isToggled, setIsToggled] = React.useState(false)
-    return (
-        <div id='icon-toggle' use-client='true'>
-            {isToggled ? <h1>🍔</h1> : <h1>🍕</h1>}
-            <button onClick={() => setIsToggled(!isToggled)}>Toggle</button>
-        </div>
-    )
-
-}
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
     return (
