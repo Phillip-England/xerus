@@ -151,10 +151,8 @@ test('🧪client-generation', async () => {
     const router = new FileBasedRouter(app)
     let dirname = './tests/apps/app_simple'
     await router.mount(dirname)
-    const client = new XerusClient(app)
-    let files = await client.getFiles(dirname)
-    console.log(files)
-    
+    const client = new XerusClient(app, router)
+    let handlerFiles = await client.getHandlerFiles()
 })
 
 

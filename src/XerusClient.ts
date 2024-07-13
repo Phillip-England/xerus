@@ -1,32 +1,29 @@
 import { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import type { Xerus } from "./Xerus";
+import type { FileBasedRouter, Handler, HandlerExport } from './export';
 
 
 
 export class XerusClient {
     app: Xerus
-    errAppDirNotFound = (dirname: string) => `app directory does not exist: ${dirname}`
-
+    router: FileBasedRouter
     
-    constructor(app: Xerus) {
+    constructor(app: Xerus, router: FileBasedRouter) {
         this.app = app
+        this.router = router
     }
 
-    async getFiles(dirname: string): Promise<Dirent[]> {
-        let systemFiles: Dirent[];
-        try {
-            systemFiles = await readdir(dirname, {
-                withFileTypes: true,
-                recursive: true,
-            });
-        } catch(e: unknown) {
-            throw new Error(this.errAppDirNotFound(dirname))
+    async getHandlerFiles(): Promise<HandlerExport[]> {
+        let handlerFiles = []
+        for (let handlerFile of this.router.handlerFiles) {
+            let handlerExport = await handlerFile.getHandlerExport()
+            if (handlerExport.get) {
+                handlerFiles.push(handlerExport)
+                console.log(handlerExport.get)
+            }
         }
-        let filtered = systemFiles.filter((file) => {
-            return file.isFile()
-        })
-        return filtered;
+        return handlerFiles
     }
 
 

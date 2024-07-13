@@ -42,7 +42,6 @@ export class FileBasedRouter {
         this.errHandlerFileMissingHandlerClass = (fileName: string) => `handler file missing handler class: ${fileName}`;
         this.errInitFileMissingInitModule = (fileName: string) => `init file missing init module: ${fileName}`;
         this.errInitFileMissingInitFunc = (fileName: string) => `init file missing init function: ${fileName}`;
-        
     }
 
     async mount(dirname: string) {

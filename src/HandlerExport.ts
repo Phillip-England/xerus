@@ -1,7 +1,8 @@
-import type { Handler, LoadFunc, MiddlewareFunc } from "./export";
+import type { ClientFunc, Handler, LoadFunc, MiddlewareFunc } from "./export";
 
 export class HandlerExport {
     load: LoadFunc
+    client: ClientFunc
     get: Handler | null = null;
     post: Handler | null = null;
     put: Handler | null = null;
@@ -12,6 +13,7 @@ export class HandlerExport {
 
     constructor() {
         this.load = async () => null;
+        this.client = async () => null
         this.get = null;
         this.post = null;
         this.put = null;

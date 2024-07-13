@@ -6,12 +6,10 @@ import type { MiddlewareFile } from "./MiddlewareFile";
 export class HandlerFile {
     file: File
     middlewareFile: MiddlewareFile | null
-    hasMiddleware: boolean
 
     constructor(file: File) {
         this.file = file
         this.middlewareFile = null
-        this.hasMiddleware = false
     }
 
     async getHandlerExport(): Promise<HandlerExport> {

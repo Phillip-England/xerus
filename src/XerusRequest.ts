@@ -5,10 +5,12 @@ export class XerusRequest {
 
     req: Request | null = null;
     loadFunc: LoadFunc
+    clientFunc: LoadFunc
 
     constructor(request: Request) {
         this.req = request;
         this.loadFunc = async () => null;
+        this.clientFunc = async () => null;
     }
 
     pathPart = (index: number): string => {

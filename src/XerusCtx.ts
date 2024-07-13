@@ -125,6 +125,13 @@ export class XerusCtx {
         this.xerusReq.loadFunc = loadFunc;
     }
 
+    setClientFunc(clientFunc: LoadFunc) {
+        if (!this.xerusReq) {
+            return;
+        }
+        this.xerusReq.clientFunc = clientFunc;
+    }
+
     async load(): Promise<any> {
         if (!this.xerusReq) {
             return async () => null;
