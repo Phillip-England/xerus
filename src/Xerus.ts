@@ -194,7 +194,7 @@ export class Xerus {
             await route.handler.handlerFunc(ctx);
             if (ctx.xerusRes.ready) {
                 if (ctx.xerusReq?.clientFunc) {
-                    return new Response(await this.injectClientScript(ctx.xerusRes.body, this.extractFunctionBody(ctx.xerusReq.clientFunc)), { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers });
+                    return new Response(await this.injectClientScript(ctx.xerusRes.body, await ctx.xerusReq.clientFunc()), { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers });
                 } else {
                     return new Response(ctx.xerusRes.body, { status: ctx.xerusRes.status, headers: ctx.xerusRes.headers });
                 }
@@ -223,7 +223,7 @@ export class Xerus {
     }
 
     async injectClientScript(responseBody: string, clientScript: string): Promise<string> {
-        return responseBody.replace("</body>", `<script>${clientScript}</script></body>`);
+        return responseBody.replace("</body>", `${clientScript}</body>`);
     }
 
     extractFunctionBody(func: Function): string {

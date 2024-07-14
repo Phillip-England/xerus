@@ -14,18 +14,22 @@ handler.get = new Handler(async (ctx: XerusCtx) => {
 })
 
 handler.client = async () => {
-    const counterSignal = store.getSignal('counter', 0);
-    let display = document.getElementById('counter-display');
-    let button = document.getElementById('increment-button');
-    if (display) {
-        counterSignal.subscribe((newValue) => {
-            display.textContent = String(newValue);
-        });
-    }
-    if (button) {
-        button.addEventListener('click', () => {
-            const currentCount = counterSignal.get();
-            counterSignal.set(currentCount + 1);
-        });
-    }
+    return /*html*/`
+        <script>
+            const counterSignal = store.getSignal('counter', 0);
+            let display = document.getElementById('counter-display');
+            let button = document.getElementById('increment-button');
+            if (display) {
+                counterSignal.subscribe((newValue) => {
+                    display.textContent = String(newValue);
+                });
+            }
+            if (button) {
+                button.addEventListener('click', () => {
+                    const currentCount = counterSignal.get();
+                    counterSignal.set(currentCount + 1);
+                });
+            }
+        </script>
+    `
 }
