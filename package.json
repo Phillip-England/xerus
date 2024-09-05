@@ -9,6 +9,6 @@
     "typescript": "^5.0.0"
   },
   "scripts": {
-    "dev": "bun --hot run index.js"
+    "dev": "bun --hot run index.jsx"
   }
 }
