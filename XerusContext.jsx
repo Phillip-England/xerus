@@ -1,4 +1,5 @@
 import { XerusResponse } from "./XerusResponse"
+import ReactDOMServer from "react-dom/server"
 
 export class XerusContext {
 
@@ -41,6 +42,11 @@ export class XerusContext {
 
     status(s) {
         this.res.status = s
+    }
+
+    jsx(component) {
+        this.res.headers["Content-Type"] = "text/html"
+        this.res.body = ReactDOMServer.renderToString(component)
     }
 
 }
