@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "react-dom": "^18.3.1",
-    "server": "react-dom/server"
-  }
+    "server": "github:react-dom/server"
+  },
+  "version": ""
 }
