@@ -61,4 +61,8 @@ export class XerusContext {
         this.isReady = true
     }
 
+    urlQuery(paramName) {
+        let url = new URL(this.req)
+        return url.searchParams.get(paramName)
+    }
 }
