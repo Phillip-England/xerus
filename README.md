@@ -1,12 +1,14 @@
 # xerus
-A tiny http library for bun.
+A tiny http library for Bun 🐿️
 
-hello world
-```js
+Hello, World!
+```jsx
 let app = new Xerus()
 
 app.at('GET /', async (c) => {
-    c.res.body = `<h1>Hello, World!</h1>`
+    c.jsx(
+        <h1>Hello, World!</h1>
+    )
 })
 
 Bun.serve({
@@ -16,3 +18,5 @@ Bun.serve({
     },
 });
 ```
+
+
