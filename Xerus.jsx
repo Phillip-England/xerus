@@ -38,7 +38,9 @@ export class Xerus {
     constructor() {
         this.routes = {}
         this.prefixMiddleware = {}
-        this.notFound = null
+        this.notFound = async (c) => {
+            c.jsx(<h1>404 Not Found</h1>)
+        }
         this.timeoutDuration = 5000
         this.staticDir = "/static"
     }

@@ -6,10 +6,6 @@ let app = new Xerus()
 app.setTimeoutDuration(5000)
 app.use('*', timeout, logger)
 
-app.setNotFound(async (c) => {
-    c.html('<h1>404 Not Found</h1>')
-})
-
 let Layout = (props) => {
     return (
         <html>
