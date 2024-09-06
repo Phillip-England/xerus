@@ -49,4 +49,9 @@ export class XerusContext {
         this.res.body = ReactDOMServer.renderToString(component)
     }
 
+    file(file) {
+        this.res.body = file
+        this.res.headers['Content-Type'] = file.type
+    }
+
 }

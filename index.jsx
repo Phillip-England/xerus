@@ -4,7 +4,6 @@ import { logger, timeout } from "./XerusMiddleware"
 let app = new Xerus()
 
 app.setTimeoutDuration(5000)
-
 app.use('*', timeout, logger)
 
 app.setNotFound(async (c) => {
@@ -18,6 +17,7 @@ let Layout = (props) => {
                 <meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
 				<link rel="stylesheet" href="/static/css/output.css" />
+				<script src='/static/js/index.js'></script>
                 <title>{props.title}</title>
             </head>
             <body>

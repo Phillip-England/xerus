@@ -18,6 +18,7 @@ export async function timeout(c, next) {
     try {
         await Promise.race([next(), timeoutPromise]);
     } catch (err) {
+        console.log(err)
         c.status(504);
         c.setHeader('Content-Type', 'application/json');
         c.json({
