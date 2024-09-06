@@ -57,9 +57,8 @@ export class Xerus {
             let exists = await f.exists()
             if (exists) {
                 c.file(f)
-            } else {
-                await this.notFound(c)
-            }
+            } 
+            return exists
         })
     }
 
@@ -118,8 +117,10 @@ export class Xerus {
         if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
             let c = new XerusContext(req, this.timeoutDuration)
             let handler = await this.handleStatic(path)
-            await handler(c)
-            return c.respond()
+            let exists = await handler(c)
+            if (c.isReady) {
+                return await c.respond()
+            }
         }
         let method = req.method
         let methodPath = `${method} ${path}`

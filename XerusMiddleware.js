@@ -14,7 +14,6 @@ export async function timeout(c, next) {
             reject(new Error('Request timed out'));
         }, c.timeoutDuration);
     });
-
     try {
         await Promise.race([next(), timeoutPromise]);
     } catch (err) {
