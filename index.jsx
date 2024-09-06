@@ -1,6 +1,5 @@
 import { Xerus } from "./Xerus"
 import { logger, timeout } from "./XerusMiddleware"
-import ReactDOMServer from "react-dom/server"
 
 let app = new Xerus()
 
@@ -12,7 +11,7 @@ app.setNotFound(async (c) => {
     c.html('<h1>404 Not Found</h1>')
 })
 
-let Dom = (props) => {
+let Layout = (props) => {
     return (
         <html>
             <head>
@@ -30,9 +29,9 @@ let Dom = (props) => {
  
 app.at('GET /', async (c) => {
     c.jsx(
-        <Dom title="test">
+        <Layout title="test">
             <p>yoooooo</p>
-        </Dom>
+        </Layout>
     )
 })
 
