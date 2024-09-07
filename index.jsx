@@ -38,9 +38,7 @@ app.at('POST /', async (c) => {
     c.redirect("/")
 })
 
-Bun.serve({
-    port: 8080,
-    async fetch(req) {
-        return await app.handleRequest(req)
-    },
-});
+
+await app.run(8080)
+
+

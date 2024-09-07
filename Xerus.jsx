@@ -147,6 +147,15 @@ export class Xerus {
     setTimeoutDuration(milliseconds) {
         this.timeoutDuration = milliseconds
     }
+
+    async run(port) {
+        Bun.serve({
+            port: port,
+            fetch: async (req) => {
+                return await this.handleRequest(req)
+            },
+        });
+    }
     
     
     
