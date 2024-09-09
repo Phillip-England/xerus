@@ -43,6 +43,7 @@ export class Xerus {
         }
         this.timeoutDuration = 5000
         this.staticDir = "/static"
+        this.globalContext = {}
     }
 
     setNotFound(fn) {
@@ -117,7 +118,7 @@ export class Xerus {
     async handleRequest(req) {
         let path = new URL(req.url).pathname
         if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
-            let c = new XerusContext(req, this.timeoutDuration)
+            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             let handler = await this.handleStatic(path)
             let exists = await handler(c)
             if (c.isReady) {
@@ -132,20 +133,24 @@ export class Xerus {
             let handler = this.routes[key]
             if (!handler) {
                 if (this.notFound) {
-                    let c = new XerusContext(req, this.timeoutDuration)
+                    let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
                     await this.notFound(c)
                     return c.respond()
                 }
                 return new Response('404 not found', { status: 404 })
             }
         }
-        let c = new XerusContext(req, this.timeoutDuration)
+        let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
         await handler(c)
         return c.respond()
     }
 
     setTimeoutDuration(milliseconds) {
         this.timeoutDuration = milliseconds
+    }
+
+    global(someKey, someValue) {
+        this.globalContext[someKey] = someValue
     }
 
     async run(port) {

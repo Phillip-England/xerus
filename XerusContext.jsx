@@ -3,11 +3,12 @@ import ReactDOMServer from "react-dom/server"
 
 export class XerusContext {
 
-    constructor(req, timeoutDuration) {
+    constructor(req, globalContext, timeoutDuration) {
         this.req = req
         this.res = new XerusResponse()
         this.timeoutDuration = timeoutDuration
         this.isReady = false
+        this.globalContext = globalContext
     }
 
     respond() {
@@ -64,5 +65,10 @@ export class XerusContext {
     param(paramName) {
         let url = new URL(this.req.url)
         return url.searchParams.get(paramName)
+    }
+    
+
+    getGlobal(someKey) {
+        return this.globalContext[someKey]
     }
 }
