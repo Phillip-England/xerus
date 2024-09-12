@@ -120,7 +120,6 @@ export class Xerus {
         if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
             let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             let handler = await this.handleStatic(path)
-            let exists = await handler(c)
             if (c.isReady) {
                 return await c.respond()
             }
@@ -128,21 +127,25 @@ export class Xerus {
         let method = req.method
         let methodPath = `${method} ${path}`
         let handler = this.routes[methodPath]
-        if (!handler) {
-            let key = searchObjectForDynamicPath(this.routes, methodPath)
-            let handler = this.routes[key]
-            if (!handler) {
-                if (this.notFound) {
-                    let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
-                    await this.notFound(c)
-                    return c.respond()
-                }
-                return new Response('404 not found', { status: 404 })
-            }
+        if (handler) {
+            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
+            await handler(c)
+            return c.respond()
         }
-        let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
-        await handler(c)
-        return c.respond()
+        let key = searchObjectForDynamicPath(this.routes, methodPath)
+        let dynamicHandler = this.routes[key]
+        if (dynamicHandler) {
+            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
+            await dynamicHandler(c)
+            return c.respond()   
+        }
+        if (this.notFound) {
+            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
+            await this.notFound(c)
+            return c.respond()
+        }
+        return new Response('404 not found', { status: 404 })
+
     }
 
     setTimeoutDuration(milliseconds) {

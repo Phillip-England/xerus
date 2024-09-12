@@ -11,17 +11,18 @@ export async function logger(c, next) {
 export async function timeout(c, next) {
     const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
-            reject(new Error('Request timed out'));
+            reject(new Error('request timed out'));
         }, c.timeoutDuration);
     });
     try {
         await Promise.race([next(), timeoutPromise]);
     } catch (err) {
-        console.log(err)
-        c.status(504);
-        c.setHeader('Content-Type', 'application/json');
-        c.json({
-            error: "request timed out",
-        })
+        if (err.message == 'request timed out') {
+            c.status(504);
+            c.setHeader('Content-Type', 'application/json');
+            c.json({
+                error: "request timed out",
+            })
+        }
     }
 }

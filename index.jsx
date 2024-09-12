@@ -39,6 +39,9 @@ app.at('POST /', async (c) => {
 })
 
 
+app.at('GET /app/receipt/{id}', async (c) => {
+})
+
 await app.run(8080)
 
 
