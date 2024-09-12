@@ -81,4 +81,11 @@ export class XerusContext {
         let path = new URL(req.pathname)
         console.log(path)
     }
+
+	text(message) {
+		this.res.body = message
+		this.res.headers['Content-Type'] = 'text/plain'
+		this.isReady = true
+	}
+
 }

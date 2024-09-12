@@ -39,7 +39,8 @@ export class Xerus {
         this.routes = {}
         this.prefixMiddleware = {}
         this.notFound = async (c) => {
-            c.jsx(<h1>404 Not Found</h1>)
+			c.status(404)
+            c.text('404 not found')
         }
         this.timeoutDuration = 5000
         this.staticDir = "/static"
@@ -60,8 +61,9 @@ export class Xerus {
             let exists = await f.exists()
             if (exists) {
                 c.file(f)
-            } 
-            return exists
+            } else {
+				await this.notFound(c)
+			}
         })
     }
 
@@ -125,26 +127,34 @@ export class Xerus {
 
         // dealing with static file requests
         if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
-            let exists = await this.handleStatic(path)
+			let staticHandler = await this.handleStatic(path)
+			await staticHandler(c)
+			return c.respond()
         }
 
+		// handling any path which is not dynamic
         let handler = this.routes[methodPath]
         if (handler) {
             await handler(c)
             return c.respond()
         }
+
+		// handling dynamic paths
         let key = searchObjectForDynamicPath(this.routes, methodPath)
         let dynamicHandler = this.routes[key]
         if (dynamicHandler) {
             await dynamicHandler(c)
             return c.respond()   
         }
+
+		// 404 not found
         if (this.notFound) {
             await this.notFound(c)
             return c.respond()
         } else {
             return new Response('404 not found', { status: 404 })
         }
+
     }
 
     setTimeoutDuration(milliseconds) {

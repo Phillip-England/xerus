@@ -24,7 +24,6 @@ let Layout = (props) => {
 }
  
 app.at('GET /', async (c) => {
-    console.log(c.pathPart(0))
     c.jsx(
         <Layout title="test">
             <p>yoooooo</p>
