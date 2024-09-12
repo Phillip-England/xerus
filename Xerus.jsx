@@ -120,9 +120,8 @@ export class Xerus {
         if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
             let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             let handler = await this.handleStatic(path)
-            if (c.isReady) {
-                return await c.respond()
-            }
+            await handler(c)
+            return await c.respond()
         }
         let method = req.method
         let methodPath = `${method} ${path}`
