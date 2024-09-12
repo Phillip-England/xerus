@@ -12,6 +12,11 @@ export class XerusContext {
     }
 
     respond() {
+        if (!this.isReady) {
+            return new Response('response body not set', {
+                status: 500,
+            })
+        }
         return new Response(this.res.body, {
             headers: this.res.headers,
             status: this.res.status
@@ -70,5 +75,10 @@ export class XerusContext {
 
     getGlobal(someKey) {
         return this.globalContext[someKey]
+    }
+
+    pathPath(arrayIndex) {
+        let path = new URL(req.pathname)
+        console.log(path)
     }
 }

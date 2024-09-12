@@ -24,6 +24,7 @@ let Layout = (props) => {
 }
  
 app.at('GET /', async (c) => {
+    console.log(c.pathPart(0))
     c.jsx(
         <Layout title="test">
             <p>yoooooo</p>
@@ -36,10 +37,6 @@ app.at('POST /', async (c) => {
     let photo = data.get('photo')
     await Bun.write('photo.jpg', photo);
     c.redirect("/")
-})
-
-
-app.at('GET /app/receipt/{id}', async (c) => {
 })
 
 await app.run(8080)

@@ -116,30 +116,30 @@ export class Xerus {
     }
 
     async handleRequest(req) {
+
+        // setting up vars
         let path = new URL(req.url).pathname
-        if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
-            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
-            let handler = await this.handleStatic(path)
-            await handler(c)
-            return await c.respond()
-        }
+        let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
         let method = req.method
         let methodPath = `${method} ${path}`
+
+        // dealing with static file requests
+        if (path.startsWith(this.staticDir+"/") || path == '/favicon.ico') {
+            let exists = await this.handleStatic(path)
+        }
+
         let handler = this.routes[methodPath]
         if (handler) {
-            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             await handler(c)
             return c.respond()
         }
         let key = searchObjectForDynamicPath(this.routes, methodPath)
         let dynamicHandler = this.routes[key]
         if (dynamicHandler) {
-            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             await dynamicHandler(c)
             return c.respond()   
         }
         if (this.notFound) {
-            let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             await this.notFound(c)
             return c.respond()
         } else {
@@ -156,6 +156,7 @@ export class Xerus {
     }
 
     async run(port) {
+        console.log(`🚀 blasting off on port ${port}!`)
         Bun.serve({
             port: port,
             fetch: async (req) => {
