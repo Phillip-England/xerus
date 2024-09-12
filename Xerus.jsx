@@ -143,9 +143,9 @@ export class Xerus {
             let c = new XerusContext(req, this.globalContext, this.timeoutDuration)
             await this.notFound(c)
             return c.respond()
+        } else {
+            return new Response('404 not found', { status: 404 })
         }
-        return new Response('404 not found', { status: 404 })
-
     }
 
     setTimeoutDuration(milliseconds) {
