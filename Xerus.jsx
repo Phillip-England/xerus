@@ -97,25 +97,7 @@ export class Xerus {
     }
 
     at(path, handler, ...middleware) {
-        let combinedMiddleware = [...(this.prefixMiddleware['*'] || [])];
-        for (const key in this.prefixMiddleware) {
-            if (path.startsWith(key)) {
-                combinedMiddleware.push(...this.prefixMiddleware[key]);
-                break;
-            }
-        }
-        combinedMiddleware.push(...middleware);
-        const wrappedHandler = async (c) => {
-            let index = 0;
-            const executeMiddleware = async () => {
-                if (index < combinedMiddleware.length) {
-                    await combinedMiddleware[index++](c, executeMiddleware);
-                } else {
-                    await handler(c);
-                }
-            };
-            await executeMiddleware();
-        };
+        const wrappedHandler = this.wrapWithMiddleware(path, handler, ...middleware);
         this.routes[path] = wrappedHandler;
     }
 
