@@ -3,9 +3,7 @@ export async function logger(c, next) {
   await next();
   let endTime = process.hrtime(startTime);
   let totalTime = endTime[0] * 1e3 + endTime[1] / 1e6;
-  console.log(
-    `[${c.req.method}][${new URL(c.req.url).pathname}][${totalTime.toFixed(3)}ms]`,
-  );
+  console.log(`[${c.req.method}][${c.path}][${totalTime.toFixed(3)}ms]`);
 }
 
 export async function timeout(c, next) {

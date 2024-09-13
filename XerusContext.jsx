@@ -3,6 +3,8 @@ import ReactDOMServer from "react-dom/server";
 
 export class XerusContext {
   constructor(req, globalContext, timeoutDuration) {
+    this.url = new URL(req.url);
+    this.path = this.url.pathname;
     this.req = req;
     this.res = new XerusResponse();
     this.timeoutDuration = timeoutDuration;
