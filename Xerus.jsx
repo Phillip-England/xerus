@@ -132,8 +132,12 @@ export class Xerus {
 
     let handler = this.routes[methodPath];
     if (handler) {
-      await handler(c);
-      return c.respond();
+      try {
+        await handler(c);
+        return c.respond();
+      } catch (e) {
+        throw new Error(e);
+      }
     }
 
     let key = searchObjectForDynamicPath(this.routes, methodPath, c);
