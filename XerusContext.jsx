@@ -9,6 +9,7 @@ export class XerusContext {
         this.timeoutDuration = timeoutDuration
         this.isReady = false
         this.globalContext = globalContext
+        this.urlContext = {}
     }
 
     respond() {
@@ -77,9 +78,11 @@ export class XerusContext {
         return this.globalContext[someKey]
     }
 
-    pathPath(arrayIndex) {
-        let path = new URL(req.pathname)
-        console.log(path)
+    dyn(key) {
+        let arrIndex = this.urlContext[key]
+        let path = new URL(this.req.url).pathname
+        let parts = path.split('/')
+        return parts[arrIndex]
     }
 
 	text(message) {

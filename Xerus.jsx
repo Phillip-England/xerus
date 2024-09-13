@@ -1,6 +1,6 @@
 import { XerusContext } from "./XerusContext"
 
-function searchObjectForDynamicPath(obj, path) {
+function searchObjectForDynamicPath(obj, path, c) {
     for (const key in obj) {
         if (!key.includes("{") && !key.includes("}")) {
             continue
@@ -13,6 +13,8 @@ function searchObjectForDynamicPath(obj, path) {
         let newPathParts = []
         let noBrackets = keyParts.filter((str, i) => {
             if (str.includes("{") && str.includes("}")) {
+                let pathPartObjKey = str.slice(1, -1)
+                c.urlContext[pathPartObjKey] = i
                 return false
             }
             newPathParts.push(pathParts[i])
@@ -24,7 +26,7 @@ function searchObjectForDynamicPath(obj, path) {
             if (k != p) {
                 break
             }
-            if (i == newPathParts.length -1) {
+            if (i == newPathParts.length-1) {
                 return key
             }
         }
@@ -140,7 +142,7 @@ export class Xerus {
         }
 
 		// handling dynamic paths
-        let key = searchObjectForDynamicPath(this.routes, methodPath)
+        let key = searchObjectForDynamicPath(this.routes, methodPath, c)
         let dynamicHandler = this.routes[key]
         if (dynamicHandler) {
             await dynamicHandler(c)
