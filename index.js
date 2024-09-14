@@ -1,7 +1,6 @@
 
 
 function searchObjectForDynamicPath(obj, path, c) {
-    console.log(obj)
   for (const key in obj) {
     if (!key.includes("{") && !key.includes("}")) {
       continue;
