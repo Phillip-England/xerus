@@ -12,6 +12,7 @@
     "dev": "bun --hot run index.jsx"
   },
   "dependencies": {
+    "jsdoc": "^4.0.3",
     "react-dom": "^18.3.1",
     "server": "github:react-dom/server"
   },

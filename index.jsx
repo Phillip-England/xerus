@@ -21,7 +21,7 @@ let Layout = (props) => {
   );
 };
 
-app.get("/", async (c) => {
+app.get("/user/{id}", async (c) => {
   c.jsx(
     <Layout title="test">
       <p>yoooooo</p>

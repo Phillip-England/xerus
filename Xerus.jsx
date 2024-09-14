@@ -1,6 +1,8 @@
 import { XerusContext } from "./XerusContext";
 
+
 function searchObjectForDynamicPath(obj, path, c) {
+    console.log(obj)
   for (const key in obj) {
     if (!key.includes("{") && !key.includes("}")) {
       continue;
@@ -33,6 +35,7 @@ function searchObjectForDynamicPath(obj, path, c) {
   }
   return "";
 }
+
 
 export class Xerus {
   constructor() {
