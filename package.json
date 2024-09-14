@@ -17,5 +17,5 @@
     "react-dom": "^18.3.1",
     "server": "github:react-dom/server"
   },
-  "version": "0.0.16"
+  "version": "0.0.17"
 }

@@ -1,5 +1,7 @@
+
+
 function searchObjectForDynamicPath(obj, path, c) {
-  console.log(obj);
+    console.log(obj)
   for (const key in obj) {
     if (!key.includes("{") && !key.includes("}")) {
       continue;
@@ -32,6 +34,7 @@ function searchObjectForDynamicPath(obj, path, c) {
   }
   return "";
 }
+
 
 export class Xerus {
   constructor() {
@@ -172,7 +175,6 @@ export class Xerus {
     });
   }
 }
-
 import ReactDOMServer from "react-dom/server";
 
 export class XerusContext {
@@ -292,9 +294,9 @@ export async function timeout(c, next) {
   }
 }
 export class XerusResponse {
-  constructor() {
-    this.headers = {};
-    this.body = "";
-    this.status = 200;
-  }
+    constructor() {
+        this.headers = {}
+        this.body = ''
+        this.status = 200
+    }
 }
