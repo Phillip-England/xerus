@@ -6,11 +6,14 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.6.2"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "dev": "bun --hot run index.jsx",
-    "build": "bun run build.js"
+    "build": "bun build --entrypoints ./src/index.ts --outdir ./dist",
+    "types": "bunx tsc",
+    "prepare": "npm run build && npm run types"
   },
   "dependencies": {
     "@types/react-dom": "^18.3.0",
@@ -18,5 +21,5 @@
     "react-dom": "^18.3.1",
     "server": "github:react-dom/server"
   },
-  "version": "0.0.19"
+  "version": "0.0.20"
 }
