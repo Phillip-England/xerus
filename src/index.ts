@@ -144,15 +144,15 @@ export class Xerus {
     this.at("DELETE " + path, handler, ...middleware);
   }
 
-  async handleRequest(req: Request) {
-    let path = new URL(req.url).pathname;
+  async handleRequest(req: Request): Promise<Response | Error> {
+    let path: string = new URL(req.url).pathname;
     let c = new XerusContext(req, this.globalContext, this.timeoutDuration);
-    let method = req.method;
+    let method: string = req.method;
     let methodPath = `${method} ${path}`;
 
     // handling static files
     if (path.startsWith(this.staticDir + "/") || path == "/favicon.ico") {
-      let staticHandler = await this.handleStatic(path);
+      let staticHandler: XerusHandler = await this.handleStatic(path);
       await staticHandler(c);
       return c.respond();
     }
@@ -160,22 +160,34 @@ export class Xerus {
     // regular handlers
     let handler = this.routes[methodPath];
     if (handler) {
-      await handler(c);
-      return c.respond();
+      try {
+        await handler(c);
+        return c.respond();
+      } catch (e: any) {
+        return e as Error;
+      }
     }
 
     // dynamic handlers
     let key = searchObjectForDynamicPath(this.routes, methodPath, c);
     let dynamicHandler = this.routes[key];
     if (dynamicHandler) {
-      await dynamicHandler(c);
-      return c.respond();
+      try {
+        await dynamicHandler(c);
+        return c.respond();
+      } catch (e: any) {
+        return e as Error;
+      }
     }
 
     // no handler found
     if (this.notFound) {
-      await this.notFound(c);
-      return c.respond();
+      try {
+        await this.notFound(c);
+        return c.respond();
+      } catch (e: any) {
+        return e as Error;
+      }
     } else {
       // default 404 (should never happen, as default is set upon construction)
       return new Response("404 not found", { status: 404 });
@@ -195,7 +207,16 @@ export class Xerus {
     Bun.serve({
       port: port,
       fetch: async (req) => {
-        return await this.handleRequest(req);
+        let res: Response | Error = await this.handleRequest(req);
+
+        // Check if `res` is an Error
+        if (res instanceof Error) {
+          console.error("An error occurred:", res);
+          return new Response("Internal Server Error", { status: 500 });
+        }
+
+        // Otherwise, return the response
+        return res;
       },
     });
   }
