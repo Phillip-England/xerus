@@ -95,22 +95,37 @@ export class Xerus {
     ...middleware: XerusMiddleware[]
   ) {
     let combinedMiddleware = [...(this.prefixMiddleware["*"] || [])];
+
+    // Collect middleware that applies to this specific path
     for (const key in this.prefixMiddleware) {
       if (path.startsWith(key)) {
         combinedMiddleware.push(...this.prefixMiddleware[key]);
         break;
       }
     }
+
     combinedMiddleware.push(...middleware);
+
     return async (c: XerusContext) => {
       let index = 0;
+
+      // Middleware execution function
       const executeMiddleware = async () => {
-        if (index < combinedMiddleware.length) {
+        while (index < combinedMiddleware.length) {
           await combinedMiddleware[index++](c, executeMiddleware);
-        } else {
+
+          // Check if XerusContext is ready, if so break out of the chain
+          if (c.isReady) {
+            return; // Terminate middleware chain early if response is already handled
+          }
+        }
+
+        // If all middleware has run and the context is not ready, call the handler
+        if (!c.isReady) {
           await handler(c);
         }
       };
+
       await executeMiddleware();
     };
   }
