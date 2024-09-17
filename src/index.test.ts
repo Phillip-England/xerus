@@ -3,19 +3,24 @@ import { expect, test } from "bun:test";
 import { logger, Xerus, XerusContext } from ".";
 import { sleep } from "bun";
 
-test("server", async () => {
+function server(routeSetup: (app: Xerus) => void, testFn: Function) {
   const app: Xerus = new Xerus();
+  routeSetup(app);
+  app.run(8080);
+  testFn();
+}
 
-  app.use("*", logger);
-
-  app.get("/", async (c: XerusContext) => {
-    c.text("hello, world");
-  });
-
-  await app.run(8080);
-
-  let res = await fetch("localhost:8080/");
-  let text = await res.text();
-
-  expect(text, "hello, world");
+test("hello", async () => {
+  server(
+    (app) => {
+      app.get("/", async (c: XerusContext) => {
+        c.text("hello, world");
+      });
+    },
+    async () => {
+      let res = await fetch("localhost:8080/");
+      let text = await res.text();
+      expect(text).toBe("hello, world");
+    },
+  );
 });
