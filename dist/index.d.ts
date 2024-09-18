@@ -25,7 +25,7 @@ export declare class Xerus {
     post(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]): void;
     put(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]): void;
     delete(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]): void;
-    handleRequest(req: Request): Promise<Response>;
+    handleRequest(req: Request): Promise<Response | Error>;
     setTimeoutDuration(milliseconds: number): void;
     global(someKey: string, someValue: any): void;
     run(port: number): Promise<void>;

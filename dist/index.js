@@ -12078,9 +12078,13 @@ class Xerus {
     return async (c) => {
       let index = 0;
       const executeMiddleware = async () => {
-        if (index < combinedMiddleware.length) {
+        while (index < combinedMiddleware.length) {
           await combinedMiddleware[index++](c, executeMiddleware);
-        } else {
+          if (c.isReady) {
+            return;
+          }
+        }
+        if (!c.isReady) {
           await handler(c);
         }
       };
@@ -12115,18 +12119,30 @@ class Xerus {
     }
     let handler = this.routes[methodPath];
     if (handler) {
-      await handler(c);
-      return c.respond();
+      try {
+        await handler(c);
+        return c.respond();
+      } catch (e) {
+        return e;
+      }
     }
     let key = searchObjectForDynamicPath(this.routes, methodPath, c);
     let dynamicHandler = this.routes[key];
     if (dynamicHandler) {
-      await dynamicHandler(c);
-      return c.respond();
+      try {
+        await dynamicHandler(c);
+        return c.respond();
+      } catch (e) {
+        return e;
+      }
     }
     if (this.notFound) {
-      await this.notFound(c);
-      return c.respond();
+      try {
+        await this.notFound(c);
+        return c.respond();
+      } catch (e) {
+        return e;
+      }
     } else {
       return new Response("404 not found", { status: 404 });
     }
@@ -12142,7 +12158,12 @@ class Xerus {
     Bun.serve({
       port,
       fetch: async (req) => {
-        return await this.handleRequest(req);
+        let res = await this.handleRequest(req);
+        if (res instanceof Error) {
+          console.error("An error occurred:", res);
+          return new Response("Internal Server Error", { status: 500 });
+        }
+        return res;
       }
     });
   }
