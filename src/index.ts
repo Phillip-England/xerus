@@ -338,6 +338,41 @@ export class XerusContext {
     this.setHeader("Content-Type", "text/plain");
     this.ready();
   }
+
+  stream(
+    streamer: () => ReadableStream<Uint8Array>,
+    contentType: string = "text/plain",
+  ) {
+    this.setHeader("Content-Type", contentType);
+
+    const reader = streamer().getReader(); // Get a reader to consume the stream
+
+    const decoder = new TextDecoder(); // For converting chunks to string
+    this.res.body = ""; // Initialize as an empty string
+
+    const readChunk = async () => {
+      let done: boolean, value: Uint8Array | undefined;
+
+      // Keep reading chunks until the stream is done
+      do {
+        ({ done, value } = await reader.read());
+
+        if (value !== undefined) {
+          // Check if value is not undefined
+          this.res.body += decoder.decode(value, { stream: true }); // Append chunks to body
+        }
+      } while (!done);
+
+      // Once the stream ends, mark the response as ready
+      this.isReady = true;
+    };
+
+    readChunk().catch((err) => {
+      console.error("Error streaming response:", err);
+      this.res.body = "Error occurred during streaming";
+      this.isReady = true;
+    });
+  }
 }
 
 export class XerusResponse {
@@ -375,6 +410,21 @@ export async function timeout(c: XerusContext, next: XerusHandler) {
       c.json({
         error: "request timed out",
       });
+    }
+  }
+}
+
+export class FileBasedRouter {
+  app: Xerus;
+
+  constructor(app: Xerus) {
+    this.app = app;
+  }
+
+  mount(): Error | void {
+    try {
+    } catch (e: any) {
+      return e as Error;
     }
   }
 }
