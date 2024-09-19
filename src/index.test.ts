@@ -29,11 +29,11 @@ test("timeout", async () => {
   expect(text).toBe(JSON.stringify({ error: "request timed out" }));
 });
 
-test("fileBasedRouter", async () => {
+test("fbr", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout);
   const router = new FileBasedRouter(app);
-  router.mount();
+  await router.mount();
 });
 
 const mockStreamer = () => {

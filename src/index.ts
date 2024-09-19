@@ -1,5 +1,6 @@
 import type { BunFile } from "bun";
 import ReactDOMServer from "react-dom/server";
+import { readdir } from "node:fs/promises";
 
 function searchObjectForDynamicPath(
   obj: Object,
@@ -416,15 +417,37 @@ export async function timeout(c: XerusContext, next: XerusHandler) {
 
 export class FileBasedRouter {
   app: Xerus;
+  targetDir: string;
+  indexFilePath: string;
 
   constructor(app: Xerus) {
     this.app = app;
+    this.targetDir = "./app";
+    this.indexFilePath = `+page.ts`;
   }
 
-  mount(): Error | void {
+  async mount(): Promise<Error | void> {
     try {
+      const fileNames = await readdir(this.targetDir, { recursive: true });
+      this.loadIndex(fileNames);
     } catch (e: any) {
       return e as Error;
+    }
+  }
+
+  loadIndex(fileNames: string[]) {
+    let foundIndex = false;
+    for (let i = 0; i < fileNames.length; i++) {
+      let fileName = fileNames[i];
+      if (fileName == this.indexFilePath) {
+        foundIndex = true;
+        break;
+      }
+    }
+    if (!foundIndex) {
+      throw new Error(
+        `failed to located index at ${this.targetDir}/${this.indexFilePath}`,
+      );
     }
   }
 }
