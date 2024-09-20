@@ -3,6 +3,10 @@ import { expect, test } from "bun:test";
 import { FileBasedRouter, logger, timeout, Xerus, XerusContext } from ".";
 import { sleep } from "bun";
 
+//=============================
+// BASIC ROUTING
+//=============================
+
 test("hello world", async () => {
   const app: Xerus = new Xerus();
   app.get("/", async (c: XerusContext) => {
@@ -13,6 +17,10 @@ test("hello world", async () => {
   let text = await res.text();
   expect(text).toBe("hello, world");
 });
+
+//=============================
+// MIDDLEWARE
+//=============================
 
 test("timeout", async () => {
   const app: Xerus = new Xerus();
@@ -29,12 +37,23 @@ test("timeout", async () => {
   expect(text).toBe(JSON.stringify({ error: "request timed out" }));
 });
 
+//=======================
+// FILE BASED ROUTER
+//=======================
+
 test("fbr", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout);
   const router = new FileBasedRouter(app);
-  await router.mount();
+  let err = await router.mount();
+  if (err) {
+    console.log(err);
+  }
 });
+
+//======================
+// STREAMING
+//======================
 
 const mockStreamer = () => {
   const data = ["This is a ", "streaming ", "response."];

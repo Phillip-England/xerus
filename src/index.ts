@@ -2,6 +2,8 @@ import type { BunFile } from "bun";
 import ReactDOMServer from "react-dom/server";
 import { readdir } from "node:fs/promises";
 
+type PotentialErr = Error | void;
+
 function searchObjectForDynamicPath(
   obj: Object,
   path: string,
@@ -418,36 +420,75 @@ export async function timeout(c: XerusContext, next: XerusHandler) {
 export class FileBasedRouter {
   app: Xerus;
   targetDir: string;
-  indexFilePath: string;
+  indexFilePath: string[];
 
   constructor(app: Xerus) {
     this.app = app;
     this.targetDir = "./app";
-    this.indexFilePath = `+page.ts`;
+    this.indexFilePath = [`+page.ts`, "+page.tsx"];
   }
 
-  async mount(): Promise<Error | void> {
+  async mount(): Promise<PotentialErr> {
     try {
       const fileNames = await readdir(this.targetDir, { recursive: true });
-      this.loadIndex(fileNames);
+      let err = this.verifyIndex(fileNames);
+      if (err) {
+        return err;
+      }
+      let filteredFileNames = this.weedOutDirs(fileNames);
+      let routeMap = this.makeRouteMap(filteredFileNames);
+      this.generateRoute(routeMap);
     } catch (e: any) {
       return e as Error;
     }
   }
 
-  loadIndex(fileNames: string[]) {
+  verifyIndex(fileNames: string[]): PotentialErr {
     let foundIndex = false;
     for (let i = 0; i < fileNames.length; i++) {
       let fileName = fileNames[i];
-      if (fileName == this.indexFilePath) {
+      if (this.indexFilePath.includes(fileName)) {
         foundIndex = true;
         break;
       }
     }
     if (!foundIndex) {
-      throw new Error(
+      return new Error(
         `failed to located index at ${this.targetDir}/${this.indexFilePath}`,
       );
     }
+  }
+
+  weedOutDirs(fileNames: string[]): string[] {
+    let filteredFileNames = fileNames.filter((value, index) => {
+      if (this.indexFilePath.includes(value)) {
+        return true;
+      }
+      return false;
+    });
+    return filteredFileNames;
+  }
+
+  makeRouteMap(filteredFileNames: string[]): { [key: string]: string } {
+    let routeMap: { [key: string]: string } = {};
+    for (let i = 0; i < filteredFileNames.length; i++) {
+      let fileName = filteredFileNames[i];
+      if (this.indexFilePath.includes(fileName)) {
+        routeMap["/"] = fileName;
+        continue;
+      }
+      let endPoint =
+        "/" +
+        fileName.slice(0, fileName.length - this.indexFilePath.length - 1);
+      routeMap[endPoint] = fileName;
+    }
+    return routeMap;
+  }
+
+  generateRoute(routeMap: { [key: string]: string }) {
+    Object.entries(routeMap).forEach(async ([endpoint, filePath]) => {
+      let module = await import("." + this.targetDir + "/" + filePath);
+      console.log(module);
+    });
   }
 }
