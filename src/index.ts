@@ -4,6 +4,59 @@ import { readdir } from "node:fs/promises";
 
 type PotentialErr = Error | void;
 
+export class Result<T, E> {
+  private constructor(
+    private readonly _value?: T,
+    private readonly _error?: E,
+  ) {}
+
+  // Static method to create a successful result
+  static Ok<T, E = never>(value: T): Result<T, E> {
+    return new Result<T, E>(value);
+  }
+
+  // Static method to create an error result
+  static Err<E, T = never>(error: E): Result<T, E> {
+    return new Result<T, E>(undefined, error);
+  }
+
+  // Check if result is Ok (success)
+  isOk(): boolean {
+    return this._error === undefined;
+  }
+
+  // Check if result is Err (failure)
+  isErr(): boolean {
+    return this._value === undefined;
+  }
+
+  // Get the success value (throws if there's an error)
+  unwrap(): T {
+    if (this.isErr()) {
+      throw new Error("Tried to unwrap an Err value");
+    }
+    return this._value as T;
+  }
+
+  // Get the error value (throws if there's no error)
+  unwrapErr(): E {
+    if (this.isOk()) {
+      throw new Error("Tried to unwrap an Ok value");
+    }
+    return this._error as E;
+  }
+
+  // Get the value or provide a default
+  unwrapOr(defaultValue: T): T {
+    return this.isOk() ? (this._value as T) : defaultValue;
+  }
+
+  // Get the error value without throwing, returns undefined if no error
+  getErr(): E | undefined {
+    return this.isErr() ? this._error : undefined;
+  }
+}
+
 function searchObjectForDynamicPath(
   obj: Object,
   path: string,
@@ -437,7 +490,12 @@ export class FileBasedRouter {
       }
       let filteredFileNames = this.weedOutDirs(fileNames);
       let routeMap = this.makeRouteMap(filteredFileNames);
-      this.generateRoute(routeMap);
+      let result = await this.extractModules(routeMap);
+      if (result.isErr()) {
+        return result.getErr();
+      }
+      let moduleArr = result.unwrap();
+      this.hookRoutes(moduleArr);
     } catch (e: any) {
       return e as Error;
     }
@@ -461,8 +519,11 @@ export class FileBasedRouter {
 
   weedOutDirs(fileNames: string[]): string[] {
     let filteredFileNames = fileNames.filter((value, index) => {
-      if (this.indexFilePath.includes(value)) {
-        return true;
+      for (let i = 0; i < this.indexFilePath.length; i++) {
+        let validFileName = this.indexFilePath[i];
+        if (value.includes(validFileName)) {
+          return true;
+        }
       }
       return false;
     });
@@ -477,18 +538,60 @@ export class FileBasedRouter {
         routeMap["/"] = fileName;
         continue;
       }
-      let endPoint =
-        "/" +
-        fileName.slice(0, fileName.length - this.indexFilePath.length - 1);
-      routeMap[endPoint] = fileName;
+      let parts = fileName.split("/");
+      parts.pop();
+      let endpoint = "/" + parts.join("/");
+      routeMap[endpoint] = fileName;
     }
     return routeMap;
   }
 
-  generateRoute(routeMap: { [key: string]: string }) {
-    Object.entries(routeMap).forEach(async ([endpoint, filePath]) => {
-      let module = await import("." + this.targetDir + "/" + filePath);
-      console.log(module);
-    });
+  async extractModules(routeMap: {
+    [key: string]: string;
+  }): Promise<Result<any[], Error>> {
+    try {
+      let routeArr: any = [];
+      Object.entries(routeMap).forEach(async ([endpoint, filePath]) => {
+        let moduleFilePath = "." + this.targetDir + "/" + filePath;
+        routeArr.push({
+          modulePath: moduleFilePath,
+          endpoint: endpoint,
+        });
+      });
+      let finalArr: any = [];
+      for (let i = 0; i < routeArr.length; i++) {
+        let { modulePath, endpoint } = routeArr[i];
+        let module = await import(modulePath);
+        finalArr.push({
+          module: module,
+          endpoint: endpoint,
+        });
+      }
+      return Result.Ok(finalArr);
+    } catch (e: any) {
+      return Result.Err(e);
+    }
+  }
+
+  hookRoutes(moduleArr: any[]) {
+    for (let i = 0; i < moduleArr.length; i++) {
+      let { module, endpoint } = moduleArr[i];
+
+      if (module.get) {
+        this.app.get(endpoint, module.get, module.getMw || []);
+      }
+
+      if (module.post) {
+        this.app.post(endpoint, module.post, module.postMw || []);
+      }
+
+      if (module.put) {
+        this.app.put(endpoint, module.put, module.putMw || []);
+      }
+
+      if (module.delete) {
+        this.app.delete(endpoint, module.delete, module.deleteMw || []);
+      }
+    }
   }
 }

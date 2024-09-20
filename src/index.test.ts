@@ -49,6 +49,10 @@ test("fbr", async () => {
   if (err) {
     console.log(err);
   }
+  await app.run(8080);
+  const res = await fetch("http://localhost:8080/");
+  const text = await res.text();
+  expect(text).toBe("<h1>Hello, World</h1>");
 });
 
 //======================
