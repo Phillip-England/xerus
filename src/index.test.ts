@@ -43,7 +43,7 @@ test("timeout", async () => {
 
 test("fbr", async () => {
   const app: Xerus = new Xerus();
-  app.use("*", timeout);
+  app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
   let err = await router.mount();
   if (err) {
@@ -53,6 +53,9 @@ test("fbr", async () => {
   const res = await fetch("http://localhost:8080/");
   const text = await res.text();
   expect(text).toBe("<h1>Hello, World</h1>");
+  const res2 = await fetch("http://localhost:8080/resource/1");
+  const text2 = await res2.text();
+  expect(text2).toBe("hello from middleware");
 });
 
 //======================

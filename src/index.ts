@@ -154,7 +154,8 @@ export class Xerus {
 
     // Collect middleware that applies to this specific path
     for (const key in this.prefixMiddleware) {
-      if (path.startsWith(key)) {
+      let pathParts = path.split(" ");
+      if (pathParts[1].startsWith(key)) {
         combinedMiddleware.push(...this.prefixMiddleware[key]);
         break;
       }
@@ -576,6 +577,22 @@ export class FileBasedRouter {
   hookRoutes(moduleArr: any[]) {
     for (let i = 0; i < moduleArr.length; i++) {
       let { module, endpoint } = moduleArr[i];
+
+      // here is where we determine our endpoints prefix middleware
+      // an important distinction is made here
+      // if a route ends with a dynamic value such as /user/{id}
+      // then all prefix middleware will be applied to "/user/"
+      // but endpoint which do not end in a dynamic value will be applied as expected
+      if (module.use) {
+        let parts = endpoint.split("/");
+        let lastPart = parts[parts.length - 1];
+        if (lastPart.includes("{") && lastPart.includes("}")) {
+          parts.pop();
+          this.app.use(parts.join("/"), ...module.use);
+        } else {
+          this.app.use(endpoint, ...module.use);
+        }
+      }
 
       if (module.get) {
         this.app.get(endpoint, module.get, module.getMw || []);
