@@ -95,6 +95,16 @@ function searchObjectForDynamicPath(
   return "";
 }
 
+export class XerusRoute {
+  handler: XerusHandler;
+  middleware: XerusMiddleware[];
+
+  constructor(handler: XerusHandler, ...middleware: XerusMiddleware[]) {
+    this.handler = handler;
+    this.middleware = middleware;
+  }
+}
+
 export type XerusHandler = (c: XerusContext) => Promise<void>;
 export type XerusMiddleware = (
   c: XerusContext,
@@ -595,19 +605,27 @@ export class FileBasedRouter {
       }
 
       if (module.get) {
-        this.app.get(endpoint, module.get, module.getMw || []);
+        this.app.get(endpoint, module.get.handler, module.get.middleware || []);
       }
 
       if (module.post) {
-        this.app.post(endpoint, module.post, module.postMw || []);
+        this.app.post(
+          endpoint,
+          module.post.handler,
+          module.post.middleware || [],
+        );
       }
 
       if (module.put) {
-        this.app.put(endpoint, module.put, module.putMw || []);
+        this.app.put(endpoint, module.put.handler, module.put.middleware || []);
       }
 
       if (module.delete) {
-        this.app.delete(endpoint, module.delete, module.deleteMw || []);
+        this.app.delete(
+          endpoint,
+          module.delete.handler,
+          module.delete.middleware || [],
+        );
       }
     }
   }
