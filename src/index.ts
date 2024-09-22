@@ -492,6 +492,13 @@ export class FileBasedRouter {
     this.indexFilePath = [`+page.ts`, "+page.tsx"];
   }
 
+  setTargetDir(targetDir: string): PotentialErr {
+    if (!targetDir.startsWith("./")) {
+      return new Error("targetDir must begin with './'");
+    }
+    this.targetDir = targetDir;
+  }
+
   async mount(): Promise<PotentialErr> {
     try {
       const fileNames = await readdir(this.targetDir, { recursive: true });

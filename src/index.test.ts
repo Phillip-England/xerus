@@ -58,6 +58,24 @@ test("fbr", async () => {
   expect(text2).toBe("hello from middleware");
 });
 
+test("fbrTarget", async () => {
+  const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
+  const router = new FileBasedRouter(app);
+  let targetDirErr = router.setTargetDir("./app2");
+  if (targetDirErr) {
+    console.log(targetDirErr);
+  }
+  let err = await router.mount();
+  if (err) {
+    console.log(err);
+  }
+  await app.run(8080);
+  const res = await fetch("http://localhost:8080/");
+  const text = await res.text();
+  expect(text).toBe("<h1>Hello, World</h1>");
+});
+
 //======================
 // STREAMING
 //======================
