@@ -1,6 +1,8 @@
 import type { BunFile } from "bun";
 import ReactDOMServer from "react-dom/server";
 import { readdir } from "node:fs/promises";
+import { Marked } from "marked";
+import { marked } from "marked";
 
 type PotentialErr = Error | void;
 
@@ -356,6 +358,7 @@ export class XerusContext {
 
   html(str: string) {
     this.setHeader("Content-Type", "text/html");
+    this.res.body = str;
     this.ready();
   }
 
@@ -507,6 +510,13 @@ export class XerusContext {
 
     // Add the 'Set-Cookie' header to remove the cookie
     this.res.headers["Set-Cookie"] = cookieStr;
+  }
+
+  async md(filePath: string): Promise<string> {
+    let file = Bun.file(filePath);
+    let text = await file.text();
+    let html = await marked.parse(text);
+    return html;
   }
 }
 

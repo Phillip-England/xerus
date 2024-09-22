@@ -2,12 +2,13 @@ import { expect, test } from "bun:test";
 
 import { FileBasedRouter, logger, timeout, Xerus, XerusContext } from ".";
 import { sleep } from "bun";
+import { Marked } from "marked";
 
 //=============================
 // BASIC ROUTING
 //=============================
 
-test("hello world", async () => {
+test("helloWorld", async () => {
   const app: Xerus = new Xerus();
   app.get("/", async (c: XerusContext) => {
     c.text("hello, world");
@@ -68,6 +69,8 @@ test("cookies", async () => {
   let resAfterClear = await fetch("http://localhost:8080/check-cookie");
   let textAfterClear = await resAfterClear.text();
   expect(textAfterClear).toBe("Cookie not found or incorrect");
+
+  await sleep(5000);
 });
 
 //=============================
@@ -168,4 +171,25 @@ test("stream", async () => {
   expect(context.res.body).toBe("This is a streaming response.");
   expect(context.res.headers["Content-Type"]).toBe("text/plain");
   expect(context.isReady).toBe(true);
+});
+
+//=============================
+// HANDLING MARKDOWN CONTENT
+//=============================
+
+test("md", async () => {
+  const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
+
+  app.get("/", async (c: XerusContext) => {
+    let mdContent = await c.md("./src/test.md");
+    c.html(mdContent);
+  });
+
+  await app.run(8080);
+  const res = await fetch("http://localhost:8080/");
+  const text = await res.text();
+  expect(text).toBe(
+    "<h1>Testing</h1>\n<p>I am testing this markdown content to see if it works.</p>\n",
+  );
 });

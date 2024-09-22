@@ -78,6 +78,12 @@ export declare class XerusContext {
     dyn(key: string): string;
     text(message: string): void;
     stream(streamer: () => ReadableStream<Uint8Array>, contentType?: string): void;
+    getCookie(cookieName: string): string | undefined;
+    setCookie(cookieName: string, value: string, options?: Record<string, any>): void;
+    clearCookie(name: string, options?: {
+        path?: string;
+        domain?: string;
+    }): void;
 }
 export declare class XerusResponse {
     headers: {
@@ -94,6 +100,7 @@ export declare class FileBasedRouter {
     targetDir: string;
     indexFilePath: string[];
     constructor(app: Xerus);
+    setTargetDir(targetDir: string): PotentialErr;
     mount(): Promise<PotentialErr>;
     verifyIndex(fileNames: string[]): PotentialErr;
     weedOutDirs(fileNames: string[]): string[];

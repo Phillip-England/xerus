@@ -12326,6 +12326,52 @@ class XerusContext {
       this.isReady = true;
     });
   }
+  getCookie(cookieName) {
+    const cookies = this.req.headers.get("cookie") || "";
+    const cookieArray = cookies.split(";").map((cookie) => cookie.trim());
+    for (const cookie of cookieArray) {
+      const [name, value] = cookie.split("=");
+      if (name === cookieName) {
+        return decodeURIComponent(value);
+      }
+    }
+    return;
+  }
+  setCookie(cookieName, value, options = {}) {
+    const cookieParts = [`${cookieName}=${encodeURIComponent(value)}`];
+    if (options.maxAge) {
+      cookieParts.push(`Max-Age=${options.maxAge}`);
+    }
+    if (options.domain) {
+      cookieParts.push(`Domain=${options.domain}`);
+    }
+    if (options.path) {
+      cookieParts.push(`Path=${options.path}`);
+    }
+    if (options.secure) {
+      cookieParts.push("Secure");
+    }
+    if (options.httpOnly) {
+      cookieParts.push("HttpOnly");
+    }
+    if (options.sameSite) {
+      cookieParts.push(`SameSite=${options.sameSite}`);
+    }
+    const cookieHeader = cookieParts.join("; ");
+    this.setHeader("Set-Cookie", cookieHeader);
+  }
+  clearCookie(name, options = {}) {
+    const cookieOptions = {
+      path: options.path || "/",
+      domain: options.domain,
+      expires: new Date(0).toUTCString()
+    };
+    let cookieStr = `${name}=; Expires=${cookieOptions.expires}; Path=${cookieOptions.path}`;
+    if (cookieOptions.domain) {
+      cookieStr += `; Domain=${cookieOptions.domain}`;
+    }
+    this.res.headers["Set-Cookie"] = cookieStr;
+  }
 }
 
 class XerusResponse {
@@ -12347,6 +12393,12 @@ class FileBasedRouter {
     this.app = app;
     this.targetDir = "./app";
     this.indexFilePath = [`+page.ts`, "+page.tsx"];
+  }
+  setTargetDir(targetDir) {
+    if (!targetDir.startsWith("./")) {
+      return new Error("targetDir must begin with './'");
+    }
+    this.targetDir = targetDir;
   }
   async mount() {
     try {
