@@ -18,6 +18,58 @@ test("hello world", async () => {
   expect(text).toBe("hello, world");
 });
 
+test("cookies", async () => {
+  const app: Xerus = new Xerus();
+
+  // Set a cookie and retrieve it
+  app.get("/", async (c: XerusContext) => {
+    c.setCookie("user", "Phillip", { path: "/", httpOnly: true });
+    c.text("Cookie set");
+  });
+
+  // Retrieve the cookie and verify its value
+  app.get("/check-cookie", async (c: XerusContext) => {
+    const userCookie = c.getCookie("user");
+    if (userCookie === "Phillip") {
+      c.text("Cookie exists and is correct");
+    } else {
+      c.text("Cookie not found or incorrect");
+    }
+  });
+
+  // Clear the cookie
+  app.get("/clear-cookie", async (c: XerusContext) => {
+    c.clearCookie("user", { path: "/" });
+    c.text("Cookie cleared");
+  });
+
+  await app.run(8080);
+
+  // Test the initial setting of the cookie
+  let res = await fetch("http://localhost:8080/");
+  let text = await res.text();
+  expect(text).toBe("Cookie set");
+
+  // Check if the cookie exists and is correct
+  let resCheck = await fetch("http://localhost:8080/check-cookie", {
+    headers: {
+      Cookie: "user=Phillip",
+    },
+  });
+  let textCheck = await resCheck.text();
+  expect(textCheck).toBe("Cookie exists and is correct");
+
+  // Clear the cookie and check that it's removed
+  let resClear = await fetch("http://localhost:8080/clear-cookie");
+  let textClear = await resClear.text();
+  expect(textClear).toBe("Cookie cleared");
+
+  // Now check that the cookie no longer exists
+  let resAfterClear = await fetch("http://localhost:8080/check-cookie");
+  let textAfterClear = await resAfterClear.text();
+  expect(textAfterClear).toBe("Cookie not found or incorrect");
+});
+
 //=============================
 // MIDDLEWARE
 //=============================

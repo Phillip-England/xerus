@@ -440,6 +440,74 @@ export class XerusContext {
       this.isReady = true;
     });
   }
+
+  getCookie(cookieName: string): string | undefined {
+    const cookies = this.req.headers.get("cookie") || "";
+    const cookieArray = cookies.split(";").map((cookie) => cookie.trim());
+
+    for (const cookie of cookieArray) {
+      const [name, value] = cookie.split("=");
+      if (name === cookieName) {
+        return decodeURIComponent(value);
+      }
+    }
+    return undefined;
+  }
+
+  // Add the setCookie method to set a cookie
+  setCookie(
+    cookieName: string,
+    value: string,
+    options: Record<string, any> = {},
+  ) {
+    const cookieParts = [`${cookieName}=${encodeURIComponent(value)}`];
+
+    if (options.maxAge) {
+      cookieParts.push(`Max-Age=${options.maxAge}`);
+    }
+
+    if (options.domain) {
+      cookieParts.push(`Domain=${options.domain}`);
+    }
+
+    if (options.path) {
+      cookieParts.push(`Path=${options.path}`);
+    }
+
+    if (options.secure) {
+      cookieParts.push("Secure");
+    }
+
+    if (options.httpOnly) {
+      cookieParts.push("HttpOnly");
+    }
+
+    if (options.sameSite) {
+      cookieParts.push(`SameSite=${options.sameSite}`);
+    }
+
+    const cookieHeader = cookieParts.join("; ");
+    this.setHeader("Set-Cookie", cookieHeader);
+  }
+
+  clearCookie(name: string, options: { path?: string; domain?: string } = {}) {
+    // Set the expiration date to a time in the past to remove the cookie
+    const cookieOptions = {
+      path: options.path || "/",
+      domain: options.domain,
+      expires: new Date(0).toUTCString(), // Expiration in the past
+    };
+
+    // Build the 'Set-Cookie' header value
+    let cookieStr = `${name}=; Expires=${cookieOptions.expires}; Path=${cookieOptions.path}`;
+
+    if (cookieOptions.domain) {
+      cookieStr += `; Domain=${cookieOptions.domain}`;
+    }
+
+    // Add the 'Set-Cookie' header to remove the cookie
+    this.res.headers["Set-Cookie"] = cookieStr;
+  }
 }
 
 export class XerusResponse {
