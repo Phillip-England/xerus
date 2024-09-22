@@ -69,8 +69,6 @@ test("cookies", async () => {
   let resAfterClear = await fetch("http://localhost:8080/check-cookie");
   let textAfterClear = await resAfterClear.text();
   expect(textAfterClear).toBe("Cookie not found or incorrect");
-
-  await sleep(5000);
 });
 
 //=============================
@@ -96,7 +94,7 @@ test("timeout", async () => {
 // FILE BASED ROUTER
 //=======================
 
-test("fbr", async () => {
+test("fbrBasic", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
