@@ -20,7 +20,7 @@ To declare a dynamic path, use braces `{}`
 ```js
 app.get('/user/{id}', async (c) => {
     let id = c.dyn('id') // access the dynamic id
-    c.text(id) 
+    c.text(id)
 })
 ```
 
@@ -134,4 +134,80 @@ app.get('/', async (c) => {
 }, customMiddleware) // <===== chain on your middleware here
 ```
 
+## File Based Route
+Xerus comes with a file-based router, enabling your directory structure to generate your routes, thus reducing code for your application.
 
+```js
+const app = new Xerus();
+const fbr = new FileBasedRouter(app);
+let err = await fbr.mount();
+if (err) {
+  // handle the err
+}
+await app.run(8080);
+```
+
+### App Directory
+By defualt, Xerus will check for your routes in `./app`. As of now, you cannot define a custom directory for your routes.
+
+
+### File Based Route - Hello World
+In the root of your project, use the following command to create the files needed for a `hello, world` example.
+
+If you plan to use `JSX` as your templating solution, run:
+```bash
+mkdir app; cd app; touch +page.tsx
+```
+
+If you are going to use an alternative templating solution, run:
+```bash
+mkdir app; cd app; touch +page.ts
+```
+
+Both `.ts` and `.tsx` files are supported. As of now, `.js` and `.jsx` are not supported.
+
+In `./app/+page.tsx` add the following code (you will also need to import `XerusRoute` and `XerusContext` from `xerus`):
+```tsx
+import React from "react";
+
+export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  c.jsx(<h1>Hello, World</h1>);
+});
+```
+
+The above code will basically be interpreted as:
+```tsx
+app.get("/", async (c: XerusContext) => {
+  c.jsx(<h1>Hello, World</h1>);
+});
+```
+
+### Using a different http method
+If you want to use a different http method like `POST` just export a const named `post` instead of `get`
+```tsx
+export const post: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  c.jsx(<h1>Hello, Post World</h1>);
+});
+```
+
+### Dynamic File Based Endpoints
+You can make a file based endpoint dynamic by doing the following.
+
+Create a few directories inside of `./app`
+```bash
+mkdir app/user/{id}; cd app/user/{id}; touch +page.tsx
+```
+
+Now in `/app/user/{id}/+page.tsx`
+```tsx
+export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  c.jsx(<h1>{c.dyn("id")}</h1>);
+});
+```
+
+The above code will and the following code have the same result
+```tsx
+app.get('/user/{id}', async (c) => {
+  c.jsx(<h1>{c.dyn("id")}</h1>);
+})
+```

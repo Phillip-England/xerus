@@ -1,4 +1,4 @@
-import { XerusContext, XerusHandler, XerusRoute } from "../src/index";
+import { XerusContext, XerusRoute } from "../src/index";
 import React from "react";
 
 export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
