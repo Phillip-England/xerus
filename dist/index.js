@@ -11969,6 +11969,7 @@ var require_server_browser = __commonJS((exports) => {
 
 // src/index.ts
 var server = __toESM(require_server_browser(), 1);
+var {readdir} = (()=>({}));
 function searchObjectForDynamicPath(obj, path, c) {
   for (const key in obj) {
     if (!key.includes("{") && !key.includes("}")) {
@@ -12028,6 +12029,54 @@ async function timeout(c, next) {
   }
 }
 
+class Result {
+  _value;
+  _error;
+  constructor(_value, _error) {
+    this._value = _value;
+    this._error = _error;
+  }
+  static Ok(value) {
+    return new Result(value);
+  }
+  static Err(error) {
+    return new Result(undefined, error);
+  }
+  isOk() {
+    return this._error === undefined;
+  }
+  isErr() {
+    return this._value === undefined;
+  }
+  unwrap() {
+    if (this.isErr()) {
+      throw new Error("Tried to unwrap an Err value");
+    }
+    return this._value;
+  }
+  unwrapErr() {
+    if (this.isOk()) {
+      throw new Error("Tried to unwrap an Ok value");
+    }
+    return this._error;
+  }
+  unwrapOr(defaultValue) {
+    return this.isOk() ? this._value : defaultValue;
+  }
+  getErr() {
+    return this.isErr() ? this._error : undefined;
+  }
+}
+
+class XerusRoute {
+  handler;
+  middleware;
+  constructor(handler, ...middleware) {
+    this.handler = handler;
+    this.middleware = middleware;
+  }
+}
+
 class Xerus {
   routes;
   prefixMiddleware;
@@ -12069,7 +12118,8 @@ class Xerus {
   wrapWithMiddleware(path, handler, ...middleware) {
     let combinedMiddleware = [...this.prefixMiddleware["*"] || []];
     for (const key in this.prefixMiddleware) {
-      if (path.startsWith(key)) {
+      let pathParts = path.split(" ");
+      if (pathParts[1].startsWith(key)) {
         combinedMiddleware.push(...this.prefixMiddleware[key]);
         break;
       }
@@ -12255,6 +12305,27 @@ class XerusContext {
     this.setHeader("Content-Type", "text/plain");
     this.ready();
   }
+  stream(streamer, contentType = "text/plain") {
+    this.setHeader("Content-Type", contentType);
+    const reader = streamer().getReader();
+    const decoder = new TextDecoder;
+    this.res.body = "";
+    const readChunk = async () => {
+      let done, value;
+      do {
+        ({ done, value } = await reader.read());
+        if (value !== undefined) {
+          this.res.body += decoder.decode(value, { stream: true });
+        }
+      } while (!done);
+      this.isReady = true;
+    };
+    readChunk().catch((err) => {
+      console.error("Error streaming response:", err);
+      this.res.body = "Error occurred during streaming";
+      this.isReady = true;
+    });
+  }
 }
 
 class XerusResponse {
@@ -12267,10 +12338,134 @@ class XerusResponse {
     this.status = 200;
   }
 }
+
+class FileBasedRouter {
+  app;
+  targetDir;
+  indexFilePath;
+  constructor(app) {
+    this.app = app;
+    this.targetDir = "./app";
+    this.indexFilePath = [`+page.ts`, "+page.tsx"];
+  }
+  async mount() {
+    try {
+      const fileNames = await readdir(this.targetDir, { recursive: true });
+      let err = this.verifyIndex(fileNames);
+      if (err) {
+        return err;
+      }
+      let filteredFileNames = this.weedOutDirs(fileNames);
+      let routeMap = this.makeRouteMap(filteredFileNames);
+      let result = await this.extractModules(routeMap);
+      if (result.isErr()) {
+        return result.getErr();
+      }
+      let moduleArr = result.unwrap();
+      this.hookRoutes(moduleArr);
+    } catch (e) {
+      return e;
+    }
+  }
+  verifyIndex(fileNames) {
+    let foundIndex = false;
+    for (let i = 0;i < fileNames.length; i++) {
+      let fileName = fileNames[i];
+      if (this.indexFilePath.includes(fileName)) {
+        foundIndex = true;
+        break;
+      }
+    }
+    if (!foundIndex) {
+      return new Error(`failed to located index at ${this.targetDir}/${this.indexFilePath}`);
+    }
+  }
+  weedOutDirs(fileNames) {
+    let filteredFileNames = fileNames.filter((value, index) => {
+      for (let i = 0;i < this.indexFilePath.length; i++) {
+        let validFileName = this.indexFilePath[i];
+        if (value.includes(validFileName)) {
+          return true;
+        }
+      }
+      return false;
+    });
+    return filteredFileNames;
+  }
+  makeRouteMap(filteredFileNames) {
+    let routeMap = {};
+    for (let i = 0;i < filteredFileNames.length; i++) {
+      let fileName = filteredFileNames[i];
+      if (this.indexFilePath.includes(fileName)) {
+        routeMap["/"] = fileName;
+        continue;
+      }
+      let parts = fileName.split("/");
+      parts.pop();
+      let endpoint = "/" + parts.join("/");
+      routeMap[endpoint] = fileName;
+    }
+    return routeMap;
+  }
+  async extractModules(routeMap) {
+    try {
+      let routeArr = [];
+      Object.entries(routeMap).forEach(async ([endpoint, filePath]) => {
+        let moduleFilePath = "." + this.targetDir + "/" + filePath;
+        routeArr.push({
+          modulePath: moduleFilePath,
+          endpoint
+        });
+      });
+      let finalArr = [];
+      for (let i = 0;i < routeArr.length; i++) {
+        let { modulePath, endpoint } = routeArr[i];
+        let module = await import(modulePath);
+        finalArr.push({
+          module,
+          endpoint
+        });
+      }
+      return Result.Ok(finalArr);
+    } catch (e) {
+      return Result.Err(e);
+    }
+  }
+  hookRoutes(moduleArr) {
+    for (let i = 0;i < moduleArr.length; i++) {
+      let { module, endpoint } = moduleArr[i];
+      if (module.use) {
+        let parts = endpoint.split("/");
+        let lastPart = parts[parts.length - 1];
+        if (lastPart.includes("{") && lastPart.includes("}")) {
+          parts.pop();
+          this.app.use(parts.join("/"), ...module.use);
+        } else {
+          this.app.use(endpoint, ...module.use);
+        }
+      }
+      if (module.get) {
+        this.app.get(endpoint, module.get.handler, module.get.middleware || []);
+      }
+      if (module.post) {
+        this.app.post(endpoint, module.post.handler, module.post.middleware || []);
+      }
+      if (module.put) {
+        this.app.put(endpoint, module.put.handler, module.put.middleware || []);
+      }
+      if (module.delete) {
+        this.app.delete(endpoint, module.delete.handler, module.delete.middleware || []);
+      }
+    }
+  }
+}
 export {
   timeout,
   logger,
+  XerusRoute,
   XerusResponse,
   XerusContext,
-  Xerus
+  Xerus,
+  Result,
+  FileBasedRouter
 };

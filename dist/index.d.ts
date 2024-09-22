@@ -1,4 +1,23 @@
 import type { BunFile } from "bun";
+type PotentialErr = Error | void;
+export declare class Result<T, E> {
+    private readonly _value?;
+    private readonly _error?;
+    private constructor();
+    static Ok<T, E = never>(value: T): Result<T, E>;
+    static Err<E, T = never>(error: E): Result<T, E>;
+    isOk(): boolean;
+    isErr(): boolean;
+    unwrap(): T;
+    unwrapErr(): E;
+    unwrapOr(defaultValue: T): T;
+    getErr(): E | undefined;
+}
+export declare class XerusRoute {
+    handler: XerusHandler;
+    middleware: XerusMiddleware[];
+    constructor(handler: XerusHandler, ...middleware: XerusMiddleware[]);
+}
 export type XerusHandler = (c: XerusContext) => Promise<void>;
 export type XerusMiddleware = (c: XerusContext, next: XerusHandler) => Promise<void>;
 export declare class Xerus {
@@ -58,6 +77,7 @@ export declare class XerusContext {
     getGlobal(someKey: string): any;
     dyn(key: string): string;
     text(message: string): void;
+    stream(streamer: () => ReadableStream<Uint8Array>, contentType?: string): void;
 }
 export declare class XerusResponse {
     headers: {
@@ -69,3 +89,20 @@ export declare class XerusResponse {
 }
 export declare function logger(c: XerusContext, next: XerusHandler): Promise<void>;
 export declare function timeout(c: XerusContext, next: XerusHandler): Promise<void>;
+export declare class FileBasedRouter {
+    app: Xerus;
+    targetDir: string;
+    indexFilePath: string[];
+    constructor(app: Xerus);
+    mount(): Promise<PotentialErr>;
+    verifyIndex(fileNames: string[]): PotentialErr;
+    weedOutDirs(fileNames: string[]): string[];
+    makeRouteMap(filteredFileNames: string[]): {
+        [key: string]: string;
+    };
+    extractModules(routeMap: {
+        [key: string]: string;
+    }): Promise<Result<any[], Error>>;
+    hookRoutes(moduleArr: any[]): void;
+}
+export {};
