@@ -211,3 +211,50 @@ app.get('/user/{id}', async (c) => {
   c.jsx(<h1>{c.dyn("id")}</h1>);
 })
 ```
+
+### Using middleware inside of file-based routes
+Remember, we have global middleware, prefix middleware, and route-specific middleware. All can be utilized in our file based routing system.
+
+1. Global Middleware
+
+All global middleware will be applied to the application prior to mounting the file based router. For example:
+```tsx
+const app: Xerus = new Xerus();
+app.use("*", timeout, logger); // setup global middleware PRIOR to mounting the router
+const router = new FileBasedRouter(app);
+let err = await router.mount();
+if (err) {
+  console.log(err);
+}
+await app.run(8080);
+```
+
+2. Prefix Middleware
+
+Prefix middleware is established inside of `+page.tsx` files by exporting a const named `use`.
+The following example will make all routes which start with `/about` apply the logger middleware.
+Keep in mind, you need to actually import the logger to use it.
+
+`/app/about/+page.tsx`
+```tsx
+export const use: XerusMiddleware[] = [logger]
+
+export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  c.jsx(<h1>About me!</h1>);
+});
+```
+
+3. Route Specific Middleware
+
+Route specific middleware can be simply chained onto the end of a `XerusRoute` like so.
+
+```tsx
+export async function hello(c: XerusContext, next: XerusHandler) {
+  c.text("hello from middleware");
+  await next(c);
+}
+
+export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  c.jsx(<h1>You wont get to see me because the middleware will exit the endpoint early!</h1>);
+}, hello); // <========== we chain our route-specific middleware on here
+```
