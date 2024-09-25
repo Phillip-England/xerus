@@ -200,11 +200,10 @@ test("mdFbr", async () => {
   if (err) {
     console.log(err);
   }
-  // await app.run(8080);
-  // const res = await fetch("http://localhost:8080/");
-  // const text = await res.text();
-  // expect(text).toBe("<h1>Hello, World</h1>");
-  // const res2 = await fetch("http://localhost:8080/resource/1");
-  // const text2 = await res2.text();
-  // expect(text2).toBe("hello from middleware");
+
+  await app.run(8080);
+  const res = await fetch("http://localhost:8080/markdown");
+  const text = await res.text();
+  console.log(text);
+  expect(text).toBe("<h1>Some Title</h1>\n<p>some content</p>\n");
 });

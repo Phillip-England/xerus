@@ -230,8 +230,13 @@ export class Xerus {
 
   async handleRequest(req: Request): Promise<Response | Error> {
     let path: string = new URL(req.url).pathname;
-    let c = new XerusContext(req, this.globalContext, this.timeoutDuration);
     let method: string = req.method;
+    let c = new XerusContext(
+      req,
+      method,
+      this.globalContext,
+      this.timeoutDuration,
+    );
     let methodPath = `${method} ${path}`;
 
     // handling static files
@@ -315,8 +320,14 @@ export class XerusContext {
   isReady: Boolean;
   globalContext: { [key: string]: any };
   urlContext: { [key: string]: number };
+  method: string;
 
-  constructor(req: Request, globalContext: Object, timeoutDuration: number) {
+  constructor(
+    req: Request,
+    method: string,
+    globalContext: Object,
+    timeoutDuration: number,
+  ) {
     this.url = new URL(req.url);
     this.path = this.url.pathname;
     this.req = req;
@@ -325,6 +336,7 @@ export class XerusContext {
     this.isReady = false;
     this.globalContext = globalContext;
     this.urlContext = {};
+    this.method = method;
   }
 
   respond(): Response {
@@ -512,11 +524,16 @@ export class XerusContext {
     this.res.headers["Set-Cookie"] = cookieStr;
   }
 
-  async md(filePath: string): Promise<string> {
-    let file = Bun.file(filePath);
-    let text = await file.text();
-    let html = await marked.parse(text);
-    return html;
+  async md(filePath: string = ""): Promise<string> {
+    if (filePath == "") {
+      let fileBasedMdContent = this.getGlobal(`MD ${this.path}`);
+      return await marked.parse(fileBasedMdContent);
+    } else {
+      let file = Bun.file(filePath);
+      let text = await file.text();
+      let html = await marked.parse(text);
+      return html;
+    }
   }
 }
 
@@ -604,6 +621,10 @@ export class FileBasedRoute {
     } catch (e: any) {
       return e as Error;
     }
+  }
+
+  pushMdContentIntoGlobalContext(app: Xerus) {
+    app.global(`MD ${this.endpoint}`, this.mdContent);
   }
 
   async hookRouteToApp(app: Xerus): Promise<PotentialErr> {
@@ -697,6 +718,7 @@ export class FileBasedRouter {
         if (mdErr) {
           return mdErr;
         }
+        route.pushMdContentIntoGlobalContext(this.app);
         await route.hookRouteToApp(this.app);
       }
     } catch (e: any) {
