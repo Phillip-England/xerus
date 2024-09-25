@@ -559,15 +559,115 @@ export async function timeout(c: XerusContext, next: XerusHandler) {
   }
 }
 
+// used in FileBasedRouter
+// contains all the needed data to generate an actual route for a specific directory
+// within the FileBasedRouter system
+export class FileBasedRoute {
+  endpoint: string;
+  pageFilePath: string;
+  mdFilePath: string;
+  pageModule: any;
+  mdContent: string;
+
+  constructor(pageFilePath: string, targetDir: string, endpoint: string) {
+    this.endpoint = endpoint;
+    this.pageFilePath = "." + targetDir + "/" + pageFilePath;
+    this.mdFilePath = "";
+    this.pageModule;
+    this.mdContent = "";
+  }
+
+  async extractModule(): Promise<PotentialErr> {
+    try {
+      let module = await import(this.pageFilePath);
+      this.pageModule = module;
+    } catch (e: any) {
+      return e as Error;
+    }
+  }
+
+  generateMdContentPath(markdownFileName: string) {
+    let parts = this.pageFilePath.split("/");
+    let pageName = parts[parts.length - 1];
+    this.mdFilePath = this.pageFilePath
+      .replace(pageName, markdownFileName)
+      .replace("../", "./");
+  }
+
+  async loadMarkdownContent(): Promise<PotentialErr> {
+    try {
+      let mdFile = Bun.file(this.mdFilePath);
+      let exists = await mdFile.exists();
+      if (exists) {
+        this.mdContent = await mdFile.text();
+      }
+    } catch (e: any) {
+      return e as Error;
+    }
+  }
+
+  async hookRouteToApp(app: Xerus): Promise<PotentialErr> {
+    // here is where we determine our endpoints prefix middleware
+    // an important distinction is made here
+    // if a route ends with a dynamic value such as /user/{id}
+    // then all prefix middleware will be applied to "/user/"
+    // but endpoint which do not end in a dynamic value will be applied as expected
+    if (this.pageModule.use) {
+      let parts = this.endpoint.split("/");
+      let lastPart = parts[parts.length - 1];
+      if (lastPart.includes("{") && lastPart.includes("}")) {
+        parts.pop();
+        app.use(parts.join("/"), ...this.pageModule.use);
+      } else {
+        app.use(this.endpoint, ...this.pageModule.use);
+      }
+    }
+
+    if (this.pageModule.get) {
+      app.get(
+        this.endpoint,
+        this.pageModule.get.handler,
+        this.pageModule.get.middleware || [],
+      );
+    }
+
+    if (this.pageModule.post) {
+      app.post(
+        this.endpoint,
+        this.pageModule.post.handler,
+        this.pageModule.post.middleware || [],
+      );
+    }
+
+    if (this.pageModule.put) {
+      app.put(
+        this.endpoint,
+        this.pageModule.put.handler,
+        this.pageModule.put.middleware || [],
+      );
+    }
+
+    if (this.pageModule.delete) {
+      app.delete(
+        this.endpoint,
+        this.pageModule.delete.handler,
+        this.pageModule.delete.middleware || [],
+      );
+    }
+  }
+}
+
 export class FileBasedRouter {
   app: Xerus;
   targetDir: string;
-  indexFilePath: string[];
+  validFilePaths: string[];
+  defaultMarkdownName: string;
 
   constructor(app: Xerus) {
     this.app = app;
     this.targetDir = "./app";
-    this.indexFilePath = [`+page.ts`, "+page.tsx"];
+    this.validFilePaths = [`+page.ts`, "+page.tsx", "+page.js", "+page.jsx"];
+    this.defaultMarkdownName = "+content.md";
   }
 
   setTargetDir(targetDir: string): PotentialErr {
@@ -584,14 +684,21 @@ export class FileBasedRouter {
       if (err) {
         return err;
       }
-      let filteredFileNames = this.weedOutDirs(fileNames);
-      let routeMap = this.makeRouteMap(filteredFileNames);
-      let result = await this.extractModules(routeMap);
-      if (result.isErr()) {
-        return result.getErr();
+      let filteredFileNames = this.parseOutPages(fileNames);
+      let routeArr = this.makeRouteArr(filteredFileNames);
+      for (let i = 0; i < routeArr.length; i++) {
+        let route: FileBasedRoute = routeArr[i];
+        let err = await route.extractModule();
+        if (err) {
+          return err;
+        }
+        route.generateMdContentPath(this.defaultMarkdownName);
+        let mdErr = await route.loadMarkdownContent();
+        if (mdErr) {
+          return mdErr;
+        }
+        await route.hookRouteToApp(this.app);
       }
-      let moduleArr = result.unwrap();
-      this.hookRoutes(moduleArr);
     } catch (e: any) {
       return e as Error;
     }
@@ -601,22 +708,22 @@ export class FileBasedRouter {
     let foundIndex = false;
     for (let i = 0; i < fileNames.length; i++) {
       let fileName = fileNames[i];
-      if (this.indexFilePath.includes(fileName)) {
+      if (this.validFilePaths.includes(fileName)) {
         foundIndex = true;
         break;
       }
     }
     if (!foundIndex) {
       return new Error(
-        `failed to located index at ${this.targetDir}/${this.indexFilePath}`,
+        `failed to located index at ${this.targetDir}/${this.validFilePaths}`,
       );
     }
   }
 
-  weedOutDirs(fileNames: string[]): string[] {
+  parseOutPages(fileNames: string[]): string[] {
     let filteredFileNames = fileNames.filter((value, index) => {
-      for (let i = 0; i < this.indexFilePath.length; i++) {
-        let validFileName = this.indexFilePath[i];
+      for (let i = 0; i < this.validFilePaths.length; i++) {
+        let validFileName = this.validFilePaths[i];
         if (value.includes(validFileName)) {
           return true;
         }
@@ -626,47 +733,20 @@ export class FileBasedRouter {
     return filteredFileNames;
   }
 
-  makeRouteMap(filteredFileNames: string[]): { [key: string]: string } {
-    let routeMap: { [key: string]: string } = {};
+  makeRouteArr(filteredFileNames: string[]): FileBasedRoute[] {
+    let routeArr: FileBasedRoute[] = [];
     for (let i = 0; i < filteredFileNames.length; i++) {
       let fileName = filteredFileNames[i];
-      if (this.indexFilePath.includes(fileName)) {
-        routeMap["/"] = fileName;
+      if (this.validFilePaths.includes(fileName)) {
+        routeArr.push(new FileBasedRoute(fileName, this.targetDir, "/"));
         continue;
       }
       let parts = fileName.split("/");
       parts.pop();
       let endpoint = "/" + parts.join("/");
-      routeMap[endpoint] = fileName;
+      routeArr.push(new FileBasedRoute(fileName, this.targetDir, endpoint));
     }
-    return routeMap;
-  }
-
-  async extractModules(routeMap: {
-    [key: string]: string;
-  }): Promise<Result<any[], Error>> {
-    try {
-      let routeArr: any = [];
-      Object.entries(routeMap).forEach(async ([endpoint, filePath]) => {
-        let moduleFilePath = "." + this.targetDir + "/" + filePath;
-        routeArr.push({
-          modulePath: moduleFilePath,
-          endpoint: endpoint,
-        });
-      });
-      let finalArr: any = [];
-      for (let i = 0; i < routeArr.length; i++) {
-        let { modulePath, endpoint } = routeArr[i];
-        let module = await import(modulePath);
-        finalArr.push({
-          module: module,
-          endpoint: endpoint,
-        });
-      }
-      return Result.Ok(finalArr);
-    } catch (e: any) {
-      return Result.Err(e);
-    }
+    return routeArr;
   }
 
   hookRoutes(moduleArr: any[]) {

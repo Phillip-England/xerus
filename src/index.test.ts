@@ -175,7 +175,7 @@ test("stream", async () => {
 // HANDLING MARKDOWN CONTENT
 //=============================
 
-test("md", async () => {
+test("mdBasic", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
 
@@ -190,4 +190,21 @@ test("md", async () => {
   expect(text).toBe(
     "<h1>Testing</h1>\n<p>I am testing this markdown content to see if it works.</p>\n",
   );
+});
+
+test("mdFbr", async () => {
+  const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
+  const router = new FileBasedRouter(app);
+  let err = await router.mount();
+  if (err) {
+    console.log(err);
+  }
+  // await app.run(8080);
+  // const res = await fetch("http://localhost:8080/");
+  // const text = await res.text();
+  // expect(text).toBe("<h1>Hello, World</h1>");
+  // const res2 = await fetch("http://localhost:8080/resource/1");
+  // const text2 = await res2.text();
+  // expect(text2).toBe("hello from middleware");
 });
