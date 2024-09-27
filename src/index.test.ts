@@ -94,6 +94,20 @@ test("timeout", async () => {
 // FILE BASED ROUTER
 //=======================
 
+test("fbrNestedDynamicRoutes", async () => {
+  const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
+  const router = new FileBasedRouter(app);
+  let err = await router.mount();
+  if (err) {
+    console.log(err);
+  }
+  await app.run(8080);
+  const res = await fetch("http://localhost:8080/user/2/blue");
+  const text = await res.text();
+  expect(text).toBe("2blue");
+});
+
 test("fbrBasic", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
