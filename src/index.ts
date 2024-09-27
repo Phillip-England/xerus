@@ -569,11 +569,9 @@ export class XerusContext {
       if (this.pathIsDynamic) {
         let dynamicKeyParts = this.dynamicKey.split(" ");
         let originalDynamicPath = dynamicKeyParts[1];
-        let fileBasedMdContent = this.getGlobal(`MD ${originalDynamicPath}`);
-        return await marked.parse(fileBasedMdContent);
+        return this.getGlobal(`MD ${originalDynamicPath}`);
       } else {
-        let fileBasedMdContent = this.getGlobal(`MD ${this.path}`);
-        return await marked.parse(fileBasedMdContent);
+        return this.getGlobal(`MD ${this.path}`);
       }
     } else {
       let file = Bun.file(filePath);
@@ -682,8 +680,9 @@ export class FileBasedRoute {
     }
   }
 
-  pushMdContentIntoGlobalContext(app: Xerus) {
-    app.global(`MD ${this.endpoint}`, this.mdContent);
+  async pushMdContentIntoGlobalContext(app: Xerus) {
+    let html = await marked.parse(this.mdContent);
+    app.global(`MD ${this.endpoint}`, html);
   }
 
   async hookRouteToApp(app: Xerus): Promise<PotentialErr> {
@@ -781,7 +780,7 @@ export class FileBasedRouter {
         if (mdErr) {
           return mdErr;
         }
-        route.pushMdContentIntoGlobalContext(this.app);
+        await route.pushMdContentIntoGlobalContext(this.app);
         await route.hookRouteToApp(this.app);
       }
     } catch (e: any) {

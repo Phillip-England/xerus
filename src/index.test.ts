@@ -168,7 +168,7 @@ test("stream", async () => {
   const req = new Request("http://localhost/test");
   const globalContext = {};
   const timeoutDuration = 5000;
-  const context = new XerusContext(req, globalContext, timeoutDuration);
+  const context = new XerusContext(req, "GET", globalContext, timeoutDuration);
   context.stream(mockStreamer, "text/plain");
   await new Promise((resolve) => {
     const checkReady = () => {
