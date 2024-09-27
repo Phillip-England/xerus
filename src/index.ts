@@ -4,6 +4,10 @@ import { readdir } from "node:fs/promises";
 import { Marked } from "marked";
 import { marked } from "marked";
 
+//===========================
+// ## ERROR TYPES
+//===========================
+
 type PotentialErr = Error | void;
 
 export class Result<T, E> {
@@ -59,6 +63,14 @@ export class Result<T, E> {
   }
 }
 
+//===================
+// ## DIRTY FUNCS
+//===================
+
+// used with Xerus to parse our dynamic paths
+// also does the task of making dynamic path variables available in XerusContext
+// this is done by make the key-value pair available in Xerus.urlContext which is copied into XerusContext.urlContext
+// this func needs revised eventually for clarity
 function searchObjectForDynamicPath(
   obj: Object,
   path: string,
@@ -97,6 +109,11 @@ function searchObjectForDynamicPath(
   return "";
 }
 
+//=====================
+// ## XerusRoute
+//=====================
+
+// used inside of +page.tsx files to define a route
 export class XerusRoute {
   handler: XerusHandler;
   middleware: XerusMiddleware[];
@@ -107,11 +124,24 @@ export class XerusRoute {
   }
 }
 
+//======================
+// ## XerusHandler
+//======================
+
 export type XerusHandler = (c: XerusContext) => Promise<void>;
+
+//======================
+// ## XerusMiddleware
+//======================
+
 export type XerusMiddleware = (
   c: XerusContext,
   next: XerusHandler,
 ) => Promise<void>;
+
+//======================
+// ## Xerus
+//======================
 
 export class Xerus {
   routes: { [key: string]: XerusHandler };
@@ -262,6 +292,8 @@ export class Xerus {
     let dynamicHandler = this.routes[key];
     if (dynamicHandler) {
       try {
+        c.pathIsDynamic = true;
+        c.dynamicKey = key;
         await dynamicHandler(c);
         return c.respond();
       } catch (e: any) {
@@ -311,6 +343,10 @@ export class Xerus {
   }
 }
 
+//======================
+// ## XerusContext
+//======================
+
 export class XerusContext {
   url: URL;
   path: string;
@@ -321,6 +357,8 @@ export class XerusContext {
   globalContext: { [key: string]: any };
   urlContext: { [key: string]: number };
   method: string;
+  pathIsDynamic: boolean;
+  dynamicKey: string;
 
   constructor(
     req: Request,
@@ -337,6 +375,8 @@ export class XerusContext {
     this.globalContext = globalContext;
     this.urlContext = {};
     this.method = method;
+    this.pathIsDynamic = false;
+    this.dynamicKey = "";
   }
 
   respond(): Response {
@@ -526,8 +566,15 @@ export class XerusContext {
 
   async md(filePath: string = ""): Promise<string> {
     if (filePath == "") {
-      let fileBasedMdContent = this.getGlobal(`MD ${this.path}`);
-      return await marked.parse(fileBasedMdContent);
+      if (this.pathIsDynamic) {
+        let dynamicKeyParts = this.dynamicKey.split(" ");
+        let originalDynamicPath = dynamicKeyParts[1];
+        let fileBasedMdContent = this.getGlobal(`MD ${originalDynamicPath}`);
+        return await marked.parse(fileBasedMdContent);
+      } else {
+        let fileBasedMdContent = this.getGlobal(`MD ${this.path}`);
+        return await marked.parse(fileBasedMdContent);
+      }
     } else {
       let file = Bun.file(filePath);
       let text = await file.text();
@@ -536,6 +583,10 @@ export class XerusContext {
     }
   }
 }
+
+//======================
+// ## XerusResponse
+//======================
 
 export class XerusResponse {
   headers: { [key: string]: string };
@@ -548,6 +599,10 @@ export class XerusResponse {
     this.status = 200;
   }
 }
+
+//========================
+// ## INTERNAL MIDDLEWARE
+//========================
 
 export async function logger(c: XerusContext, next: XerusHandler) {
   let startTime = process.hrtime();
@@ -575,6 +630,10 @@ export async function timeout(c: XerusContext, next: XerusHandler) {
     }
   }
 }
+
+//======================
+// ## FileBasedRoute
+//======================
 
 // used in FileBasedRouter
 // contains all the needed data to generate an actual route for a specific directory
@@ -677,6 +736,10 @@ export class FileBasedRoute {
     }
   }
 }
+
+//======================
+// ## FileBasedRouter
+//======================
 
 export class FileBasedRouter {
   app: Xerus;

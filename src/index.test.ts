@@ -200,10 +200,13 @@ test("mdFbr", async () => {
   if (err) {
     console.log(err);
   }
-
   await app.run(8080);
   const res = await fetch("http://localhost:8080/markdown");
   const text = await res.text();
-  console.log(text);
   expect(text).toBe("<h1>Some Title</h1>\n<p>some content</p>\n");
+  const res2 = await fetch("http://localhost:8080/markdown/2");
+  const text2 = await res2.text();
+  expect(text2).toBe(
+    "<h1>Some Other Title</h1>\n<p>some content you&#39;ll love or else</p>\n",
+  );
 });
