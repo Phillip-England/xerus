@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 
 import { FileBasedRouter, logger, timeout, Xerus, XerusContext } from ".";
 import { sleep } from "bun";
-import { Marked } from "marked";
 
 //=============================
 // BASIC ROUTING
@@ -98,9 +97,13 @@ test("fbrNestedDynamicRoutes", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
+  let targetDirErr = router.setTargetDir("./testApps/app");
+  if (targetDirErr) {
+    throw targetDirErr;
+  }
   let err = await router.mount();
   if (err) {
-    console.log(err);
+    throw err;
   }
   await app.run(8080);
   const res = await fetch("http://localhost:8080/user/2/blue");
@@ -112,9 +115,13 @@ test("fbrBasic", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
+  let targetDirErr = router.setTargetDir("./testApps/app");
+  if (targetDirErr) {
+    throw targetDirErr;
+  }
   let err = await router.mount();
   if (err) {
-    console.log(err);
+    throw err;
   }
   await app.run(8080);
   const res = await fetch("http://localhost:8080/");
@@ -129,7 +136,7 @@ test("fbrTarget", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
-  let targetDirErr = router.setTargetDir("./app2");
+  let targetDirErr = router.setTargetDir("./testApps/app2");
   if (targetDirErr) {
     console.log(targetDirErr);
   }
@@ -210,9 +217,13 @@ test("mdFbr", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
+  let targetDirErr = router.setTargetDir("./testApps/app");
+  if (targetDirErr) {
+    throw targetDirErr;
+  }
   let err = await router.mount();
   if (err) {
-    console.log(err);
+    throw err;
   }
   await app.run(8080);
   const res = await fetch("http://localhost:8080/markdown");

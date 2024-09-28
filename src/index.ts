@@ -399,6 +399,10 @@ export class XerusContext {
     this.res.headers[key] = value;
   }
 
+  getHeader(key: string): string {
+    return this.res.headers[key] || "";
+  }
+
   status(code: number) {
     this.res.status = code;
     this.ready();
