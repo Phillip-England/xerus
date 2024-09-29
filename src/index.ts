@@ -213,7 +213,8 @@ export class Xerus {
       const executeMiddleware = async () => {
         for (let i = 0; i < combinedMiddleware.length; i++) {
           let middlewareFunc = combinedMiddleware[i];
-          await middlewareFunc(c, executeMiddleware);
+          console.log(middlewareFunc);
+          if (middlewareFunc) await middlewareFunc(c, executeMiddleware);
           if (c.isReady) {
             return;
           }
