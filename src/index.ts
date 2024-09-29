@@ -159,7 +159,7 @@ export class Xerus {
       c.text("404 not found");
     };
     this.timeoutDuration = 5000;
-    this.staticDir = "/static";
+    this.staticDir = process.cwd() + "/static";
     this.globalContext = {};
     this.entryPoint = "";
   }
@@ -169,7 +169,7 @@ export class Xerus {
   }
 
   setStaticDir(dirPath: string) {
-    this.staticDir = dirPath;
+    this.staticDir = process.cwd() + dirPath;
   }
 
   async handleStatic(path: string) {
@@ -650,7 +650,7 @@ export class FileBasedRoute {
 
   constructor(pageFilePath: string, targetDir: string, endpoint: string) {
     this.endpoint = endpoint;
-    this.pageFilePath = "." + targetDir + "/" + pageFilePath;
+    this.pageFilePath = targetDir + "/" + pageFilePath;
     this.mdFilePath = "";
     this.pageModule;
     this.mdContent = "";
@@ -753,7 +753,7 @@ export class FileBasedRouter {
 
   constructor(app: Xerus) {
     this.app = app;
-    this.targetDir = "./app";
+    this.targetDir = process.cwd() + "/app";
     this.validFilePaths = [`+page.ts`, "+page.tsx", "+page.js", "+page.jsx"];
     this.defaultMarkdownName = "+content.md";
   }
@@ -762,7 +762,7 @@ export class FileBasedRouter {
     // if (!targetDir.startsWith("./")) {
     //   return new Error("targetDir must begin with './'");
     // }
-    this.targetDir = targetDir;
+    this.targetDir = process.cwd() + targetDir;
   }
 
   async mount(): Promise<PotentialErr> {

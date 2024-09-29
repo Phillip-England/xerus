@@ -97,7 +97,7 @@ test("fbrNestedDynamicRoutes", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
-  let targetDirErr = router.setTargetDir("./testApps/app");
+  let targetDirErr = router.setTargetDir("/testApps/app");
   if (targetDirErr) {
     throw targetDirErr;
   }
@@ -115,7 +115,7 @@ test("fbrBasic", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
-  let targetDirErr = router.setTargetDir("./testApps/app");
+  let targetDirErr = router.setTargetDir("/testApps/app");
   if (targetDirErr) {
     throw targetDirErr;
   }
@@ -136,7 +136,7 @@ test("fbrTarget", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
-  let targetDirErr = router.setTargetDir("./testApps/app2");
+  let targetDirErr = router.setTargetDir("/testApps/app2");
   if (targetDirErr) {
     console.log(targetDirErr);
   }
@@ -217,7 +217,7 @@ test("mdFbr", async () => {
   const app: Xerus = new Xerus();
   app.use("*", timeout, logger);
   const router = new FileBasedRouter(app);
-  let targetDirErr = router.setTargetDir("./testApps/app");
+  let targetDirErr = router.setTargetDir("/testApps/app");
   if (targetDirErr) {
     throw targetDirErr;
   }
