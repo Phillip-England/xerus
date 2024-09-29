@@ -33,6 +33,7 @@ export declare class Xerus {
     globalContext: {
         [key: string]: any;
     };
+    entryPoint: string;
     constructor();
     setNotFound(fn: XerusHandler): void;
     setStaticDir(dirPath: string): void;

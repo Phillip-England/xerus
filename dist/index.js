@@ -12063,7 +12063,7 @@ var require_server_node = __commonJS((exports) => {
 
 // src/index.ts
 var server = __toESM(require_server_node(), 1);
-import {readdir as nodeReadDir} from "fs/promises";
+import {readdir} from "fs/promises";
 
 // node_modules/marked/lib/marked.esm.js
 function _getDefaults() {
@@ -14193,6 +14193,7 @@ class Xerus {
   timeoutDuration;
   staticDir;
   globalContext;
+  entryPoint;
   constructor() {
     this.routes = {};
     this.prefixMiddleware = {};
@@ -14203,6 +14204,7 @@ class Xerus {
     this.timeoutDuration = 5000;
     this.staticDir = "/static";
     this.globalContext = {};
+    this.entryPoint = "";
   }
   setNotFound(fn) {
     this.notFound = fn;
@@ -14601,14 +14603,11 @@ class FileBasedRouter {
     this.defaultMarkdownName = "+content.md";
   }
   setTargetDir(targetDir) {
-    if (!targetDir.startsWith("./")) {
-      return new Error("targetDir must begin with './'");
-    }
     this.targetDir = targetDir;
   }
   async mount() {
     try {
-      const fileNames = await nodeReadDir(this.targetDir, { recursive: true });
+      const fileNames = await readdir(this.targetDir, { recursive: true });
       let err = this.verifyIndex(fileNames);
       if (err) {
         return err;
