@@ -212,7 +212,10 @@ export class Xerus {
       // Middleware execution function
       const executeMiddleware = async () => {
         while (index < combinedMiddleware.length) {
-          await combinedMiddleware[index++](c, executeMiddleware);
+          let middlewareFunc = combinedMiddleware[index++];
+          if (middlewareFunc) {
+            await middlewareFunc(c, executeMiddleware);
+          }
 
           // Check if XerusContext is ready, if so break out of the chain
           if (c.isReady) {

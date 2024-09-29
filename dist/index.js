@@ -14240,7 +14240,10 @@ class Xerus {
       let index = 0;
       const executeMiddleware = async () => {
         while (index < combinedMiddleware.length) {
-          await combinedMiddleware[index++](c, executeMiddleware);
+          let middlewareFunc = combinedMiddleware[index++];
+          if (middlewareFunc) {
+            await middlewareFunc(c, executeMiddleware);
+          }
           if (c.isReady) {
             return;
           }
