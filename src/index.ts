@@ -1,6 +1,6 @@
 import type { BunFile } from "bun";
 import ReactDOMServer from "react-dom/server";
-import { readdir as nodeReadDir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { marked } from "marked";
 
 //===========================
@@ -149,6 +149,7 @@ export class Xerus {
   timeoutDuration: number;
   staticDir: string;
   globalContext: { [key: string]: any };
+  entryPoint: string;
 
   constructor() {
     this.routes = {};
@@ -160,6 +161,7 @@ export class Xerus {
     this.timeoutDuration = 5000;
     this.staticDir = "/static";
     this.globalContext = {};
+    this.entryPoint = "";
   }
 
   setNotFound(fn: XerusHandler) {
@@ -757,15 +759,15 @@ export class FileBasedRouter {
   }
 
   setTargetDir(targetDir: string): PotentialErr {
-    if (!targetDir.startsWith("./")) {
-      return new Error("targetDir must begin with './'");
-    }
+    // if (!targetDir.startsWith("./")) {
+    //   return new Error("targetDir must begin with './'");
+    // }
     this.targetDir = targetDir;
   }
 
   async mount(): Promise<PotentialErr> {
     try {
-      const fileNames = await nodeReadDir(this.targetDir, { recursive: true });
+      const fileNames = await readdir(this.targetDir, { recursive: true });
       let err = this.verifyIndex(fileNames);
       if (err) {
         return err;
