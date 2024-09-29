@@ -62,10 +62,14 @@ export declare class XerusContext {
     urlContext: {
         [key: string]: number;
     };
-    constructor(req: Request, globalContext: Object, timeoutDuration: number);
+    method: string;
+    pathIsDynamic: boolean;
+    dynamicKey: string;
+    constructor(req: Request, method: string, globalContext: Object, timeoutDuration: number);
     respond(): Response;
     form(): Promise<FormData>;
     setHeader(key: string, value: string): void;
+    getHeader(key: string): string;
     status(code: number): void;
     ready(): void;
     html(str: string): void;
@@ -84,6 +88,7 @@ export declare class XerusContext {
         path?: string;
         domain?: string;
     }): void;
+    md(filePath?: string): Promise<string>;
 }
 export declare class XerusResponse {
     headers: {
@@ -95,21 +100,30 @@ export declare class XerusResponse {
 }
 export declare function logger(c: XerusContext, next: XerusHandler): Promise<void>;
 export declare function timeout(c: XerusContext, next: XerusHandler): Promise<void>;
+export declare class FileBasedRoute {
+    endpoint: string;
+    pageFilePath: string;
+    mdFilePath: string;
+    pageModule: any;
+    mdContent: string;
+    constructor(pageFilePath: string, targetDir: string, endpoint: string);
+    extractModule(): Promise<PotentialErr>;
+    generateMdContentPath(markdownFileName: string): void;
+    loadMarkdownContent(): Promise<PotentialErr>;
+    pushMdContentIntoGlobalContext(app: Xerus): Promise<void>;
+    hookRouteToApp(app: Xerus): Promise<PotentialErr>;
+}
 export declare class FileBasedRouter {
     app: Xerus;
     targetDir: string;
-    indexFilePath: string[];
+    validFilePaths: string[];
+    defaultMarkdownName: string;
     constructor(app: Xerus);
     setTargetDir(targetDir: string): PotentialErr;
     mount(): Promise<PotentialErr>;
     verifyIndex(fileNames: string[]): PotentialErr;
-    weedOutDirs(fileNames: string[]): string[];
-    makeRouteMap(filteredFileNames: string[]): {
-        [key: string]: string;
-    };
-    extractModules(routeMap: {
-        [key: string]: string;
-    }): Promise<Result<any[], Error>>;
+    parseOutPages(fileNames: string[]): string[];
+    makeRouteArr(filteredFileNames: string[]): FileBasedRoute[];
     hookRoutes(moduleArr: any[]): void;
 }
 export {};
