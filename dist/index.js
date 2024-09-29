@@ -11969,7 +11969,7 @@ var require_server_browser = __commonJS((exports) => {
 
 // src/index.ts
 var server = __toESM(require_server_browser(), 1);
-var {readdir} = (()=>({}));
+var {readdir: nodeReadDir} = (()=>({}));
 
 // node_modules/marked/lib/marked.esm.js
 function _getDefaults() {
@@ -14514,7 +14514,7 @@ class FileBasedRouter {
   }
   async mount() {
     try {
-      const fileNames = await readdir(this.targetDir, { recursive: true });
+      const fileNames = await nodeReadDir(this.targetDir, { recursive: true });
       let err = this.verifyIndex(fileNames);
       if (err) {
         return err;
