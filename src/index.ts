@@ -1,7 +1,6 @@
 import type { BunFile } from "bun";
 import ReactDOMServer from "react-dom/server";
-import { readdir } from "node:fs/promises";
-import { Marked } from "marked";
+import { readdir as nodeReadDir } from "node:fs/promises";
 import { marked } from "marked";
 
 //===========================
@@ -766,7 +765,7 @@ export class FileBasedRouter {
 
   async mount(): Promise<PotentialErr> {
     try {
-      const fileNames = await readdir(this.targetDir, { recursive: true });
+      const fileNames = await nodeReadDir(this.targetDir, { recursive: true });
       let err = this.verifyIndex(fileNames);
       if (err) {
         return err;
