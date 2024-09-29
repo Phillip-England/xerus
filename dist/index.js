@@ -1,3 +1,4 @@
+// @bun
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
@@ -1810,8 +1811,9 @@ var require_react = __commonJS((exports, module) => {
   }
 });
 
-// node_modules/react-dom/cjs/react-dom-server-legacy.browser.development.js
-var require_react_dom_server_legacy_browser_development = __commonJS((exports) => {
+// node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js
+import * as stream from "stream";
+var require_react_dom_server_legacy_node_development = __commonJS((exports) => {
   var React = __toESM(require_react(), 1);
   if (true) {
     (function() {
@@ -6869,17 +6871,62 @@ var require_react_dom_server_legacy_browser_development = __commonJS((exports) =
         }
         return result;
       }
+      function _inheritsLoose(subClass, superClass) {
+        subClass.prototype = Object.create(superClass.prototype);
+        subClass.prototype.constructor = subClass;
+        subClass.__proto__ = superClass;
+      }
+      var ReactMarkupReadableStream = /* @__PURE__ */ function(_Readable) {
+        _inheritsLoose(ReactMarkupReadableStream2, _Readable);
+        function ReactMarkupReadableStream2() {
+          var _this;
+          _this = _Readable.call(this, {}) || this;
+          _this.request = null;
+          _this.startedFlowing = false;
+          return _this;
+        }
+        var _proto = ReactMarkupReadableStream2.prototype;
+        _proto._destroy = function _destroy(err, callback) {
+          abort(this.request);
+          callback(err);
+        };
+        _proto._read = function _read(size) {
+          if (this.startedFlowing) {
+            startFlowing(this.request, this);
+          }
+        };
+        return ReactMarkupReadableStream2;
+      }(stream.Readable);
+      function onError$1() {
+      }
+      function renderToNodeStreamImpl(children, options, generateStaticMarkup) {
+        function onAllReady() {
+          destination.startedFlowing = true;
+          startFlowing(request, destination);
+        }
+        var destination = new ReactMarkupReadableStream;
+        var request = createRequest(children, createResponseState$1(false, options ? options.identifierPrefix : undefined), createRootFormatContext(), Infinity, onError$1, onAllReady, undefined, undefined);
+        destination.request = request;
+        startWork(request);
+        return destination;
+      }
+      function renderToNodeStream(children, options) {
+        {
+          error("renderToNodeStream is deprecated. Use renderToPipeableStream instead.");
+        }
+        return renderToNodeStreamImpl(children, options);
+      }
+      function renderToStaticNodeStream(children, options) {
+        {
+          error("ReactDOMServer.renderToStaticNodeStream() is deprecated." + " Use ReactDOMServer.renderToPipeableStream() and wait to `pipe` until the `onAllReady`" + " callback has been called instead.");
+        }
+        return renderToNodeStreamImpl(children, options);
+      }
       function renderToString(children, options) {
-        return renderToStringImpl(children, options, false, 'The server used "renderToString" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to "renderToReadableStream" which supports Suspense on the server');
+        return renderToStringImpl(children, options, false, 'The server used "renderToString" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to "renderToPipeableStream" which supports Suspense on the server');
       }
       function renderToStaticMarkup(children, options) {
-        return renderToStringImpl(children, options, true, 'The server used "renderToStaticMarkup" which does not support Suspense. If you intended to have the server wait for the suspended component please switch to "renderToReadableStream" which supports Suspense on the server');
-      }
-      function renderToNodeStream() {
-        throw new Error("ReactDOMServer.renderToNodeStream(): The streaming API is not available " + "in the browser. Use ReactDOMServer.renderToString() instead.");
-      }
-      function renderToStaticNodeStream() {
-        throw new Error("ReactDOMServer.renderToStaticNodeStream(): The streaming API is not available " + "in the browser. Use ReactDOMServer.renderToStaticMarkup() instead.");
+        return renderToStringImpl(children, options, true, 'The server used "renderToStaticMarkup" which does not support Suspense. If you intended to have the server wait for the suspended component please switch to "renderToPipeableStream" which supports Suspense on the server');
       }
       exports.renderToNodeStream = renderToNodeStream;
       exports.renderToStaticMarkup = renderToStaticMarkup;
@@ -6890,8 +6937,9 @@ var require_react_dom_server_legacy_browser_development = __commonJS((exports) =
   }
 });
 
-// node_modules/react-dom/cjs/react-dom-server.browser.development.js
-var require_react_dom_server_browser_development = __commonJS((exports) => {
+// node_modules/react-dom/cjs/react-dom-server.node.development.js
+import * as util from "util";
+var require_react_dom_server_node_development = __commonJS((exports) => {
   var React = __toESM(require_react(), 1);
   if (true) {
     (function() {
@@ -6933,71 +6981,122 @@ var require_react_dom_server_browser_development = __commonJS((exports) => {
         }
       }
       function scheduleWork(callback) {
-        callback();
+        setImmediate(callback);
       }
-      var VIEW_SIZE = 512;
+      function flushBuffered(destination) {
+        if (typeof destination.flush === "function") {
+          destination.flush();
+        }
+      }
+      var VIEW_SIZE = 2048;
       var currentView = null;
       var writtenBytes = 0;
+      var destinationHasCapacity = true;
       function beginWriting(destination) {
         currentView = new Uint8Array(VIEW_SIZE);
         writtenBytes = 0;
+        destinationHasCapacity = true;
       }
-      function writeChunk(destination, chunk) {
-        if (chunk.length === 0) {
+      function writeStringChunk(destination, stringChunk) {
+        if (stringChunk.length === 0) {
           return;
         }
-        if (chunk.length > VIEW_SIZE) {
+        if (stringChunk.length * 3 > VIEW_SIZE) {
           if (writtenBytes > 0) {
-            destination.enqueue(new Uint8Array(currentView.buffer, 0, writtenBytes));
+            writeToDestination(destination, currentView.subarray(0, writtenBytes));
             currentView = new Uint8Array(VIEW_SIZE);
             writtenBytes = 0;
           }
-          destination.enqueue(chunk);
+          writeToDestination(destination, textEncoder.encode(stringChunk));
+          return;
+        }
+        var target = currentView;
+        if (writtenBytes > 0) {
+          target = currentView.subarray(writtenBytes);
+        }
+        var _textEncoder$encodeIn = textEncoder.encodeInto(stringChunk, target), read = _textEncoder$encodeIn.read, written = _textEncoder$encodeIn.written;
+        writtenBytes += written;
+        if (read < stringChunk.length) {
+          writeToDestination(destination, currentView);
+          currentView = new Uint8Array(VIEW_SIZE);
+          writtenBytes = textEncoder.encodeInto(stringChunk.slice(read), currentView).written;
+        }
+        if (writtenBytes === VIEW_SIZE) {
+          writeToDestination(destination, currentView);
+          currentView = new Uint8Array(VIEW_SIZE);
+          writtenBytes = 0;
+        }
+      }
+      function writeViewChunk(destination, chunk) {
+        if (chunk.byteLength === 0) {
+          return;
+        }
+        if (chunk.byteLength > VIEW_SIZE) {
+          if (writtenBytes > 0) {
+            writeToDestination(destination, currentView.subarray(0, writtenBytes));
+            currentView = new Uint8Array(VIEW_SIZE);
+            writtenBytes = 0;
+          }
+          writeToDestination(destination, chunk);
           return;
         }
         var bytesToWrite = chunk;
         var allowableBytes = currentView.length - writtenBytes;
-        if (allowableBytes < bytesToWrite.length) {
+        if (allowableBytes < bytesToWrite.byteLength) {
           if (allowableBytes === 0) {
-            destination.enqueue(currentView);
+            writeToDestination(destination, currentView);
           } else {
             currentView.set(bytesToWrite.subarray(0, allowableBytes), writtenBytes);
-            destination.enqueue(currentView);
+            writtenBytes += allowableBytes;
+            writeToDestination(destination, currentView);
             bytesToWrite = bytesToWrite.subarray(allowableBytes);
           }
           currentView = new Uint8Array(VIEW_SIZE);
           writtenBytes = 0;
         }
         currentView.set(bytesToWrite, writtenBytes);
-        writtenBytes += bytesToWrite.length;
-      }
-      function writeChunkAndReturn(destination, chunk) {
-        writeChunk(destination, chunk);
-        return true;
-      }
-      function completeWriting(destination) {
-        if (currentView && writtenBytes > 0) {
-          destination.enqueue(new Uint8Array(currentView.buffer, 0, writtenBytes));
-          currentView = null;
+        writtenBytes += bytesToWrite.byteLength;
+        if (writtenBytes === VIEW_SIZE) {
+          writeToDestination(destination, currentView);
+          currentView = new Uint8Array(VIEW_SIZE);
           writtenBytes = 0;
         }
       }
-      function close(destination) {
-        destination.close();
+      function writeChunk(destination, chunk) {
+        if (typeof chunk === "string") {
+          writeStringChunk(destination, chunk);
+        } else {
+          writeViewChunk(destination, chunk);
+        }
       }
-      var textEncoder = new TextEncoder;
+      function writeToDestination(destination, view) {
+        var currentHasCapacity = destination.write(view);
+        destinationHasCapacity = destinationHasCapacity && currentHasCapacity;
+      }
+      function writeChunkAndReturn(destination, chunk) {
+        writeChunk(destination, chunk);
+        return destinationHasCapacity;
+      }
+      function completeWriting(destination) {
+        if (currentView && writtenBytes > 0) {
+          destination.write(currentView.subarray(0, writtenBytes));
+        }
+        currentView = null;
+        writtenBytes = 0;
+        destinationHasCapacity = true;
+      }
+      function close(destination) {
+        destination.end();
+      }
+      var textEncoder = new util.TextEncoder;
       function stringToChunk(content) {
-        return textEncoder.encode(content);
+        return content;
       }
       function stringToPrecomputedChunk(content) {
         return textEncoder.encode(content);
       }
       function closeWithError(destination, error2) {
-        if (typeof destination.error === "function") {
-          destination.error(error2);
-        } else {
-          destination.close();
-        }
+        destination.destroy(error2);
       }
       function typeName(value) {
         {
@@ -11852,6 +11951,7 @@ var require_react_dom_server_browser_development = __commonJS((exports) => {
           largeBoundaries.splice(0, i);
         } finally {
           completeWriting(destination);
+          flushBuffered(destination);
           if (request.allPendingTasks === 0 && request.pingedTasks.length === 0 && request.clientRenderedBoundaries.length === 0 && request.completedBoundaries.length === 0) {
             {
               if (request.abortableTasks.size !== 0) {
@@ -11902,74 +12002,68 @@ var require_react_dom_server_browser_development = __commonJS((exports) => {
           fatalError(request, error2);
         }
       }
-      function renderToReadableStream(children, options) {
-        return new Promise(function(resolve, reject) {
-          var onFatalError;
-          var onAllReady;
-          var allReady = new Promise(function(res, rej) {
-            onAllReady = res;
-            onFatalError = rej;
-          });
-          function onShellReady() {
-            var stream = new ReadableStream({
-              type: "bytes",
-              pull: function(controller) {
-                startFlowing(request, controller);
-              },
-              cancel: function(reason) {
-                abort(request);
-              }
-            }, {
-              highWaterMark: 0
-            });
-            stream.allReady = allReady;
-            resolve(stream);
-          }
-          function onShellError(error2) {
-            allReady.catch(function() {
-            });
-            reject(error2);
-          }
-          var request = createRequest(children, createResponseState(options ? options.identifierPrefix : undefined, options ? options.nonce : undefined, options ? options.bootstrapScriptContent : undefined, options ? options.bootstrapScripts : undefined, options ? options.bootstrapModules : undefined), createRootFormatContext(options ? options.namespaceURI : undefined), options ? options.progressiveChunkSize : undefined, options ? options.onError : undefined, onAllReady, onShellReady, onShellError, onFatalError);
-          if (options && options.signal) {
-            var signal = options.signal;
-            var listener = function() {
-              abort(request, signal.reason);
-              signal.removeEventListener("abort", listener);
-            };
-            signal.addEventListener("abort", listener);
-          }
-          startWork(request);
-        });
+      function createDrainHandler(destination, request) {
+        return function() {
+          return startFlowing(request, destination);
+        };
       }
-      exports.renderToReadableStream = renderToReadableStream;
+      function createAbortHandler(request, reason) {
+        return function() {
+          return abort(request, reason);
+        };
+      }
+      function createRequestImpl(children, options) {
+        return createRequest(children, createResponseState(options ? options.identifierPrefix : undefined, options ? options.nonce : undefined, options ? options.bootstrapScriptContent : undefined, options ? options.bootstrapScripts : undefined, options ? options.bootstrapModules : undefined), createRootFormatContext(options ? options.namespaceURI : undefined), options ? options.progressiveChunkSize : undefined, options ? options.onError : undefined, options ? options.onAllReady : undefined, options ? options.onShellReady : undefined, options ? options.onShellError : undefined, undefined);
+      }
+      function renderToPipeableStream(children, options) {
+        var request = createRequestImpl(children, options);
+        var hasStartedFlowing = false;
+        startWork(request);
+        return {
+          pipe: function(destination) {
+            if (hasStartedFlowing) {
+              throw new Error("React currently only supports piping to one writable stream.");
+            }
+            hasStartedFlowing = true;
+            startFlowing(request, destination);
+            destination.on("drain", createDrainHandler(destination, request));
+            destination.on("error", createAbortHandler(request, new Error("The destination stream errored while writing data.")));
+            destination.on("close", createAbortHandler(request, new Error("The destination stream closed early.")));
+            return destination;
+          },
+          abort: function(reason) {
+            abort(request, reason);
+          }
+        };
+      }
+      exports.renderToPipeableStream = renderToPipeableStream;
       exports.version = ReactVersion;
     })();
   }
 });
 
-// node_modules/react-dom/server.browser.js
-var require_server_browser = __commonJS((exports) => {
-  var react_dom_server_legacy_browser_development = __toESM(require_react_dom_server_legacy_browser_development(), 1);
-  var react_dom_server_browser_development = __toESM(require_react_dom_server_browser_development(), 1);
+// node_modules/react-dom/server.node.js
+var require_server_node = __commonJS((exports) => {
+  var react_dom_server_legacy_node_development = __toESM(require_react_dom_server_legacy_node_development(), 1);
+  var react_dom_server_node_development = __toESM(require_react_dom_server_node_development(), 1);
   var l;
   var s;
   if (false) {
   } else {
-    l = react_dom_server_legacy_browser_development;
-    s = react_dom_server_browser_development;
+    l = react_dom_server_legacy_node_development;
+    s = react_dom_server_node_development;
   }
   exports.version = l.version;
   exports.renderToString = l.renderToString;
   exports.renderToStaticMarkup = l.renderToStaticMarkup;
   exports.renderToNodeStream = l.renderToNodeStream;
   exports.renderToStaticNodeStream = l.renderToStaticNodeStream;
-  exports.renderToReadableStream = s.renderToReadableStream;
+  exports.renderToPipeableStream = s.renderToPipeableStream;
 });
 
 // src/index.ts
-var server = __toESM(require_server_browser(), 1);
-var {readdir: nodeReadDir} = (()=>({}));
+var server = __toESM(require_server_node(), 1);
+import {readdir as nodeReadDir} from "fs/promises";
 
 // node_modules/marked/lib/marked.esm.js
 function _getDefaults() {
