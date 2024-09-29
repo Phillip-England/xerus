@@ -11,7 +11,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "bun build --entrypoints ./src/index.ts --outdir ./dist",
+    "build": "bun build --target=bun --entrypoints ./src/index.ts --outdir ./dist",
     "types": "bunx tsc",
     "prepare": "npm run build && npm run types"
   },
