@@ -14227,7 +14227,9 @@ class Xerus {
     this.prefixMiddleware[pathPrefix] = middleware;
   }
   wrapWithMiddleware(path, handler, ...middleware) {
-    let combinedMiddleware = [...this.prefixMiddleware["*"] || []];
+    let combinedMiddleware = [
+      ...this.prefixMiddleware["*"] || []
+    ];
     for (const key in this.prefixMiddleware) {
       let pathParts = path.split(" ");
       if (pathParts[1].startsWith(key)) {
@@ -14236,6 +14238,7 @@ class Xerus {
       }
     }
     combinedMiddleware.push(...middleware);
+    combinedMiddleware = combinedMiddleware.filter((mw) => typeof mw === "function");
     return async (c) => {
       let index = 0;
       const executeMiddleware = async () => {
