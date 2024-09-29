@@ -258,3 +258,39 @@ export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
   c.jsx(<h1>You wont get to see me because the middleware will exit the endpoint early!</h1>);
 }, hello); // <========== we chain our route-specific middleware on here
 ```
+
+### Markdown Content Ease of Loading
+Xerus has taken into account you may want to use markdown content in your application.
+
+Xerus uses [Marked](https://github.com/markedjs/marked) under to hood.
+
+As of now, All I've done is wrapped the basic usage of `marked` in a function call like so:
+
+```tsx
+app.get('/', async (c) => {
+  let html = await c.md("./path/to/markdown/content.md")
+  c.html(html)
+})
+```
+
+Here is the real kicker, you can pre-load your markdown content in the `FileBasedRouter` by using `+content.md` files.
+
+Let's assuming your file-based routes are located in the default `./app` directory.
+```bash
+./app
+├── +page.tsx
+├── +content.md
+```
+
+With the above example, the markdown content inside of `+content.md` is tranformed into html during the route-building process.
+The markdown content can then be accessed using `c.md()` with no args passed to the function. Like so:
+
+```tsx
+export const get: XerusRoute = new XerusRoute(async (c: XerusContext) => {
+  let mdContent = await c.md(); // <===== no arg passed
+  c.html(mdContent);
+});
+```
+
+This makes it very easy to utilize markdown content in your application without having to worry about file paths.
+Just place a `+content.md` right next to your `+page.tsx` and you're good to go.
