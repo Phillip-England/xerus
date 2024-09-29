@@ -193,9 +193,7 @@ export class Xerus {
     handler: XerusHandler,
     ...middleware: XerusMiddleware[]
   ) {
-    let combinedMiddleware: XerusMiddleware[] = [
-      ...(this.prefixMiddleware["*"] || []),
-    ];
+    let combinedMiddleware = [...(this.prefixMiddleware["*"] || [])];
 
     // Collect middleware that applies to this specific path
     for (const key in this.prefixMiddleware) {
@@ -206,28 +204,18 @@ export class Xerus {
       }
     }
 
-    // Add the provided middleware
     combinedMiddleware.push(...middleware);
-
-    // Filter out non-function middleware
-    combinedMiddleware = combinedMiddleware.filter(
-      (mw) => typeof mw === "function",
-    );
 
     return async (c: XerusContext) => {
       let index = 0;
 
       // Middleware execution function
       const executeMiddleware = async () => {
-        while (index < combinedMiddleware.length) {
-          let middlewareFunc = combinedMiddleware[index++];
-          if (middlewareFunc) {
-            await middlewareFunc(c, executeMiddleware);
-          }
-
-          // Check if XerusContext is ready, if so break out of the chain
+        for (let i = 0; i < combinedMiddleware.length; i++) {
+          let middlewareFunc = combinedMiddleware[i];
+          await middlewareFunc(c, executeMiddleware);
           if (c.isReady) {
-            return; // Terminate middleware chain early if response is already handled
+            return;
           }
         }
 
