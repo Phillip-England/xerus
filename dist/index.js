@@ -14239,14 +14239,15 @@ class Xerus {
     return async (c) => {
       let index = 0;
       const executeMiddleware = async () => {
-        for (let i = 0;i < combinedMiddleware.length; i++) {
+        for (let i = index;i < combinedMiddleware.length; i++) {
+          index = i;
           let middlewareFunc = combinedMiddleware[i];
           if (Array.isArray(middlewareFunc)) {
           } else {
             await middlewareFunc(c, executeMiddleware);
-          }
-          if (c.isReady) {
-            return;
+            if (c.isReady) {
+              return;
+            }
           }
         }
         if (!c.isReady) {

@@ -211,15 +211,19 @@ export class Xerus {
 
       // Middleware execution function
       const executeMiddleware = async () => {
-        for (let i = 0; i < combinedMiddleware.length; i++) {
+        for (let i = index; i < combinedMiddleware.length; i++) {
+          index = i; // Update the index to keep track of the current middleware
           let middlewareFunc: XerusMiddleware | Array<any> =
             combinedMiddleware[i];
+
           if (Array.isArray(middlewareFunc)) {
+            // Handle array of middleware if necessary
           } else {
-            await middlewareFunc(c, executeMiddleware);
-          }
-          if (c.isReady) {
-            return;
+            await middlewareFunc(c, executeMiddleware); // Execute the middleware
+
+            if (c.isReady) {
+              return; // If the context is ready, exit the middleware execution
+            }
           }
         }
 
@@ -229,6 +233,7 @@ export class Xerus {
         }
       };
 
+      // Start executing middleware
       await executeMiddleware();
     };
   }
