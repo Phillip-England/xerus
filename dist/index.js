@@ -14264,7 +14264,9 @@ class Xerus {
             await runMiddleware(index + 1);
           });
         } else {
-          await handler(c);
+          if (!c.isReady) {
+            await handler(c);
+          }
         }
       };
       await runMiddleware(0);
