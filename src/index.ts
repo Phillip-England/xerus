@@ -246,9 +246,9 @@ export class Xerus {
           });
         } else {
           // If all middleware has been executed, run the final route handler
-          // if (!c.isReady) {
-          await handler(c);
-          // }
+          if (!c.isReady) {
+            await handler(c);
+          }
         }
       };
 
