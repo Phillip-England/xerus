@@ -173,102 +173,146 @@ export class Xerus {
   }
 
   async handleStatic(path: string) {
-    return this.wrapWithMiddleware(this.staticDir, async (c: XerusContext) => {
-      let f = Bun.file("." + path);
-      let exists = await f.exists();
-      if (exists) {
-        c.file(f);
-      } else {
-        await this.notFound(c);
-      }
-    });
+    let finalMiddlewareChain = this.getMiddlewareChain(path);
+    let finalHandler = this.getFinalHandler(
+      finalMiddlewareChain,
+      async (c: XerusContext) => {
+        let f = Bun.file(path);
+        let exists = await f.exists();
+        if (exists) {
+          await c.file(f);
+        } else {
+          await this.notFound(c);
+        }
+      },
+    );
+    return finalHandler;
   }
 
   use(pathPrefix: string, ...middleware: XerusMiddleware[]) {
     this.prefixMiddleware[pathPrefix] = middleware;
   }
 
-  wrapWithMiddleware(
+  getMiddlewareChain(
     path: string,
-    handler: XerusHandler,
-    ...middleware: XerusMiddleware[]
-  ) {
-    let combinedMiddleware = [...(this.prefixMiddleware["*"] || [])];
+    ...routeSpecificMiddleware: XerusMiddleware[]
+  ): XerusMiddleware[] {
+    let globalMiddleware = this.prefixMiddleware["*"] || [];
+    let prefixMiddleware: XerusMiddleware[] = [];
 
-    // Collect middleware that applies to this specific path
+    // Collect the middleware for the matching prefix
     for (const key in this.prefixMiddleware) {
       let pathParts = path.split(" ");
-      if (pathParts[1].startsWith(key)) {
-        combinedMiddleware.push(...this.prefixMiddleware[key]);
-        break;
+      if (pathParts.length == 2) {
+        if (pathParts[1].startsWith(key)) {
+          prefixMiddleware.push(...this.prefixMiddleware[key]);
+          break;
+        }
+      } else {
+        if (path.startsWith(key)) {
+          prefixMiddleware.push(...this.prefixMiddleware[key]);
+          break;
+        }
       }
     }
 
-    combinedMiddleware.push(...middleware);
+    // Flatten the middleware chain
+    let finalMiddlewareChain = [
+      ...globalMiddleware,
+      ...prefixMiddleware,
+      ...routeSpecificMiddleware,
+    ].flat();
 
-    return async (c: XerusContext) => {
-      let index = 0;
+    return finalMiddlewareChain;
+  }
 
-      // Middleware execution function
-      const executeMiddleware = async () => {
-        for (let i = index; i < combinedMiddleware.length; i++) {
-          index = i; // Update the index to keep track of the current middleware
-          let middlewareFunc: XerusMiddleware | Array<any> =
-            combinedMiddleware[i];
-
-          if (Array.isArray(middlewareFunc)) {
-            // Handle array of middleware if necessary
-          } else {
-            await middlewareFunc(c, executeMiddleware); // Execute the middleware
-
-            if (c.isReady) {
-              return; // If the context is ready, exit the middleware execution
-            }
-          }
+  getFinalHandler(
+    finalMiddlewareChain: XerusMiddleware[],
+    handler: XerusHandler,
+  ): XerusHandler {
+    const finalHandler: XerusHandler = async (c: XerusContext) => {
+      // Recursive function to run middleware
+      const runMiddleware = async (index: number): Promise<void> => {
+        // Check if c.isReady, return early if true
+        if (c.isReady) {
+          return;
         }
 
-        // If all middleware has run and the context is not ready, call the handler
-        if (!c.isReady) {
+        if (index < finalMiddlewareChain.length) {
+          const currentMiddlewareFunc = finalMiddlewareChain[index];
+          // Call current middleware and pass next function
+          await currentMiddlewareFunc(c, async () => {
+            await runMiddleware(index + 1); // Call next middleware
+          });
+        } else {
+          // If all middleware has been executed, run the final route handler
+          // if (!c.isReady) {
           await handler(c);
+          // }
         }
       };
 
-      // Start executing middleware
-      await executeMiddleware();
+      // Start the middleware chain
+      await runMiddleware(0);
     };
+    return finalHandler;
   }
 
-  at(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]) {
-    const wrappedHandler = this.wrapWithMiddleware(
+  at(
+    path: string,
+    handler: XerusHandler,
+    ...routeSpecificMiddleware: XerusMiddleware[]
+  ) {
+    let finalMiddlewareChain = this.getMiddlewareChain(
       path,
-      handler,
-      ...middleware,
+      ...routeSpecificMiddleware,
     );
-    this.routes[path] = wrappedHandler;
+
+    // Define the final handler that includes middleware chaining
+    const finalHandler: XerusHandler = this.getFinalHandler(
+      finalMiddlewareChain,
+      handler,
+    );
+
+    // Store the final handler for the route
+    this.routes[path] = finalHandler;
   }
 
-  get(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]) {
-    this.at("GET " + path, handler, ...middleware);
+  get(
+    path: string,
+    handler: XerusHandler,
+    ...routeSpecificMiddleware: XerusMiddleware[]
+  ) {
+    this.at("GET " + path, handler, ...routeSpecificMiddleware);
   }
 
-  post(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]) {
-    this.at("POST " + path, handler, ...middleware);
+  post(
+    path: string,
+    handler: XerusHandler,
+    ...routeSpecificMiddleware: XerusMiddleware[]
+  ) {
+    this.at("POST " + path, handler, ...routeSpecificMiddleware);
   }
 
-  put(path: string, handler: XerusHandler, ...middleware: XerusMiddleware[]) {
-    this.at("PUT " + path, handler, ...middleware);
+  put(
+    path: string,
+    handler: XerusHandler,
+    ...routeSpecificMiddleware: XerusMiddleware[]
+  ) {
+    this.at("PUT " + path, handler, ...routeSpecificMiddleware);
   }
 
   delete(
     path: string,
     handler: XerusHandler,
-    ...middleware: XerusMiddleware[]
+    ...routeSpecificMiddleware: XerusMiddleware[]
   ) {
-    this.at("DELETE " + path, handler, ...middleware);
+    this.at("DELETE " + path, handler, ...routeSpecificMiddleware);
   }
 
   async handleRequest(req: Request): Promise<Response | Error> {
     let path: string = new URL(req.url).pathname;
+    let absolutePath = process.cwd() + path;
     let method: string = req.method;
     let c = new XerusContext(
       req,
@@ -279,8 +323,10 @@ export class Xerus {
     let methodPath = `${method} ${path}`;
 
     // handling static files
-    if (path.startsWith(this.staticDir + "/") || path == "/favicon.ico") {
-      let staticHandler: XerusHandler = await this.handleStatic(path);
+    if (absolutePath.startsWith(this.staticDir) || path == "/favicon.ico") {
+      let staticHandler: XerusHandler = await this.handleStatic(
+        process.cwd() + path,
+      );
       await staticHandler(c);
       return c.respond();
     }

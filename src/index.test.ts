@@ -9,13 +9,24 @@ import { sleep } from "bun";
 
 test("helloWorld", async () => {
   const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
   app.get("/", async (c: XerusContext) => {
     c.text("hello, world");
   });
+
   await app.run(8080);
   let res = await fetch("localhost:8080/");
   let text = await res.text();
   expect(text).toBe("hello, world");
+});
+
+test("static", async () => {
+  const app: Xerus = new Xerus();
+  app.use("*", timeout, logger);
+  await app.run(8080);
+  let res = await fetch("localhost:8080/static/js/index.js");
+  let text = await res.text();
+  expect(text).toBe("console.log('hit')");
 });
 
 test("cookies", async () => {
