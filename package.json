@@ -1,29 +1,11 @@
 {
-  "name": "xerus",
+  "name": "bttp",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.6.2"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "build": "bun build --target=bun --entrypoints ./src/index.ts --outdir ./dist",
-    "types": "bunx tsc",
-    "prepare": "npm run build && npm run types"
-  },
-  "dependencies": {
-    "@types/react-dom": "^18.3.0",
-    "jsdoc": "^4.0.3",
-    "marked": "^14.1.2",
-    "react-dom": "^18.3.1",
-    "server": "github:react-dom/server"
-  },
-  "version": "0.0.46",
-  "files": [
-    "dist"
-  ]
+    "typescript": "^5.0.0"
+  }
 }
