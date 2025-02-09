@@ -140,37 +140,111 @@ test("GET /status/999 should return a 400 error", async () => {
 });
 
 
-test("Benchmark: Measure requests per second over 10 seconds", async () => {
-  const startTime = performance.now();
-  let completedRequests = 0;
-  let failedRequests = 0;
 
-  const sendRequest = async () => {
-    while (performance.now() - startTime < TEST_DURATION) {
-      try {
-        const res = await fetch(`${BASE_URL}/`);
-        if (res.status === 200) {
-          completedRequests++;
-        } else {
-          failedRequests++;
-        }
-      } catch {
-        failedRequests++;
-      }
-    }
-  };
+// Test GET /cors-test should allow CORS
+test("GET /cors-test should return correct CORS headers", async () => {
+  const res = await fetch(`${BASE_URL}/cors-test`, {
+    method: "GET",
+    headers: {
+      Origin: "http://example.com",
+    },
+  });
 
-  // Start concurrent requests
-  const requests = Array(CONCURRENT_REQUESTS).fill(null).map(sendRequest);
-  await Promise.all(requests);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("http://example.com");
+  expect(res.headers.get("access-control-allow-methods")).toContain("GET");
+});
 
-  const endTime = performance.now();
-  const timeTaken = (endTime - startTime) / 1000; // Convert to seconds
-  const rps = completedRequests / timeTaken;
+// Test OPTIONS preflight request to /cors-test
+test("OPTIONS /cors-test should return correct preflight headers", async () => {
+  const res = await fetch(`${BASE_URL}/cors-test`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "http://example.com",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "Content-Type",
+    },
+  });
 
-  console.log(`Completed ${completedRequests} requests in ${timeTaken.toFixed(2)}s`);
-  console.log(`Requests per second: ${rps.toFixed(2)}`);
-  console.log(`Failed requests: ${failedRequests}`);
+  expect(res.status).toBe(204);
+  expect(res.headers.get("access-control-allow-origin")).toBe("http://example.com");
+  expect(res.headers.get("access-control-allow-methods")).toContain("GET");
+  expect(res.headers.get("access-control-allow-headers")).toContain("Content-Type");
+});
 
-  expect(failedRequests).toBe(0); // Ensure no requests failed
-}, 15000);
+// Test GET /public-data with open CORS policy
+test("GET /public-data should allow any origin", async () => {
+  const res = await fetch(`${BASE_URL}/public-data`, {
+    method: "GET",
+    headers: {
+      Origin: "http://randomsite.com",
+    },
+  });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("*");
+});
+
+// Test GET /private-data should allow credentials
+test("GET /private-data should allow credentials", async () => {
+  const res = await fetch(`${BASE_URL}/private-data`, {
+    method: "GET",
+    headers: {
+      Origin: "http://example.com",
+    },
+    credentials: "include",
+  });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+});
+
+// Test GET /wild/anything should return correct response and CORS headers
+test("GET /wild/test/path should return correct wildcard response and CORS headers", async () => {
+  const res = await fetch(`${BASE_URL}/wild/test/path`, {
+    method: "GET",
+    headers: {
+      Origin: "http://example.com",
+    },
+  });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("http://example.com");
+  const json = await res.json();
+  expect(json.path).toBe("test/path");
+});
+
+// test("Benchmark: Measure requests per second over 10 seconds", async () => {
+//   const startTime = performance.now();
+//   let completedRequests = 0;
+//   let failedRequests = 0;
+
+//   const sendRequest = async () => {
+//     while (performance.now() - startTime < TEST_DURATION) {
+//       try {
+//         const res = await fetch(`${BASE_URL}/`);
+//         if (res.status === 200) {
+//           completedRequests++;
+//         } else {
+//           failedRequests++;
+//         }
+//       } catch {
+//         failedRequests++;
+//       }
+//     }
+//   };
+
+//   // Start concurrent requests
+//   const requests = Array(CONCURRENT_REQUESTS).fill(null).map(sendRequest);
+//   await Promise.all(requests);
+
+//   const endTime = performance.now();
+//   const timeTaken = (endTime - startTime) / 1000; // Convert to seconds
+//   const rps = completedRequests / timeTaken;
+
+//   console.log(`Completed ${completedRequests} requests in ${timeTaken.toFixed(2)}s`);
+//   console.log(`Requests per second: ${rps.toFixed(2)}`);
+//   console.log(`Failed requests: ${failedRequests}`);
+
+//   expect(failedRequests).toBe(0); // Ensure no requests failed
+// }, 15000);

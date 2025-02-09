@@ -1,34 +1,35 @@
-import { Xerus, html, makeCookie, deleteCookie, json, logger, staticHandler, type Context } from "./src/xerus";
+import { Xerus, makeCookie, deleteCookie, logger, cors, staticHandler, type Context } from "./src/xerus";
 
 const app = new Xerus();
 
-app.get("/", async () => {
-  return html('<h1>GET /</h1>');
+app.get("/", async (c: Context) => {
+  return c.html('<h1>GET /</h1>');
 }, logger);
 
 app.post("/", async (c: Context) => {
-  return json({"user": "phillip"}, 200);
+  return c.json({"user": "phillip"}, 200);
 }, logger);
 
 app.get("/static/*", staticHandler("./static"), logger);
 
 app.get("/user/settings", async (c: Context) => {
-  return html("<h1>User Settings</h1>");
+  return c.html("<h1>User Settings</h1>");
 }, logger);
 
 app.get("/user/:id", async (c: Context) => {
-  return json({"user": "phillip", "id": c.params.id});
+  return c.json({"user": "phillip", "id": c.params.id});
 }, logger);
 
 
 app.get("/set-cookie", async (c: Context) => {
-  let cookie =  makeCookie("user", "philthy", { httpOnly: true, maxAge: 3600 })
-  return html("<h1>Cookie Set!</h1>", 200, cookie, { "X-Custom-Header": "Hello" });
+  c.setCookie("user", "philthy", { httpOnly: true, maxAge: 3600 }); // Use Context method
+  c.headers["X-Custom-Header"] = "Hello"; // Custom header
+  return c.html("<h1>Cookie Set!</h1>");
 }, logger);
 
 app.get("/delete-cookie", async (c: Context) => {
-  return html("<h1>Cookie Deleted!</h1>", 200, deleteCookie("user")
-  );
+  c.deleteCookie("user"); // Use Context method
+  return c.html("<h1>Cookie Deleted!</h1>");
 }, logger);
 
 export async function testStore(c: Context, next: () => Promise<Response>): Promise<Response> {
@@ -38,26 +39,29 @@ export async function testStore(c: Context, next: () => Promise<Response>): Prom
 }
 
 app.get("/testing-store", async (c: Context) => {
-  return html(`<h1>${c.store.test}</h1>`);
+  return c.html(`<h1>${c.store.test}</h1>`);
 }, logger, testStore);
 
 app.post("/login", async (c: Context) => {
-  return json({ message: "Logged in successfully" }, 200, makeCookie("session", "valid-session"));
+  c.setCookie("session", "valid-session", { httpOnly: true, secure: true, maxAge: 86400 }); // 1-day expiration
+  return c.json({ message: "Logged in successfully" });
 }, logger);
 
 app.get("/logout", async (c: Context) => {
-  return html("<h1>Logged out</h1>", 200, deleteCookie("session"));
+  c.deleteCookie("session");
+  return c.html("<h1>Logged out</h1>");
 }, logger);
+
 
 app.post("/upload", async (c: Context) => {
   const formData = await c.req.formData();
   const file = formData.get("file");
   
   if (!file || !(file instanceof File)) {
-    return json({ error: "No file uploaded" }, 400);
+    return c.json({ error: "No file uploaded" }, 400);
   }
 
-  return json({ message: `Received file: ${file.name}`, size: file.size });
+  return c.json({ message: `Received file: ${file.name}`, size: file.size });
 }, logger);
 
 app.get("/redirect", async (c: Context) => {
@@ -70,11 +74,48 @@ app.get("/redirect", async (c: Context) => {
 app.get("/status/:code", async (c: Context) => {
   const statusCode = parseInt(c.params.code, 10);
   if (isNaN(statusCode) || statusCode < 100 || statusCode > 599) {
-    return json({ error: "Invalid status code" }, 400);
+    return c.json({ error: "Invalid status code" }, 400);
   }
   return new Response(`Status ${statusCode}`, { status: statusCode });
 }, logger);
 
+// Middleware: Apply CORS with different configurations
+const corsMiddleware = cors({
+  origin: "http://example.com", // Change to test different origins
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["X-Custom-Header"],
+  credentials: true,
+  maxAge: 600,
+});
+
+// Simple route to check if CORS headers are being set correctly
+app.get("/cors-test", async (ctx) => {
+  return ctx.json({ message: "CORS is working!" });
+}, corsMiddleware);
+
+// Route to test preflight request (OPTIONS)
+app.options("/cors-test", async (ctx) => {
+  return new Response(null, { status: 204, headers: ctx.headers });
+}, corsMiddleware);
+
+// Another route with different CORS settings
+const openCors = cors({ origin: "*", methods: ["GET", "POST"] });
+
+app.get("/public-data", async (ctx) => {
+  return ctx.json({ data: "This is accessible from any origin" });
+}, openCors);
+
+// A route requiring credentials (cookies, HTTP auth)
+app.get("/private-data", async (ctx) => {
+  ctx.setCookie("session", "valid_session_token", { httpOnly: true, secure: true, sameSite: "None" });
+  return ctx.json({ secret: "This data requires credentials" });
+}, corsMiddleware);
+
+// Catch-all wildcard route to test CORS for dynamic routes
+app.get("/wild/*",  async (ctx) => {
+  return ctx.json({ path: ctx.params["*"], message: "Wildcard CORS test" });
+}, corsMiddleware);
 
 
 let server = Bun.serve({
