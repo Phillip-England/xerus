@@ -1,3 +1,6 @@
+import { join } from "path";
+import { existsSync } from "fs";
+
 // Utility function to convert a path into a regex
 function pathToRegex(path: string): RegExp {
   return new RegExp("^" + path.replace(/:\w+/g, "([^/]+)").replace(/\*/g, ".*") + "/?$");
@@ -80,6 +83,26 @@ export type Context = {
   store: Record<string, unknown>;
   query: Record<string, string>;
 };
+
+export function staticHandler(staticDir: string) {
+  return async (c: Context): Promise<Response> => {
+    const url = new URL(c.req.url);
+    const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
+
+    if (!existsSync(filePath)) {
+      return new Response("404 Not Found", { status: 404 });
+    }
+
+    const file = Bun.file(filePath);
+    return new Response(file, {
+      headers: {
+        "Content-Type": file.type,
+        "Cache-Control": "max-age=3600", // Cache for 1 hour
+        "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
+      },
+    });
+  };
+}
 
 
 export async function logger(ctx: Context, next: () => Promise<Response>): Promise<Response> {

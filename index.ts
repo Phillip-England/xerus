@@ -1,8 +1,5 @@
-import { Xerus, html, makeCookie, deleteCookie, json, logger, type Context } from "./src/xerus";
-import { join } from "path";
-import { existsSync } from "fs";
+import { Xerus, html, makeCookie, deleteCookie, json, logger, staticHandler, type Context } from "./src/xerus";
 
-const STATIC_DIR = "./static"
 const app = new Xerus();
 
 app.get("/", async () => {
@@ -13,21 +10,7 @@ app.post("/", async (c: Context) => {
   return json({"user": "phillip"}, 200);
 }, logger);
 
-app.get("/static/*", async (c: Context) => {
-  const url = new URL(c.req.url);
-  const filePath = join(STATIC_DIR, url.pathname.replace("/static/", "")); // Resolve file path
-  if (!existsSync(filePath)) {
-    return new Response("404 Not Found", { status: 404 });
-  }
-  const file = Bun.file(filePath);
-  return new Response(file, {
-    headers: {
-      "Content-Type": file.type,
-      "Cache-Control": "max-age=3600", // Cache for 1 hour
-      "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
-    },
-  });
-}, logger);
+app.get("/static/*", staticHandler("./static"), logger);
 
 app.get("/user/settings", async (c: Context) => {
   return html("<h1>User Settings</h1>");
