@@ -1,5 +1,5 @@
 {
-  "name": "bttp",
+  "name": "cfasuite-bun",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
@@ -7,5 +7,10 @@
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@elysiajs/html": "^1.2.0",
+    "elysia": "^1.2.12",
+    "xerus": "^0.0.46"
   }
 }
