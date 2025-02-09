@@ -1,4 +1,4 @@
-import { Xerus, makeCookie, deleteCookie, logger, cors, staticHandler, type Context } from "./xerus";
+import { Xerus, logger, cors, staticHandler, type Context } from "./xerus";
 
 const app = new Xerus();
 

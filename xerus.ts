@@ -1,5 +1,8 @@
 import { join } from "path";
-import { existsSync } from "fs";
+
+//====================================
+// utils
+//====================================
 
 // Utility function to convert a path into a regex
 function pathToRegex(path: string): RegExp {
@@ -11,64 +14,36 @@ export function merge(...headersList: Record<string, string>[]): Record<string, 
   return headersList.reduce((acc, headers) => ({ ...acc, ...headers }), {});
 }
 
-// Utility function to create a cookie as a header object
-export function makeCookie(
-  name: string,
-  value: string,
-  options: {
-    path?: string;
-    domain?: string;
-    maxAge?: number;
-    expires?: Date;
-    secure?: boolean;
-    httpOnly?: boolean;
-    sameSite?: "Strict" | "Lax" | "None";
-  } = {}
-): Record<string, string> {
-  let cookieValue = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+//====================================
+// handlers
+//====================================
 
-  if (options.path) cookieValue += `; Path=${options.path}`;
-  if (options.domain) cookieValue += `; Domain=${options.domain}`;
-  if (options.maxAge !== undefined) cookieValue += `; Max-Age=${options.maxAge}`;
-  if (options.expires) cookieValue += `; Expires=${options.expires.toUTCString()}`;
-  if (options.secure) cookieValue += `; Secure`;
-  if (options.httpOnly) cookieValue += `; HttpOnly`;
-  if (options.sameSite) cookieValue += `; SameSite=${options.sameSite}`;
-
-  return { "Set-Cookie": cookieValue }; // Return as a header object
-}
-
-// Utility function to delete a cookie
-export function deleteCookie(name: string, path: string = "/"): Record<string, string> {
-  return { "Set-Cookie": `${encodeURIComponent(name)}=; Path=${path}; Expires=Thu, 01 Jan 1970 00:00:00 GMT` };
-}
-
-type Middleware = (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
 type Handler = (ctx: Context) => Promise<Response>;
 
-type RouteNode = {
-  children: Record<string, RouteNode>;
-  wildcard?: RouteNode; // Added for wildcard routes
-  handlers: Partial<Record<string, { regex: RegExp, handlers: Middleware[], finalHandler: Handler }>>;
-};
-
 export function staticHandler(staticDir: string) {
-  return async (c: Context): Promise<Response> => {
-    const url = new URL(c.req.url);
-    const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
-    if (!existsSync(filePath)) {
-      return new Response("404 Not Found", { status: 404 });
-    }
-    const file = Bun.file(filePath);
-    return new Response(file, {
-      headers: {
-        "Content-Type": file.type || "application/octet",
-        "Cache-Control": "max-age=3600", // Cache for 1 hour
-        "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
-      },
-    });
-  };
-}
+	return async (c: Context): Promise<Response> => {
+	  const url = new URL(c.req.url);
+	  const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
+		const file = Bun.file(filePath);
+		if (!(await file.exists())) {
+			return new Response("404 Not Found", { status: 404 });
+		}
+	  return new Response(file, {
+		headers: {
+		  "Content-Type": file.type || "application/octet",
+		  "Cache-Control": "max-age=3600", // Cache for 1 hour
+		  "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
+		},
+	  });
+	};
+  }
+  
+
+//====================================
+// middleware
+//====================================
+
+type Middleware = (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
 
 
 export async function logger(ctx: Context, next: () => Promise<Response>): Promise<Response> {
@@ -118,6 +93,9 @@ export function cors(options: {
   };
 }
 
+//====================================
+// context
+//====================================
 
 // Context class
 export class Context {
@@ -174,16 +152,58 @@ export class Context {
     return new Response(JSON.stringify(data), { status, headers: merge({ "Content-Type": "application/json" }, this.headers) });
   }
   
-  async parseBody<T = unknown>(): Promise<T | null> {
+	async parseBody<T = unknown>(): Promise<T | null> {
+    const contentType = this.req.headers.get("Content-Type");
+
+    if (!contentType) return null;
+
     try {
-      return await this.req.json();
-    } catch {
-      return null;
+        if (contentType.includes("application/json")) {
+            return await this.req.json();
+        } 
+        if (contentType.includes("application/x-www-form-urlencoded")) {
+            const formData = new URLSearchParams(await this.req.text());
+            return Object.fromEntries(formData.entries()) as T;
+        }
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await this.req.formData();
+            const data: Record<string, unknown> = {};
+            formData.forEach((value, key) => {
+                if (data[key]) {
+                    if (Array.isArray(data[key])) {
+                        (data[key] as any[]).push(value);
+                    } else {
+                        data[key] = [data[key], value];
+                    }
+                } else {
+                    data[key] = value;
+                }
+            });
+            return data as T;
+        }
+        if (contentType.includes("text/plain")) {
+            return (await this.req.text()) as T;
+        }
+    } catch (error) {
+        console.error("Error parsing request body:", error);
+        return null;
     }
-  }
+
+    return null;
+}
+
 
 }
 
+//====================================
+// router
+//====================================
+
+type RouteNode = {
+	children: Record<string, RouteNode>;
+	wildcard?: RouteNode; // Added for wildcard routes
+	handlers: Partial<Record<string, { regex: RegExp, handlers: Middleware[], finalHandler: Handler }>>;
+};
 
 export class Xerus {
   private trie: RouteNode = { children: {}, handlers: {} };
