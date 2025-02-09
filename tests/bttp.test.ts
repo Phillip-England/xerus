@@ -75,37 +75,102 @@ test("GET /testing-store should return HTML containing 'testing'", async () => {
   expect(text).toContain("<h1>testing</h1>");
 });
 
-// test("Benchmark: Measure requests per second over 10 seconds", async () => {
-//   const startTime = performance.now();
-//   let completedRequests = 0;
-//   let failedRequests = 0;
+test("POST /login should return JSON with session cookie", async () => {
+  const res = await fetch(`${BASE_URL}/login`, { method: "POST" });
+  const json = await res.json();
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ message: "Logged in successfully" });
+  expect(res.headers.get("set-cookie")).toContain("session=valid-session");
+});
 
-//   const sendRequest = async () => {
-//     while (performance.now() - startTime < TEST_DURATION) {
-//       try {
-//         const res = await fetch(`${BASE_URL}/`);
-//         if (res.status === 200) {
-//           completedRequests++;
-//         } else {
-//           failedRequests++;
-//         }
-//       } catch {
-//         failedRequests++;
-//       }
-//     }
-//   };
+test("GET /logout should remove session cookie", async () => {
+  const res = await fetch(`${BASE_URL}/logout`);
+  const text = await res.text();
+  expect(res.status).toBe(200);
+  expect(text).toContain("<h1>Logged out</h1>");
+  expect(res.headers.get("set-cookie")).toContain("session=;");
+});
 
-//   // Start concurrent requests
-//   const requests = Array(CONCURRENT_REQUESTS).fill(null).map(sendRequest);
-//   await Promise.all(requests);
+test("POST /upload should return file info", async () => {
+  const file = new Blob(["Hello World"], { type: "text/plain" });
+  const formData = new FormData();
+  formData.append("file", file, "test.txt");
 
-//   const endTime = performance.now();
-//   const timeTaken = (endTime - startTime) / 1000; // Convert to seconds
-//   const rps = completedRequests / timeTaken;
+  const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: formData });
+  const json = await res.json();
 
-//   console.log(`Completed ${completedRequests} requests in ${timeTaken.toFixed(2)}s`);
-//   console.log(`Requests per second: ${rps.toFixed(2)}`);
-//   console.log(`Failed requests: ${failedRequests}`);
+  expect(res.status).toBe(200);
+  expect(json.message).toContain("Received file: test.txt");
+  expect(json.size).toBe(11);
+});
 
-//   expect(failedRequests).toBe(0); // Ensure no requests failed
-// }, 15000);
+test("POST /upload without file should return error", async () => {
+  const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: new FormData() });
+  const json = await res.json();
+
+  expect(res.status).toBe(400);
+  expect(json.error).toBe("No file uploaded");
+});
+
+test("GET /redirect should return 302 redirect", async () => {
+  const res = await fetch(`${BASE_URL}/redirect`, { redirect: "manual" });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("Location")).toBe("/");
+});
+
+test("GET /status/200 should return a 200 response", async () => {
+  const res = await fetch(`${BASE_URL}/status/200`);
+  const text = await res.text();
+  expect(res.status).toBe(200);
+  expect(text).toBe("Status 200");
+});
+
+test("GET /status/500 should return a 500 response", async () => {
+  const res = await fetch(`${BASE_URL}/status/500`);
+  const text = await res.text();
+  expect(res.status).toBe(500);
+  expect(text).toBe("Status 500");
+});
+
+test("GET /status/999 should return a 400 error", async () => {
+  const res = await fetch(`${BASE_URL}/status/999`);
+  const json = await res.json();
+  expect(res.status).toBe(400);
+  expect(json.error).toBe("Invalid status code");
+});
+
+
+test("Benchmark: Measure requests per second over 10 seconds", async () => {
+  const startTime = performance.now();
+  let completedRequests = 0;
+  let failedRequests = 0;
+
+  const sendRequest = async () => {
+    while (performance.now() - startTime < TEST_DURATION) {
+      try {
+        const res = await fetch(`${BASE_URL}/`);
+        if (res.status === 200) {
+          completedRequests++;
+        } else {
+          failedRequests++;
+        }
+      } catch {
+        failedRequests++;
+      }
+    }
+  };
+
+  // Start concurrent requests
+  const requests = Array(CONCURRENT_REQUESTS).fill(null).map(sendRequest);
+  await Promise.all(requests);
+
+  const endTime = performance.now();
+  const timeTaken = (endTime - startTime) / 1000; // Convert to seconds
+  const rps = completedRequests / timeTaken;
+
+  console.log(`Completed ${completedRequests} requests in ${timeTaken.toFixed(2)}s`);
+  console.log(`Requests per second: ${rps.toFixed(2)}`);
+  console.log(`Failed requests: ${failedRequests}`);
+
+  expect(failedRequests).toBe(0); // Ensure no requests failed
+}, 15000);

@@ -78,6 +78,7 @@ export type Context = {
   req: Request;
   params: Record<string, string>;
   store: Record<string, unknown>;
+  query: Record<string, string>;
 };
 
 
@@ -144,38 +145,65 @@ export class Xerus {
   async handleRequest(req: Request): Promise<Response | null> {
     const url = new URL(req.url);
     const pathname = url.pathname;
+    const queryParams = Object.fromEntries(url.searchParams.entries());
     const segments = pathname.split('/').filter(Boolean);
-  
+    
     let node: RouteNode | null = this.trie;
-    let context: Context = { req, params: {}, store: {} }; // Attach req to context
-  
+    let context: Context = { req, params: {}, store: {}, query: queryParams };
     let wildcardMatch: string | null = null;
+    let paramMatches: { [key: string]: string } = {};
+  
+    let exactMatchNode: RouteNode | null = node;
+    let paramMatchNode: RouteNode | null = null;
+    let wildcardNode: RouteNode | null = null;
   
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
   
+      // Check for exact static match first
+      if (exactMatchNode?.children[segment]) {
+        exactMatchNode = exactMatchNode.children[segment];
+      } else {
+        exactMatchNode = null;
+      }
+  
+      // Check for a parameterized match
+      const paramKey: any = Object.keys(node.children).find(k => k.startsWith(":"));
+      if (paramKey) {
+        paramMatches[paramKey.slice(1)] = segment;
+        paramMatchNode = node.children[paramKey];
+      }
+  
+      // Check for wildcard
+      if (node.wildcard) {
+        wildcardMatch = segments.slice(i).join("/");
+        wildcardNode = node.wildcard;
+        break;
+      }
+  
+      // Move deeper in the trie
       if (node.children[segment]) {
         node = node.children[segment];
-      } else if (node.wildcard) {
-        wildcardMatch = segments.slice(i).join('/'); // Capture remaining path
-        node = node.wildcard;
-        break; // Stop further traversal since wildcard captures everything after
+      } else if (paramMatchNode) {
+        node = paramMatchNode;
       } else {
-        const paramKey: any = Object.keys(node.children).find(k => k.startsWith(':'));
-        if (paramKey) {
-          context.params[paramKey.slice(1)] = segment;
-          node = node.children[paramKey];
-        } else {
-          return null; // No matching route found
-        }
+        node = wildcardNode;
+        break;
       }
     }
   
-    const methodHandlers = node.handlers[req.method];
-    if (!methodHandlers) return null;
+    // Prioritize static > param > wildcard match
+    let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
+    if (!matchedNode) return new Response("Not Found", { status: 404 });
   
+    // Retrieve method handlers
+    const methodHandlers = matchedNode.handlers[req.method];
+    if (!methodHandlers) return new Response("Method Not Allowed", { status: 405 });
+  
+    // Assign parameters if matched dynamically
+    context.params = { ...context.params, ...paramMatches };
     if (wildcardMatch) {
-      context.params['*'] = wildcardMatch; // Store wildcard match in params
+      context.params["*"] = wildcardMatch;
     }
   
     return this.runMiddlewares(
@@ -184,23 +212,29 @@ export class Xerus {
     );
   }
   
+  
+  
 
   private async runMiddlewares(handlers: (Middleware | Handler)[], ctx: Context): Promise<Response> {
     let index = -1;
     const next = async (): Promise<Response> => {
-        index++;
-        if (index >= handlers.length) {
-            return new Response("Unexpected server error", { status: 500 });
-        }
-        try {
-            return handlers[index](ctx, next);
-        } catch (err) {
-            console.error("Middleware error:", err);
-            return new Response("Internal Server Error", { status: 500 });
-        }
+      index++;
+      if (index >= handlers.length) {
+        return new Response("Unexpected server error", { status: 500 });
+      }
+      try {
+        return handlers[index](ctx, next);
+      } catch (err) {
+        console.error("Middleware error:", err);
+        return this.handleError(ctx, err);
+      }
     };
     return next();
-}
+  }
+  
+  private handleError(ctx: Context, err: unknown): Response {
+    return new Response("Internal Server Error", { status: 500 });
+  }
   
 }
 
