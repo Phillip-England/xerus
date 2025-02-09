@@ -56,11 +56,9 @@ export function staticHandler(staticDir: string) {
   return async (c: Context): Promise<Response> => {
     const url = new URL(c.req.url);
     const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
-
     if (!existsSync(filePath)) {
       return new Response("404 Not Found", { status: 404 });
     }
-
     const file = Bun.file(filePath);
     return new Response(file, {
       headers: {
@@ -175,6 +173,15 @@ export class Context {
   json(data: unknown, status: number = 200): Response {
     return new Response(JSON.stringify(data), { status, headers: merge({ "Content-Type": "application/json" }, this.headers) });
   }
+  
+  async parseBody<T = unknown>(): Promise<T | null> {
+    try {
+      return await this.req.json();
+    } catch {
+      return null;
+    }
+  }
+
 }
 
 
@@ -296,13 +303,11 @@ export class Xerus {
     let index = -1;
     const next = async (): Promise<Response> => {
       index++;
-      if (index >= handlers.length) {
-        return new Response("Unexpected server error", { status: 500 });
-      }
+      if (index >= handlers.length) return new Response("Unexpected server error", { status: 500 });
+    
       try {
-        return handlers[index](ctx, next);
+        return await handlers[index](ctx, next); // Ensure async handling
       } catch (err) {
-        console.error("Middleware error:", err);
         return this.handleError(ctx, err);
       }
     };
@@ -310,6 +315,8 @@ export class Xerus {
   }
   
   private handleError(ctx: Context, err: unknown): Response {
-    return new Response("Internal Server Error", { status: 500 });
+    console.error("Error:", err);
+    return new Response(`Internal Server Error: ${(err as Error).message || "Unknown error"}`, { status: 500 });
   }
+  
 }

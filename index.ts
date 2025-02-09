@@ -117,6 +117,14 @@ app.get("/wild/*",  async (ctx) => {
   return ctx.json({ path: ctx.params["*"], message: "Wildcard CORS test" });
 }, corsMiddleware);
 
+app.post("/test-body", async (c: Context) => {
+  const body = await c.parseBody<{ message: string }>();
+  if (!body || !body.message) {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+  return c.json({ received: body.message }, 200);
+}, logger);
+
 
 let server = Bun.serve({
   port: 8080,

@@ -214,6 +214,41 @@ test("GET /wild/test/path should return correct wildcard response and CORS heade
   expect(json.path).toBe("test/path");
 });
 
+test("POST /test-body should parse JSON body correctly", async () => {
+  const res = await fetch(`${BASE_URL}/test-body`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Hello, Xerus!" }),
+  });
+
+  const json = await res.json();
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ received: "Hello, Xerus!" });
+});
+
+test("POST /test-body with invalid body should return 400", async () => {
+  const res = await fetch(`${BASE_URL}/test-body`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invalid: "No message field" }), // Missing "message" field
+  });
+
+  const json = await res.json();
+  expect(res.status).toBe(400);
+  expect(json).toEqual({ error: "Invalid request body" });
+});
+
+test("POST /test-body with no body should return 400", async () => {
+  const res = await fetch(`${BASE_URL}/test-body`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const json = await res.json();
+  expect(res.status).toBe(400);
+  expect(json).toEqual({ error: "Invalid request body" });
+});
+
 // test("Benchmark: Measure requests per second over 10 seconds", async () => {
 //   const startTime = performance.now();
 //   let completedRequests = 0;
