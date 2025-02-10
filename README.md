@@ -9,7 +9,7 @@ bun add github:phillip-england/xerus@latest
 ```
 
 ## Hello, World!
-All the features in one place.
+Get a server up and running!
 
 ```ts
 import { type Context, Xerus } from "xerus/xerus";
