@@ -5,13 +5,13 @@ A minimal http framework for Bun!
 ## Installation
 
 ```bash
-bun add github:phillip-england/xerus
+bun add github:phillip-england/xerus@latest
 ```
 
 ## Hello, World
 
 ```ts
-import { type Context, cors, logger, staticHandler, Xerus } from "./src/xerus";
+import { type Context, cors, logger, staticHandler, Xerus } from "xerus/xerus";
 
 const app = new Xerus();
 

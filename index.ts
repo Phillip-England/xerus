@@ -10,7 +10,7 @@ import {
 const app = new Xerus();
 
 app.use(logger);
-app.use(errorHandler());
+app.use(errorHandler);
 
 
 app.setErrorHandler(async (ctx, err) => {
@@ -168,4 +168,4 @@ let server = Bun.serve({
   },
 });
 
-console.log(`starting server on port ${server.port}`);
+console.log(`starting server on port ${server.port}! 🚀`);

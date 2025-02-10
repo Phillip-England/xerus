@@ -101,28 +101,27 @@ export function cors(options: {
   };
 }
 
-export function errorHandler(): Middleware {
-  return async (ctx, next) => {
-    try {
-      return await next();
-    } catch (err) {
-      console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
+export const errorHandler: Middleware = async (ctx, next) => {
+  try {
+    return await next();
+  } catch (err) {
+    console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
 
-      let status = 500;
-      let message = "Internal Server Error";
+    let status = 500;
+    let message = "Internal Server Error";
 
-      if (err instanceof Error && err.message === "Malformed JSON body") {
-        status = 400;
-        message = "Bad Request: Malformed JSON";
-      }
-
-      return new Response(
-        JSON.stringify({ error: message }),
-        { status, headers: new Headers({ "Content-Type": "application/json" }) }
-      );
+    if (err instanceof Error && err.message === "Malformed JSON body") {
+      status = 400;
+      message = "Bad Request: Malformed JSON";
     }
-  };
-}
+
+    return new Response(
+      JSON.stringify({ error: message }),
+      { status, headers: new Headers({ "Content-Type": "application/json" }) }
+    );
+  }
+};
+
 
 
 
