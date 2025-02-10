@@ -1,14 +1,17 @@
 # Xerus
+
 A minimal http framework for Bun!
 
 ## Installation
+
 ```bash
 bun add github:phillip-england/xerus
 ```
 
 ## Hello, World
+
 ```ts
-import { Xerus, logger, cors, staticHandler, type Context } from "./src/xerus";
+import { type Context, cors, logger, staticHandler, Xerus } from "./src/xerus";
 
 const app = new Xerus();
 
@@ -16,12 +19,17 @@ const app = new Xerus();
 app.get("/static/*", staticHandler("./static"), logger);
 
 app.get("/", async (c: Context) => {
-  return c.html('<h1>GET /</h1>');
+  return c.html("<h1>GET /</h1>");
 }, logger); // chain middleware here
 
-app.post("/", async (c: Context) => {
-  return c.json({"user": "phillip"}, 200);
-}, logger, cors()); // use default cors configuration
+app.post(
+  "/",
+  async (c: Context) => {
+    return c.json({ "user": "phillip" }, 200);
+  },
+  logger,
+  cors(),
+); // use default cors configuration
 
 let server = Bun.serve({
   port: 8080,
@@ -32,8 +40,8 @@ let server = Bun.serve({
       return response;
     }
     return new Response("404 Not Found", { status: 404 }); // custom 404 logic here
-  }
+  },
 });
 
-console.log(`starting server on port ${server.port}`)
+console.log(`starting server on port ${server.port}`);
 ```

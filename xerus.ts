@@ -15,10 +15,16 @@ export function merge(...headersList: Record<string, string>[]): Record<string, 
 }
 
 //====================================
-// handlers
+// types
 //====================================
 
 type Handler = (ctx: Context) => Promise<Response>;
+type Middleware = (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
+type ErrorHandler = (ctx: Context, err: unknown) => Promise<Response> | Response;
+
+//====================================
+// handlers
+//====================================
 
 export function staticHandler(staticDir: string) {
 	return async (c: Context): Promise<Response> => {
@@ -42,9 +48,6 @@ export function staticHandler(staticDir: string) {
 //====================================
 // middleware
 //====================================
-
-type Middleware = (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
-
 
 export async function logger(ctx: Context, next: () => Promise<Response>): Promise<Response> {
   const startTime = performance.now();
@@ -92,6 +95,31 @@ export function cors(options: {
     return await next();
   };
 }
+
+export function errorHandler(): Middleware {
+	return async (ctx, next) => {
+			try {
+					return await next();
+			} catch (err) {
+					console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
+					
+					let status = 500;
+					let message = "Internal Server Error";
+
+					if (err instanceof Error && err.message === "Malformed JSON body") {
+							status = 400;
+							message = "Bad Request: Malformed JSON";
+					}
+
+					return new Response(
+							JSON.stringify({ error: message }),
+							{ status, headers: { "Content-Type": "application/json" } }
+					);
+			}
+	};
+}
+
+
 
 //====================================
 // context
@@ -151,6 +179,13 @@ export class Context {
   json(data: unknown, status: number = 200): Response {
     return new Response(JSON.stringify(data), { status, headers: merge({ "Content-Type": "application/json" }, this.headers) });
   }
+
+	redirect(url: string, status: number = 302): Response {
+    return new Response(null, {
+      status,
+      headers: merge({ Location: url }, this.headers),
+    });
+  }
   
 	async parseBody<T = unknown>(): Promise<T | null> {
     const contentType = this.req.headers.get("Content-Type");
@@ -158,13 +193,24 @@ export class Context {
     if (!contentType) return null;
 
     try {
+        const text = await this.req.text();
+        if (!text.trim()) {
+            return null; // Return null if body is empty
+        }
+
         if (contentType.includes("application/json")) {
-            return await this.req.json();
-        } 
+            try {
+                return JSON.parse(text) as T; // Manually parse JSON
+            } catch (error) {
+                throw new Error("Malformed JSON body"); // Throw error for malformed JSON
+            }
+        }
+
         if (contentType.includes("application/x-www-form-urlencoded")) {
-            const formData = new URLSearchParams(await this.req.text());
+            const formData = new URLSearchParams(text);
             return Object.fromEntries(formData.entries()) as T;
         }
+
         if (contentType.includes("multipart/form-data")) {
             const formData = await this.req.formData();
             const data: Record<string, unknown> = {};
@@ -181,16 +227,19 @@ export class Context {
             });
             return data as T;
         }
+
         if (contentType.includes("text/plain")) {
-            return (await this.req.text()) as T;
+            return text as T;
         }
     } catch (error) {
         console.error("Error parsing request body:", error);
-        return null;
+        throw error; // Ensure errors are propagated to the error handler
     }
 
     return null;
 }
+
+
 
 
 }
@@ -200,18 +249,58 @@ export class Context {
 //====================================
 
 type RouteNode = {
-	children: Record<string, RouteNode>;
-	wildcard?: RouteNode; // Added for wildcard routes
-	handlers: Partial<Record<string, { regex: RegExp, handlers: Middleware[], finalHandler: Handler }>>;
+  children: Record<string, RouteNode>;
+  wildcard?: RouteNode;
+  handlers: Partial<Record<string, { regex: RegExp; handlers: Middleware[]; finalHandler: Handler }>>;
 };
 
 export class Xerus {
   private trie: RouteNode = { children: {}, handlers: {} };
+	private globalErrorHandler: ErrorHandler = async (ctx, err) => {
+    console.error("Unhandled Error:", err);
+
+    let status = 500;
+    let message = "Internal Server Error";
+
+    if (err instanceof Response) {
+        return err; // Allows early returns from middleware as responses.
+    } else if (err instanceof Error) {
+        message = err.message;
+    } else if (typeof err === "string") {
+        message = err;
+    }
+
+    return new Response(
+        JSON.stringify({
+            error: true,
+            message: status === 500 ? "An unexpected error occurred" : message,
+        }),
+        {
+            status,
+            headers: { "Content-Type": "application/json" },
+        }
+    );
+};
+  private globalMiddlewares: Middleware[] = [];
+
+  /**
+   * Set a global error handler for handling uncaught errors.
+   */
+  setErrorHandler(handler: ErrorHandler) {
+    this.globalErrorHandler = handler;
+  }
+
+  /**
+   * Use global middleware for all routes.
+   */
+  use(...middlewares: Middleware[]) {
+    this.globalMiddlewares.push(...middlewares);
+  }
 
   private register(method: string, path: string, handler: Handler, middlewares: Middleware[]) {
     const segments = path.split('/').filter(Boolean);
     let node = this.trie;
-    
+
     for (const segment of segments) {
       if (segment === "*") {
         if (!node.wildcard) {
@@ -256,87 +345,88 @@ export class Xerus {
     this.register("HEAD", path, handler, middlewares);
   }
 
-  async handleRequest(req: Request): Promise<Response | null> {
-    const url = new URL(req.url);
-    const pathname = url.pathname;
-    const segments = pathname.split('/').filter(Boolean);
-    
-    let node: RouteNode | null = this.trie;
-    let ctx = new Context(req);
+	async handleRequest(req: Request): Promise<Response> {
+    try {
+        const url = new URL(req.url);
+        const pathname = url.pathname;
+        const segments = pathname.split("/").filter(Boolean);
 
-    let wildcardMatch: string | null = null;
-    let paramMatches: { [key: string]: string } = {};
-  
-    let exactMatchNode: RouteNode | null = node;
-    let paramMatchNode: RouteNode | null = null;
-    let wildcardNode: RouteNode | null = null;
-  
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-  
-      if (exactMatchNode?.children[segment]) {
-        exactMatchNode = exactMatchNode.children[segment];
-      } else {
-        exactMatchNode = null;
-      }
-  
-      const paramKey: any = Object.keys(node.children).find(k => k.startsWith(":"));
-      if (paramKey) {
-        paramMatches[paramKey.slice(1)] = segment;
-        paramMatchNode = node.children[paramKey];
-      }
-  
-      if (node.wildcard) {
-        wildcardMatch = segments.slice(i).join("/");
-        wildcardNode = node.wildcard;
-        break;
-      }
-  
-      if (node.children[segment]) {
-        node = node.children[segment];
-      } else if (paramMatchNode) {
-        node = paramMatchNode;
-      } else {
-        node = wildcardNode;
-        break;
-      }
+        let node: RouteNode | null = this.trie;
+        let ctx = new Context(req);
+
+        let paramMatches: Record<string, string> = {};
+        let exactMatchNode: RouteNode | null = node;
+        let paramMatchNode: RouteNode | null = null;
+        let wildcardNode: RouteNode | null = null;
+        let wildcardMatch: string | null = null;
+
+        for (let i = 0; i < segments.length; i++) {
+            const segment = segments[i];
+
+            if (exactMatchNode?.children[segment]) {
+                exactMatchNode = exactMatchNode.children[segment];
+            } else {
+                exactMatchNode = null;
+            }
+
+            const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
+            if (paramKey) {
+                paramMatches[paramKey.slice(1)] = segment;
+                paramMatchNode = node.children[paramKey];
+            }
+
+            if (node.wildcard) {
+                wildcardMatch = segments.slice(i).join("/");
+                wildcardNode = node.wildcard;
+                break;
+            }
+
+            if (node.children[segment]) {
+                node = node.children[segment];
+            } else if (paramMatchNode) {
+                node = paramMatchNode;
+            } else {
+                node = wildcardNode;
+                break;
+            }
+        }
+
+        let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
+        if (!matchedNode) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+
+        const methodHandlers = matchedNode.handlers[req.method];
+        if (!methodHandlers) {
+            return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+                status: 405,
+                headers: { "Content-Type": "application/json" },
+            });
+        }
+
+        ctx.params = { ...ctx.params, ...paramMatches };
+        if (wildcardMatch) ctx.params["*"] = wildcardMatch;
+
+        return this.runMiddlewares(
+            [...this.globalMiddlewares, ...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)],
+            ctx
+        );
+    } catch (err) {
+        return this.globalErrorHandler(new Context(req), err);
     }
-  
-    let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
-    if (!matchedNode) return new Response("Not Found", { status: 404 });
-  
-    const methodHandlers = matchedNode.handlers[req.method];
-    if (!methodHandlers) return new Response("Method Not Allowed", { status: 405 });
+}
 
-    ctx.params = { ...ctx.params, ...paramMatches };
-    if (wildcardMatch) {
-      ctx.params["*"] = wildcardMatch;
-    }
-
-    return this.runMiddlewares(
-      [...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)], 
-      ctx
-    );
-  }
 
   private async runMiddlewares(handlers: (Middleware | Handler)[], ctx: Context): Promise<Response> {
     let index = -1;
     const next = async (): Promise<Response> => {
       index++;
       if (index >= handlers.length) return new Response("Unexpected server error", { status: 500 });
-    
+
       try {
-        return await handlers[index](ctx, next); // Ensure async handling
+        return await handlers[index](ctx, next);
       } catch (err) {
-        return this.handleError(ctx, err);
+        return this.globalErrorHandler(ctx, err);
       }
     };
     return next();
   }
-  
-  private handleError(ctx: Context, err: unknown): Response {
-    console.error("Error:", err);
-    return new Response(`Internal Server Error: ${(err as Error).message || "Unknown error"}`, { status: 500 });
-  }
-  
 }
