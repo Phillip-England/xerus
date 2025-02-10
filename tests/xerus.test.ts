@@ -270,7 +270,6 @@ test("GET /throw-middleware-error should trigger error handler", async () => {
   expect(json.details).toBe("Middleware triggered error");
 });
 
-
 // test("Benchmark: Measure requests per second over 10 seconds", async () => {
 //   const startTime = performance.now();
 //   let completedRequests = 0;

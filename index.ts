@@ -1,4 +1,11 @@
-import { type Context, cors, errorHandler, logger, staticHandler, Xerus } from "./xerus";
+import {
+  type Context,
+  cors,
+  errorHandler,
+  logger,
+  staticHandler,
+  Xerus,
+} from "./xerus";
 
 const app = new Xerus();
 
@@ -15,7 +22,7 @@ app.setErrorHandler(async (ctx, err) => {
 
 async function errorThrowingMiddleware(
   c: Context,
-  next: () => Promise<Response>
+  next: () => Promise<Response>,
 ): Promise<Response> {
   throw new Error("Middleware triggered error");
 }
@@ -40,7 +47,7 @@ app.get("/user/:id", async (c: Context) => {
 
 app.get("/set-cookie", async (c: Context) => {
   c.setCookie("user", "philthy", { httpOnly: true, maxAge: 3600 });
-  c.headers["X-Custom-Header"] = "Hello";
+  c.headers.set("X-Custom-Header", "Hello");
   return c.html("<h1>Cookie Set!</h1>");
 });
 
@@ -156,11 +163,7 @@ let server = Bun.serve({
   idleTimeout: 10,
   development: false,
   async fetch(req) {
-    let response = await app.handleRequest(req);
-    if (response) {
-      return response;
-    }
-    return new Response("404 Not Found", { status: 404 });
+    return await app.handleRequest(req);
   },
 });
 

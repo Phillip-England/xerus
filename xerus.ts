@@ -9,10 +9,18 @@ function pathToRegex(path: string): RegExp {
   return new RegExp("^" + path.replace(/:\w+/g, "([^/]+)").replace(/\*/g, ".*") + "/?$");
 }
 
-// Utility function to merge multiple records into one
-export function merge(...headersList: Record<string, string>[]): Record<string, string> {
-  return headersList.reduce((acc, headers) => ({ ...acc, ...headers }), {});
+export function merge(...headersList: Headers[]): Headers {
+  const mergedHeaders = new Headers();
+
+  for (const headers of headersList) {
+    headers.forEach((value, key) => {
+      mergedHeaders.set(key, value);
+    });
+  }
+
+  return mergedHeaders;
 }
+
 
 //====================================
 // types
@@ -34,7 +42,7 @@ export function staticHandler(staticDir: string) {
 		if (!(await file.exists())) {
 			return new Response("404 Not Found", { status: 404 });
 		}
-	  return new Response(file, {
+	  return new Response(file.stream(), {
 		headers: {
 		  "Content-Type": file.type || "application/octet",
 		  "Cache-Control": "max-age=3600", // Cache for 1 hour
@@ -67,27 +75,24 @@ export function cors(options: {
   maxAge?: number;
 } = {}): Middleware {
   return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
-    // Set default values
     const {
       origin = "*",
       methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders = ["Content-Type", "Authorization"],
       exposedHeaders = [],
       credentials = false,
-      maxAge = 86400, // 24 hours
+      maxAge = 86400,
     } = options;
 
-    // Apply CORS headers
-    ctx.headers["Access-Control-Allow-Origin"] = origin;
-    ctx.headers["Access-Control-Allow-Methods"] = methods.join(", ");
-    ctx.headers["Access-Control-Allow-Headers"] = allowedHeaders.join(", ");
-    ctx.headers["Access-Control-Expose-Headers"] = exposedHeaders.join(", ");
+    ctx.headers.set("Access-Control-Allow-Origin", origin);
+    ctx.headers.set("Access-Control-Allow-Methods", methods.join(", "));
+    ctx.headers.set("Access-Control-Allow-Headers", allowedHeaders.join(", "));
+    ctx.headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
     if (credentials && origin !== "*") {
-      ctx.headers["Access-Control-Allow-Credentials"] = "true";
+      ctx.headers.set("Access-Control-Allow-Credentials", "true");
     }
-    ctx.headers["Access-Control-Max-Age"] = maxAge.toString();
+    ctx.headers.set("Access-Control-Max-Age", maxAge.toString());
 
-    // Handle preflight requests (OPTIONS)
     if (ctx.req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: ctx.headers });
     }
@@ -97,26 +102,26 @@ export function cors(options: {
 }
 
 export function errorHandler(): Middleware {
-	return async (ctx, next) => {
-			try {
-					return await next();
-			} catch (err) {
-					console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
-					
-					let status = 500;
-					let message = "Internal Server Error";
+  return async (ctx, next) => {
+    try {
+      return await next();
+    } catch (err) {
+      console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
 
-					if (err instanceof Error && err.message === "Malformed JSON body") {
-							status = 400;
-							message = "Bad Request: Malformed JSON";
-					}
+      let status = 500;
+      let message = "Internal Server Error";
 
-					return new Response(
-							JSON.stringify({ error: message }),
-							{ status, headers: { "Content-Type": "application/json" } }
-					);
-			}
-	};
+      if (err instanceof Error && err.message === "Malformed JSON body") {
+        status = 400;
+        message = "Bad Request: Malformed JSON";
+      }
+
+      return new Response(
+        JSON.stringify({ error: message }),
+        { status, headers: new Headers({ "Content-Type": "application/json" }) }
+      );
+    }
+  };
 }
 
 
@@ -131,11 +136,12 @@ export class Context {
   params: Record<string, string> = {};
   store: Record<string, unknown> = {};
   query: Record<string, string>;
-  headers: Record<string, string> = {};
+  headers: Headers; // Use Headers instead of Record<string, string>
 
   constructor(req: Request) {
     this.req = req;
     this.query = Object.fromEntries(new URL(req.url).searchParams.entries());
+    this.headers = new Headers(); // Initialize as Bun Headers
   }
 
   setCookie(
@@ -161,11 +167,7 @@ export class Context {
     if (options.httpOnly) cookieValue += `; HttpOnly`;
     if (options.sameSite) cookieValue += `; SameSite=${options.sameSite}`;
 
-    if (!this.headers["Set-Cookie"]) {
-      this.headers["Set-Cookie"] = cookieValue;
-    } else {
-      this.headers["Set-Cookie"] += `, ${cookieValue}`; // Append multiple cookies
-    }
+    this.headers.append("Set-Cookie", cookieValue); // Append cookie using Headers API
   }
 
   deleteCookie(name: string, path: string = "/") {
@@ -173,20 +175,20 @@ export class Context {
   }
 
   html(body: string, status: number = 200): Response {
-    return new Response(body, { status, headers: merge({ "Content-Type": "text/html" }, this.headers) });
+    return new Response(body, { status, headers: merge(new Headers({ "Content-Type": "text/html" }), this.headers) });
   }
 
   json(data: unknown, status: number = 200): Response {
-    return new Response(JSON.stringify(data), { status, headers: merge({ "Content-Type": "application/json" }, this.headers) });
+    return new Response(JSON.stringify(data), { status, headers: merge(new Headers({ "Content-Type": "application/json" }), this.headers) });
   }
 
-	redirect(url: string, status: number = 302): Response {
+  redirect(url: string, status: number = 302): Response {
     return new Response(null, {
       status,
-      headers: merge({ Location: url }, this.headers),
+      headers: merge(new Headers({ Location: url }), this.headers),
     });
   }
-  
+
 	async parseBody<T = unknown>(): Promise<T | null> {
     const contentType = this.req.headers.get("Content-Type");
 
@@ -239,10 +241,8 @@ export class Context {
     return null;
 }
 
-
-
-
 }
+
 
 //====================================
 // router
@@ -255,6 +255,7 @@ type RouteNode = {
 };
 
 export class Xerus {
+
   private trie: RouteNode = { children: {}, handlers: {} };
 	private globalErrorHandler: ErrorHandler = async (ctx, err) => {
     console.error("Unhandled Error:", err);
@@ -346,73 +347,73 @@ export class Xerus {
   }
 
 	async handleRequest(req: Request): Promise<Response> {
-    try {
-        const url = new URL(req.url);
-        const pathname = url.pathname;
-        const segments = pathname.split("/").filter(Boolean);
-
-        let node: RouteNode | null = this.trie;
-        let ctx = new Context(req);
-
-        let paramMatches: Record<string, string> = {};
-        let exactMatchNode: RouteNode | null = node;
-        let paramMatchNode: RouteNode | null = null;
-        let wildcardNode: RouteNode | null = null;
-        let wildcardMatch: string | null = null;
-
-        for (let i = 0; i < segments.length; i++) {
-            const segment = segments[i];
-
-            if (exactMatchNode?.children[segment]) {
-                exactMatchNode = exactMatchNode.children[segment];
-            } else {
-                exactMatchNode = null;
-            }
-
-            const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
-            if (paramKey) {
-                paramMatches[paramKey.slice(1)] = segment;
-                paramMatchNode = node.children[paramKey];
-            }
-
-            if (node.wildcard) {
-                wildcardMatch = segments.slice(i).join("/");
-                wildcardNode = node.wildcard;
-                break;
-            }
-
-            if (node.children[segment]) {
-                node = node.children[segment];
-            } else if (paramMatchNode) {
-                node = paramMatchNode;
-            } else {
-                node = wildcardNode;
-                break;
-            }
-        }
-
-        let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
-        if (!matchedNode) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
-
-        const methodHandlers = matchedNode.handlers[req.method];
-        if (!methodHandlers) {
-            return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-                status: 405,
-                headers: { "Content-Type": "application/json" },
-            });
-        }
-
-        ctx.params = { ...ctx.params, ...paramMatches };
-        if (wildcardMatch) ctx.params["*"] = wildcardMatch;
-
-        return this.runMiddlewares(
-            [...this.globalMiddlewares, ...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)],
-            ctx
-        );
-    } catch (err) {
-        return this.globalErrorHandler(new Context(req), err);
-    }
-}
+		try {
+			const url = new URL(req.url);
+			const pathname = url.pathname;
+			const segments = pathname.split("/").filter(Boolean);
+	
+			let node: RouteNode | null = this.trie;
+			let ctx = new Context(req);
+	
+			let paramMatches: Record<string, string> = {};
+			let exactMatchNode: RouteNode | null = node;
+			let paramMatchNode: RouteNode | null = null;
+			let wildcardNode: RouteNode | null = null;
+			let wildcardMatch: string | null = null;
+	
+			for (let i = 0; i < segments.length; i++) {
+				const segment = segments[i];
+	
+				if (exactMatchNode?.children[segment]) {
+					exactMatchNode = exactMatchNode.children[segment];
+				} else {
+					exactMatchNode = null;
+				}
+	
+				const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
+				if (paramKey) {
+					paramMatches[paramKey.slice(1)] = segment;
+					paramMatchNode = node.children[paramKey];
+				}
+	
+				if (node.wildcard) {
+					wildcardMatch = segments.slice(i).join("/");
+					wildcardNode = node.wildcard;
+					break;
+				}
+	
+				if (node.children[segment]) {
+					node = node.children[segment];
+				} else if (paramMatchNode) {
+					node = paramMatchNode;
+				} else {
+					node = wildcardNode;
+					break;
+				}
+			}
+	
+			let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
+			if (!matchedNode) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: new Headers({ "Content-Type": "application/json" }) });
+	
+			const methodHandlers = matchedNode.handlers[req.method];
+			if (!methodHandlers) {
+				return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+					status: 405,
+					headers: new Headers({ "Content-Type": "application/json" }),
+				});
+			}
+	
+			ctx.params = { ...ctx.params, ...paramMatches };
+			if (wildcardMatch) ctx.params["*"] = wildcardMatch;
+	
+			return this.runMiddlewares(
+				[...this.globalMiddlewares, ...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)],
+				ctx
+			);
+		} catch (err) {
+			return this.globalErrorHandler(new Context(req), err);
+		}
+	}	
 
 
   private async runMiddlewares(handlers: (Middleware | Handler)[], ctx: Context): Promise<Response> {
