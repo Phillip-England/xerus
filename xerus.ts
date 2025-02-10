@@ -66,15 +66,54 @@ export async function logger(ctx: Context, next: () => Promise<Response>): Promi
   return response;
 }
 
-export function cors(options: {
+export async function cors(ctx: Context,  next: () => Promise<Response>): Promise<Response> {
+    ctx.headers.set("Access-Control-Allow-Origin", "*");
+    ctx.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    ctx.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    ctx.headers.set("Access-Control-Expose-Headers", "");
+    ctx.headers.set("Access-Control-Max-Age", "86400");
+
+    if (ctx.req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: ctx.headers });
+    }
+
+    return await next();
+  };
+
+export const customCors: ((options?: {
   origin?: string;
   methods?: string[];
   allowedHeaders?: string[];
   exposedHeaders?: string[];
   credentials?: boolean;
   maxAge?: number;
-} = {}): Middleware {
-  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
+}) => Middleware) & Middleware = ((options?: {
+  origin?: string;
+  methods?: string[];
+  allowedHeaders?: string[];
+  exposedHeaders?: string[];
+  credentials?: boolean;
+  maxAge?: number;
+}) => {
+  // If no options are provided, return a direct middleware function
+  if (!options) {
+    return async (ctx: Context, next: () => Promise<Response>) => {
+      ctx.headers.set("Access-Control-Allow-Origin", "*");
+      ctx.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+      ctx.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      ctx.headers.set("Access-Control-Expose-Headers", "");
+      ctx.headers.set("Access-Control-Max-Age", "86400");
+
+      if (ctx.req.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: ctx.headers });
+      }
+
+      return await next();
+    };
+  }
+
+  // If options are provided, return a function that generates the middleware
+  return async (ctx: Context, next: () => Promise<Response>) => {
     const {
       origin = "*",
       methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -88,10 +127,11 @@ export function cors(options: {
     ctx.headers.set("Access-Control-Allow-Methods", methods.join(", "));
     ctx.headers.set("Access-Control-Allow-Headers", allowedHeaders.join(", "));
     ctx.headers.set("Access-Control-Expose-Headers", exposedHeaders.join(", "));
+    ctx.headers.set("Access-Control-Max-Age", maxAge.toString());
+    
     if (credentials && origin !== "*") {
       ctx.headers.set("Access-Control-Allow-Credentials", "true");
     }
-    ctx.headers.set("Access-Control-Max-Age", maxAge.toString());
 
     if (ctx.req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: ctx.headers });
@@ -99,7 +139,8 @@ export function cors(options: {
 
     return await next();
   };
-}
+}) as any;
+
 
 export const errorHandler: Middleware = async (ctx, next) => {
   try {

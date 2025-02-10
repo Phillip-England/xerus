@@ -1,47 +1,33 @@
 # Xerus
-
 A minimal http framework for Bun!
 
 ## Installation
+Install Xerus from github.
 
 ```bash
 bun add github:phillip-england/xerus@latest
 ```
 
-## Hello, World
+## Hello, World!
+All the features in one place.
 
 ```ts
-import { type Context, cors, logger, staticHandler, Xerus } from "xerus/xerus";
+import { type Context, Xerus } from "xerus/xerus";
 
 const app = new Xerus();
 
-// handling static files
-app.get("/static/*", staticHandler("./static"), logger);
-
 app.get("/", async (c: Context) => {
   return c.html("<h1>GET /</h1>");
-}, logger); // chain middleware here
-
-app.post(
-  "/",
-  async (c: Context) => {
-    return c.json({ "user": "phillip" }, 200);
-  },
-  logger,
-  cors(),
-); // use default cors configuration
+});
 
 let server = Bun.serve({
   port: 8080,
   idleTimeout: 10,
+  development: false,
   async fetch(req) {
-    let response = await app.handleRequest(req);
-    if (response) {
-      return response;
-    }
-    return new Response("404 Not Found", { status: 404 }); // custom 404 logic here
+    return await app.handleRequest(req);
   },
 });
 
-console.log(`starting server on port ${server.port}`);
+console.log(`starting server on port ${server.port}! 🚀`);
 ```

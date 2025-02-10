@@ -1,6 +1,7 @@
 import {
   type Context,
   cors,
+  customCors,
   errorHandler,
   logger,
   staticHandler,
@@ -11,7 +12,6 @@ const app = new Xerus();
 
 app.use(logger);
 app.use(errorHandler);
-
 
 app.setErrorHandler(async (ctx, err) => {
   console.error("Custom Error:", err);
@@ -107,7 +107,7 @@ app.get("/status/:code", async (c: Context) => {
   return new Response(`Status ${statusCode}`, { status: statusCode });
 });
 
-const corsMiddleware = cors({
+const corsMiddleware = customCors({
   origin: "http://example.com",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -124,7 +124,7 @@ app.options("/cors-test", async (ctx) => {
   return new Response(null, { status: 204, headers: ctx.headers });
 }, corsMiddleware);
 
-const openCors = cors({ origin: "*", methods: ["GET", "POST"] });
+const openCors = customCors({ origin: "*", methods: ["GET", "POST"] });
 
 app.get("/public-data", async (ctx) => {
   return ctx.json({ data: "This is accessible from any origin" });
@@ -158,6 +158,10 @@ app.get("/throw-err", async (c: Context) => {
 app.get("/throw-middleware-error", async (c: Context) => {
   return c.json({ "success": "true" }, 200);
 }, errorThrowingMiddleware);
+
+app.get('/blank-cors', async (c: Context) => {
+  return c.json({ "success": "true" }, 200);
+}, cors)
 
 let server = Bun.serve({
   port: 8080,
