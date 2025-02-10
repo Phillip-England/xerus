@@ -6,16 +6,16 @@ import {
   logger,
   staticHandler,
   Xerus,
+  makeMiddleware
 } from "./xerus";
 
 const app = new Xerus();
 
-app.use(logger);
-app.use(errorHandler);
+app.use(logger, errorHandler);
 
-app.setErrorHandler(async (ctx, err) => {
+app.setErrorHandler(async (c, err) => {
   console.error("Custom Error:", err);
-  return ctx.json({
+  return c.json({
     error: "Something went wrong",
     details: (err as Error).message,
   }, 500);
@@ -57,14 +57,11 @@ app.get("/delete-cookie", async (c: Context) => {
   return c.html("<h1>Cookie Deleted!</h1>");
 });
 
-export async function testStore(
-  c: Context,
-  next: () => Promise<Response>,
-): Promise<Response> {
+
+export const testStore = makeMiddleware(async (c, next) => {
   c.store.test = "testing";
-  const response = await next();
-  return response;
-}
+  return await next();
+});
 
 app.get("/testing-store", async (c: Context) => {
   return c.html(`<h1>${c.store.test}</h1>`);
@@ -116,31 +113,31 @@ const corsMiddleware = customCors({
   maxAge: 600,
 });
 
-app.get("/cors-test", async (ctx) => {
-  return ctx.json({ message: "CORS is working!" });
+app.get("/cors-test", async (c) => {
+  return c.json({ message: "CORS is working!" });
 }, corsMiddleware);
 
-app.options("/cors-test", async (ctx) => {
-  return new Response(null, { status: 204, headers: ctx.headers });
+app.options("/cors-test", async (c) => {
+  return new Response(null, { status: 204, headers: c.headers });
 }, corsMiddleware);
 
 const openCors = customCors({ origin: "*", methods: ["GET", "POST"] });
 
-app.get("/public-data", async (ctx) => {
-  return ctx.json({ data: "This is accessible from any origin" });
+app.get("/public-data", async (c) => {
+  return c.json({ data: "This is accessible from any origin" });
 }, openCors);
 
-app.get("/private-data", async (ctx) => {
-  ctx.setCookie("session", "valid_session_token", {
+app.get("/private-data", async (c) => {
+  c.setCookie("session", "valid_session_token", {
     httpOnly: true,
     secure: true,
     sameSite: "None",
   });
-  return ctx.json({ secret: "This data requires credentials" });
+  return c.json({ secret: "This data requires credentials" });
 }, corsMiddleware);
 
-app.get("/wild/*", async (ctx) => {
-  return ctx.json({ path: ctx.params["*"], message: "Wildcard CORS test" });
+app.get("/wild/*", async (c) => {
+  return c.json({ path: c.params["*"], message: "Wildcard CORS test" });
 }, corsMiddleware);
 
 app.post("/test-body", async (c: Context) => {
@@ -162,6 +159,12 @@ app.get("/throw-middleware-error", async (c: Context) => {
 app.get('/blank-cors', async (c: Context) => {
   return c.json({ "success": "true" }, 200);
 }, cors)
+
+app.get("/search", async (c: Context) => {
+  const term = c.query("q");
+  const allParams = c.query(); 
+  return c.json({ term, allParams });
+});
 
 let server = Bun.serve({
   port: 8080,

@@ -286,3 +286,39 @@ test("GET /blank-cors should return success response with correct CORS headers",
 
   expect(res.headers.get("access-control-allow-origin")).toBe("*");
 });
+
+// Test GET /search without query params
+test("GET /search without query params should return empty query object", async () => {
+  const res = await fetch(`${BASE_URL}/search`);
+  const json = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ term: null, allParams: {} });
+});
+
+// Test GET /search with a single query param
+test("GET /search?q=rust should return query param", async () => {
+  const res = await fetch(`${BASE_URL}/search?q=rust`);
+  const json = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ term: "rust", allParams: { q: "rust" } });
+});
+
+// Test GET /search with multiple query params
+test("GET /search?q=rust&page=2 should return all query params", async () => {
+  const res = await fetch(`${BASE_URL}/search?q=rust&page=2`);
+  const json = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ term: "rust", allParams: { q: "rust", page: "2" } });
+});
+
+// Test GET /search with an empty query parameter
+test("GET /search?q= should return empty string as query value", async () => {
+  const res = await fetch(`${BASE_URL}/search?q=`);
+  const json = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ term: "", allParams: { q: "" } });
+});

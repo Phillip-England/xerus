@@ -57,6 +57,17 @@ export function staticHandler(staticDir: string) {
 // middleware
 //====================================
 
+export function makeMiddleware(middleware: Middleware): Middleware {
+  return async (ctx: Context, next: () => Promise<Response>) => {
+    try {
+      return await middleware(ctx, next);
+    } catch (err) {
+      console.error("Middleware error:", err);
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  };
+}
+
 export async function logger(ctx: Context, next: () => Promise<Response>): Promise<Response> {
   const startTime = performance.now();
   const response = await next();
@@ -175,13 +186,23 @@ export class Context {
   req: Request;
   params: Record<string, string> = {};
   store: Record<string, unknown> = {};
-  query: Record<string, string>;
-  headers: Headers; // Use Headers instead of Record<string, string>
+  headers: Headers;
+
+  private _query: URLSearchParams;
 
   constructor(req: Request) {
     this.req = req;
-    this.query = Object.fromEntries(new URL(req.url).searchParams.entries());
-    this.headers = new Headers(); // Initialize as Bun Headers
+    this._query = new URL(req.url).searchParams;
+    this.headers = new Headers();
+  }
+
+  query(): Record<string, string>;
+  query(key: string): string | null;
+  query(key?: string): Record<string, string> | string | null {
+    if (key) {
+      return this._query.get(key);
+    }
+    return Object.fromEntries(this._query.entries());
   }
 
   setCookie(
@@ -207,70 +228,26 @@ export class Context {
     if (options.httpOnly) cookieValue += `; HttpOnly`;
     if (options.sameSite) cookieValue += `; SameSite=${options.sameSite}`;
 
-    this.headers.append("Set-Cookie", cookieValue); // Append cookie using Headers API
+    this.headers.append("Set-Cookie", cookieValue);
   }
 
   deleteCookie(name: string, path: string = "/") {
     this.setCookie(name, "", { path, expires: new Date(0) });
   }
 
-html(body: string, status: number = 200): Response {
+  html(body: string, status: number = 200): Response {
     return new Response(body, { 
         status, 
         headers: merge(new Headers({ "Content-Type": "text/html" }), this.headers) 
     });
-}
+  }
 
-htmlStream(dataGenerator: AsyncIterable<string>, status: number = 200): Response {
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-        async start(controller) {
-            for await (const chunk of dataGenerator) {
-                controller.enqueue(encoder.encode(chunk));
-            }
-            controller.close();
-        },
-    });
-
-    return new Response(stream, {
-        status,
-        headers: merge(new Headers({ "Content-Type": "text/html" }), this.headers),
-    });
-}
-
-
-	json(data: unknown, status: number = 200): Response {
-    if (typeof data === "object" && data !== null && Symbol.asyncIterator in data) {
-        return this.jsonStream(data as AsyncIterable<unknown>, status);
-    }
+  json(data: unknown, status: number = 200): Response {
     return new Response(JSON.stringify(data), { 
         status, 
         headers: merge(new Headers({ "Content-Type": "application/json" }), this.headers) 
     });
-}
-
-	jsonStream(dataGenerator: AsyncIterable<unknown>, status: number = 200): Response {
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-        async start(controller) {
-            controller.enqueue(encoder.encode("["));
-            let first = true;
-            for await (const item of dataGenerator) {
-                if (!first) controller.enqueue(encoder.encode(","));
-                first = false;
-                controller.enqueue(encoder.encode(JSON.stringify(item)));
-            }
-            controller.enqueue(encoder.encode("]"));
-            controller.close();
-        },
-    });
-
-    return new Response(stream, {
-        status,
-        headers: merge(new Headers({ "Content-Type": "application/json" }), this.headers),
-    });
-}
-
+  }
 
   redirect(url: string, status: number = 302): Response {
     return new Response(null, {
@@ -279,7 +256,7 @@ htmlStream(dataGenerator: AsyncIterable<string>, status: number = 200): Response
     });
   }
 
-	async parseBody<T = unknown>(): Promise<T | null> {
+  async parseBody<T = unknown>(): Promise<T | null> {
     const contentType = this.req.headers.get("Content-Type");
 
     if (!contentType) return null;
@@ -287,14 +264,14 @@ htmlStream(dataGenerator: AsyncIterable<string>, status: number = 200): Response
     try {
         const text = await this.req.text();
         if (!text.trim()) {
-            return null; // Return null if body is empty
+            return null;
         }
 
         if (contentType.includes("application/json")) {
             try {
-                return JSON.parse(text) as T; // Manually parse JSON
+                return JSON.parse(text) as T;
             } catch (error) {
-                throw new Error("Malformed JSON body"); // Throw error for malformed JSON
+                throw new Error("Malformed JSON body");
             }
         }
 
@@ -325,13 +302,13 @@ htmlStream(dataGenerator: AsyncIterable<string>, status: number = 200): Response
         }
     } catch (error) {
         console.error("Error parsing request body:", error);
-        throw error; // Ensure errors are propagated to the error handler
+        throw error;
     }
 
     return null;
+  }
 }
 
-}
 
 
 //====================================
