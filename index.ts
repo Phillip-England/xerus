@@ -82,7 +82,7 @@ app.get("/logout", async (c: Context) => {
 });
 
 app.post("/upload", async (c: Context) => {
-  const formData = await c.req.formData();
+  const formData = await c.form();
   const file = formData.get("file");
 
   if (!file || !(file instanceof File)) {

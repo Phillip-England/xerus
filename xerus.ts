@@ -307,6 +307,12 @@ export class Context {
 
     return null;
   }
+
+  async form(): Promise<FormData> {
+    return await this.req.formData()
+  }
+
+
 }
 
 
@@ -351,16 +357,10 @@ export class Xerus {
 };
   private globalMiddlewares: Middleware[] = [];
 
-  /**
-   * Set a global error handler for handling uncaught errors.
-   */
   setErrorHandler(handler: ErrorHandler) {
     this.globalErrorHandler = handler;
   }
 
-  /**
-   * Use global middleware for all routes.
-   */
   use(...middlewares: Middleware[]) {
     this.globalMiddlewares.push(...middlewares);
   }
