@@ -12,6 +12,7 @@ const app = new Xerus();
 app.use(logger);
 app.use(errorHandler());
 
+
 app.setErrorHandler(async (ctx, err) => {
   console.error("Custom Error:", err);
   return ctx.json({

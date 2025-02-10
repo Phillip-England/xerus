@@ -6,9 +6,7 @@ import { join } from "path";
 
 // Utility function to convert a path into a regex
 function pathToRegex(path: string): RegExp {
-  return new RegExp(
-    "^" + path.replace(/:\w+/g, "([^/]+)").replace(/\*/g, ".*") + "/?$",
-  );
+  return new RegExp("^" + path.replace(/:\w+/g, "([^/]+)").replace(/\*/g, ".*") + "/?$");
 }
 
 export function merge(...headersList: Headers[]): Headers {
@@ -23,57 +21,48 @@ export function merge(...headersList: Headers[]): Headers {
   return mergedHeaders;
 }
 
+
 //====================================
 // types
 //====================================
 
 type Handler = (ctx: Context) => Promise<Response>;
-type Middleware = (
-  ctx: Context,
-  next: () => Promise<Response>,
-) => Promise<Response>;
-type ErrorHandler = (
-  ctx: Context,
-  err: unknown,
-) => Promise<Response> | Response;
+type Middleware = (ctx: Context, next: () => Promise<Response>) => Promise<Response>;
+type ErrorHandler = (ctx: Context, err: unknown) => Promise<Response> | Response;
 
 //====================================
 // handlers
 //====================================
 
 export function staticHandler(staticDir: string) {
-  return async (c: Context): Promise<Response> => {
-    const url = new URL(c.req.url);
-    const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) {
-      return new Response("404 Not Found", { status: 404 });
-    }
-    return new Response(file.stream(), {
-      headers: {
-        "Content-Type": file.type || "application/octet",
-        "Cache-Control": "max-age=3600", // Cache for 1 hour
-        "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
-      },
-    });
-  };
-}
+	return async (c: Context): Promise<Response> => {
+	  const url = new URL(c.req.url);
+	  const filePath = join(staticDir, url.pathname.replace(/^\/static\//, "")); // Resolve file path
+		const file = Bun.file(filePath);
+		if (!(await file.exists())) {
+			return new Response("404 Not Found", { status: 404 });
+		}
+	  return new Response(file.stream(), {
+		headers: {
+		  "Content-Type": file.type || "application/octet",
+		  "Cache-Control": "max-age=3600", // Cache for 1 hour
+		  "ETag": `"${filePath}-${file.size}-${file.lastModified}"`,
+		},
+	  });
+	};
+  }
+  
 
 //====================================
 // middleware
 //====================================
 
-export async function logger(
-  ctx: Context,
-  next: () => Promise<Response>,
-): Promise<Response> {
+export async function logger(ctx: Context, next: () => Promise<Response>): Promise<Response> {
   const startTime = performance.now();
   const response = await next();
   const endTime = performance.now();
   const timeTaken = (endTime - startTime).toFixed(2);
-  console.log(
-    `[${ctx.req.method}][${new URL(ctx.req.url).pathname}][${timeTaken}ms]`,
-  );
+  console.log(`[${ctx.req.method}][${new URL(ctx.req.url).pathname}][${timeTaken}ms]`);
   return response;
 }
 
@@ -85,10 +74,7 @@ export function cors(options: {
   credentials?: boolean;
   maxAge?: number;
 } = {}): Middleware {
-  return async (
-    ctx: Context,
-    next: () => Promise<Response>,
-  ): Promise<Response> => {
+  return async (ctx: Context, next: () => Promise<Response>): Promise<Response> => {
     const {
       origin = "*",
       methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -120,10 +106,7 @@ export function errorHandler(): Middleware {
     try {
       return await next();
     } catch (err) {
-      console.error(
-        `[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`,
-        err,
-      );
+      console.error(`[${ctx.req.method}] ${new URL(ctx.req.url).pathname} - Error:`, err);
 
       let status = 500;
       let message = "Internal Server Error";
@@ -135,14 +118,13 @@ export function errorHandler(): Middleware {
 
       return new Response(
         JSON.stringify({ error: message }),
-        {
-          status,
-          headers: new Headers({ "Content-Type": "application/json" }),
-        },
+        { status, headers: new Headers({ "Content-Type": "application/json" }) }
       );
     }
   };
 }
+
+
 
 //====================================
 // context
@@ -173,20 +155,14 @@ export class Context {
       secure?: boolean;
       httpOnly?: boolean;
       sameSite?: "Strict" | "Lax" | "None";
-    } = {},
+    } = {}
   ) {
-    let cookieValue = `${encodeURIComponent(name)}=${
-      encodeURIComponent(value)
-    }`;
+    let cookieValue = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
 
     if (options.path) cookieValue += `; Path=${options.path}`;
     if (options.domain) cookieValue += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) {
-      cookieValue += `; Max-Age=${options.maxAge}`;
-    }
-    if (options.expires) {
-      cookieValue += `; Expires=${options.expires.toUTCString()}`;
-    }
+    if (options.maxAge !== undefined) cookieValue += `; Max-Age=${options.maxAge}`;
+    if (options.expires) cookieValue += `; Expires=${options.expires.toUTCString()}`;
     if (options.secure) cookieValue += `; Secure`;
     if (options.httpOnly) cookieValue += `; HttpOnly`;
     if (options.sameSite) cookieValue += `; SameSite=${options.sameSite}`;
@@ -198,81 +174,63 @@ export class Context {
     this.setCookie(name, "", { path, expires: new Date(0) });
   }
 
-  html(body: string, status: number = 200): Response {
-    return new Response(body, {
-      status,
-      headers: merge(
-        new Headers({ "Content-Type": "text/html" }),
-        this.headers,
-      ),
+html(body: string, status: number = 200): Response {
+    return new Response(body, { 
+        status, 
+        headers: merge(new Headers({ "Content-Type": "text/html" }), this.headers) 
     });
-  }
+}
 
-  htmlStream(
-    dataGenerator: AsyncIterable<string>,
-    status: number = 200,
-  ): Response {
+htmlStream(dataGenerator: AsyncIterable<string>, status: number = 200): Response {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of dataGenerator) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
+        async start(controller) {
+            for await (const chunk of dataGenerator) {
+                controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+        },
     });
 
     return new Response(stream, {
-      status,
-      headers: merge(
-        new Headers({ "Content-Type": "text/html" }),
-        this.headers,
-      ),
+        status,
+        headers: merge(new Headers({ "Content-Type": "text/html" }), this.headers),
     });
-  }
+}
 
-  json(data: unknown, status: number = 200): Response {
-    if (
-      typeof data === "object" && data !== null && Symbol.asyncIterator in data
-    ) {
-      return this.jsonStream(data as AsyncIterable<unknown>, status);
+
+	json(data: unknown, status: number = 200): Response {
+    if (typeof data === "object" && data !== null && Symbol.asyncIterator in data) {
+        return this.jsonStream(data as AsyncIterable<unknown>, status);
     }
-    return new Response(JSON.stringify(data), {
-      status,
-      headers: merge(
-        new Headers({ "Content-Type": "application/json" }),
-        this.headers,
-      ),
+    return new Response(JSON.stringify(data), { 
+        status, 
+        headers: merge(new Headers({ "Content-Type": "application/json" }), this.headers) 
     });
-  }
+}
 
-  jsonStream(
-    dataGenerator: AsyncIterable<unknown>,
-    status: number = 200,
-  ): Response {
+	jsonStream(dataGenerator: AsyncIterable<unknown>, status: number = 200): Response {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
-      async start(controller) {
-        controller.enqueue(encoder.encode("["));
-        let first = true;
-        for await (const item of dataGenerator) {
-          if (!first) controller.enqueue(encoder.encode(","));
-          first = false;
-          controller.enqueue(encoder.encode(JSON.stringify(item)));
-        }
-        controller.enqueue(encoder.encode("]"));
-        controller.close();
-      },
+        async start(controller) {
+            controller.enqueue(encoder.encode("["));
+            let first = true;
+            for await (const item of dataGenerator) {
+                if (!first) controller.enqueue(encoder.encode(","));
+                first = false;
+                controller.enqueue(encoder.encode(JSON.stringify(item)));
+            }
+            controller.enqueue(encoder.encode("]"));
+            controller.close();
+        },
     });
 
     return new Response(stream, {
-      status,
-      headers: merge(
-        new Headers({ "Content-Type": "application/json" }),
-        this.headers,
-      ),
+        status,
+        headers: merge(new Headers({ "Content-Type": "application/json" }), this.headers),
     });
-  }
+}
+
 
   redirect(url: string, status: number = 302): Response {
     return new Response(null, {
@@ -281,58 +239,60 @@ export class Context {
     });
   }
 
-  async parseBody<T = unknown>(): Promise<T | null> {
+	async parseBody<T = unknown>(): Promise<T | null> {
     const contentType = this.req.headers.get("Content-Type");
 
     if (!contentType) return null;
 
     try {
-      const text = await this.req.text();
-      if (!text.trim()) {
-        return null; // Return null if body is empty
-      }
-
-      if (contentType.includes("application/json")) {
-        try {
-          return JSON.parse(text) as T; // Manually parse JSON
-        } catch (error) {
-          throw new Error("Malformed JSON body"); // Throw error for malformed JSON
+        const text = await this.req.text();
+        if (!text.trim()) {
+            return null; // Return null if body is empty
         }
-      }
 
-      if (contentType.includes("application/x-www-form-urlencoded")) {
-        const formData = new URLSearchParams(text);
-        return Object.fromEntries(formData.entries()) as T;
-      }
-
-      if (contentType.includes("multipart/form-data")) {
-        const formData = await this.req.formData();
-        const data: Record<string, unknown> = {};
-        formData.forEach((value, key) => {
-          if (data[key]) {
-            if (Array.isArray(data[key])) {
-              (data[key] as any[]).push(value);
-            } else {
-              data[key] = [data[key], value];
+        if (contentType.includes("application/json")) {
+            try {
+                return JSON.parse(text) as T; // Manually parse JSON
+            } catch (error) {
+                throw new Error("Malformed JSON body"); // Throw error for malformed JSON
             }
-          } else {
-            data[key] = value;
-          }
-        });
-        return data as T;
-      }
+        }
 
-      if (contentType.includes("text/plain")) {
-        return text as T;
-      }
+        if (contentType.includes("application/x-www-form-urlencoded")) {
+            const formData = new URLSearchParams(text);
+            return Object.fromEntries(formData.entries()) as T;
+        }
+
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await this.req.formData();
+            const data: Record<string, unknown> = {};
+            formData.forEach((value, key) => {
+                if (data[key]) {
+                    if (Array.isArray(data[key])) {
+                        (data[key] as any[]).push(value);
+                    } else {
+                        data[key] = [data[key], value];
+                    }
+                } else {
+                    data[key] = value;
+                }
+            });
+            return data as T;
+        }
+
+        if (contentType.includes("text/plain")) {
+            return text as T;
+        }
     } catch (error) {
-      console.error("Error parsing request body:", error);
-      throw error; // Ensure errors are propagated to the error handler
+        console.error("Error parsing request body:", error);
+        throw error; // Ensure errors are propagated to the error handler
     }
 
     return null;
-  }
 }
+
+}
+
 
 //====================================
 // router
@@ -341,41 +301,37 @@ export class Context {
 type RouteNode = {
   children: Record<string, RouteNode>;
   wildcard?: RouteNode;
-  handlers: Partial<
-    Record<
-      string,
-      { regex: RegExp; handlers: Middleware[]; finalHandler: Handler }
-    >
-  >;
+  handlers: Partial<Record<string, { regex: RegExp; handlers: Middleware[]; finalHandler: Handler }>>;
 };
 
 export class Xerus {
+
   private trie: RouteNode = { children: {}, handlers: {} };
-  private globalErrorHandler: ErrorHandler = async (ctx, err) => {
+	private globalErrorHandler: ErrorHandler = async (ctx, err) => {
     console.error("Unhandled Error:", err);
 
     let status = 500;
     let message = "Internal Server Error";
 
     if (err instanceof Response) {
-      return err; // Allows early returns from middleware as responses.
+        return err; // Allows early returns from middleware as responses.
     } else if (err instanceof Error) {
-      message = err.message;
+        message = err.message;
     } else if (typeof err === "string") {
-      message = err;
+        message = err;
     }
 
     return new Response(
-      JSON.stringify({
-        error: true,
-        message: status === 500 ? "An unexpected error occurred" : message,
-      }),
-      {
-        status,
-        headers: { "Content-Type": "application/json" },
-      },
+        JSON.stringify({
+            error: true,
+            message: status === 500 ? "An unexpected error occurred" : message,
+        }),
+        {
+            status,
+            headers: { "Content-Type": "application/json" },
+        }
     );
-  };
+};
   private globalMiddlewares: Middleware[] = [];
 
   /**
@@ -392,13 +348,8 @@ export class Xerus {
     this.globalMiddlewares.push(...middlewares);
   }
 
-  private register(
-    method: string,
-    path: string,
-    handler: Handler,
-    middlewares: Middleware[],
-  ) {
-    const segments = path.split("/").filter(Boolean);
+  private register(method: string, path: string, handler: Handler, middlewares: Middleware[]) {
+    const segments = path.split('/').filter(Boolean);
     let node = this.trie;
 
     for (const segment of segments) {
@@ -414,11 +365,7 @@ export class Xerus {
         node = node.children[segment];
       }
     }
-    node.handlers[method] = {
-      regex: pathToRegex(path),
-      handlers: middlewares,
-      finalHandler: handler,
-    };
+    node.handlers[method] = { regex: pathToRegex(path), handlers: middlewares, finalHandler: handler };
   }
 
   get(path: string, handler: Handler, ...middlewares: Middleware[]) {
@@ -449,96 +396,81 @@ export class Xerus {
     this.register("HEAD", path, handler, middlewares);
   }
 
-  async handleRequest(req: Request): Promise<Response> {
-    try {
-      const url = new URL(req.url);
-      const pathname = url.pathname;
-      const segments = pathname.split("/").filter(Boolean);
+	async handleRequest(req: Request): Promise<Response> {
+		try {
+			const url = new URL(req.url);
+			const pathname = url.pathname;
+			const segments = pathname.split("/").filter(Boolean);
+	
+			let node: RouteNode | null = this.trie;
+			let ctx = new Context(req);
+	
+			let paramMatches: Record<string, string> = {};
+			let exactMatchNode: RouteNode | null = node;
+			let paramMatchNode: RouteNode | null = null;
+			let wildcardNode: RouteNode | null = null;
+			let wildcardMatch: string | null = null;
+	
+			for (let i = 0; i < segments.length; i++) {
+				const segment = segments[i];
+	
+				if (exactMatchNode?.children[segment]) {
+					exactMatchNode = exactMatchNode.children[segment];
+				} else {
+					exactMatchNode = null;
+				}
+	
+				const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
+				if (paramKey) {
+					paramMatches[paramKey.slice(1)] = segment;
+					paramMatchNode = node.children[paramKey];
+				}
+	
+				if (node.wildcard) {
+					wildcardMatch = segments.slice(i).join("/");
+					wildcardNode = node.wildcard;
+					break;
+				}
+	
+				if (node.children[segment]) {
+					node = node.children[segment];
+				} else if (paramMatchNode) {
+					node = paramMatchNode;
+				} else {
+					node = wildcardNode;
+					break;
+				}
+			}
+	
+			let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
+			if (!matchedNode) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: new Headers({ "Content-Type": "application/json" }) });
+	
+			const methodHandlers = matchedNode.handlers[req.method];
+			if (!methodHandlers) {
+				return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+					status: 405,
+					headers: new Headers({ "Content-Type": "application/json" }),
+				});
+			}
+	
+			ctx.params = { ...ctx.params, ...paramMatches };
+			if (wildcardMatch) ctx.params["*"] = wildcardMatch;
+	
+			return this.runMiddlewares(
+				[...this.globalMiddlewares, ...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)],
+				ctx
+			);
+		} catch (err) {
+			return this.globalErrorHandler(new Context(req), err);
+		}
+	}	
 
-      let node: RouteNode | null = this.trie;
-      let ctx = new Context(req);
 
-      let paramMatches: Record<string, string> = {};
-      let exactMatchNode: RouteNode | null = node;
-      let paramMatchNode: RouteNode | null = null;
-      let wildcardNode: RouteNode | null = null;
-      let wildcardMatch: string | null = null;
-
-      for (let i = 0; i < segments.length; i++) {
-        const segment = segments[i];
-
-        if (exactMatchNode?.children[segment]) {
-          exactMatchNode = exactMatchNode.children[segment];
-        } else {
-          exactMatchNode = null;
-        }
-
-        const paramKey: any = Object.keys(node.children).find((k) =>
-          k.startsWith(":")
-        );
-        if (paramKey) {
-          paramMatches[paramKey.slice(1)] = segment;
-          paramMatchNode = node.children[paramKey];
-        }
-
-        if (node.wildcard) {
-          wildcardMatch = segments.slice(i).join("/");
-          wildcardNode = node.wildcard;
-          break;
-        }
-
-        if (node.children[segment]) {
-          node = node.children[segment];
-        } else if (paramMatchNode) {
-          node = paramMatchNode;
-        } else {
-          node = wildcardNode;
-          break;
-        }
-      }
-
-      let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
-      if (!matchedNode) {
-        return new Response(JSON.stringify({ error: "Not Found" }), {
-          status: 404,
-          headers: new Headers({ "Content-Type": "application/json" }),
-        });
-      }
-
-      const methodHandlers = matchedNode.handlers[req.method];
-      if (!methodHandlers) {
-        return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-          status: 405,
-          headers: new Headers({ "Content-Type": "application/json" }),
-        });
-      }
-
-      ctx.params = { ...ctx.params, ...paramMatches };
-      if (wildcardMatch) ctx.params["*"] = wildcardMatch;
-
-      return this.runMiddlewares(
-        [
-          ...this.globalMiddlewares,
-          ...methodHandlers.handlers,
-          async (c: Context) => methodHandlers.finalHandler(c),
-        ],
-        ctx,
-      );
-    } catch (err) {
-      return this.globalErrorHandler(new Context(req), err);
-    }
-  }
-
-  private async runMiddlewares(
-    handlers: (Middleware | Handler)[],
-    ctx: Context,
-  ): Promise<Response> {
+  private async runMiddlewares(handlers: (Middleware | Handler)[], ctx: Context): Promise<Response> {
     let index = -1;
     const next = async (): Promise<Response> => {
       index++;
-      if (index >= handlers.length) {
-        return new Response("Unexpected server error", { status: 500 });
-      }
+      if (index >= handlers.length) return new Response("Unexpected server error", { status: 500 });
 
       try {
         return await handlers[index](ctx, next);
