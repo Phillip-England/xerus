@@ -322,3 +322,11 @@ test("GET /search?q= should return empty string as query value", async () => {
   expect(res.status).toBe(200);
   expect(json).toEqual({ term: "", allParams: { q: "" } });
 });
+
+test("Middleware execution order should be Global -> Route-specific -> Handler", async () => {
+  const res = await fetch(`${BASE_URL}/test-middleware-order`);
+  const json = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(json).toEqual({ order: "A->B->C->Handler" });
+});

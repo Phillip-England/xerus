@@ -77,19 +77,21 @@ export async function logger(ctx: Context, next: () => Promise<Response>): Promi
   return response;
 }
 
-export async function cors(ctx: Context,  next: () => Promise<Response>): Promise<Response> {
-    ctx.headers.set("Access-Control-Allow-Origin", "*");
-    ctx.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    ctx.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    ctx.headers.set("Access-Control-Expose-Headers", "");
-    ctx.headers.set("Access-Control-Max-Age", "86400");
+export async function cors(ctx: Context, next: () => Promise<Response>): Promise<Response> {
+  ctx.headers.set("Access-Control-Allow-Origin", "*");
+  ctx.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  ctx.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  ctx.headers.set("Access-Control-Expose-Headers", "");
+  ctx.headers.set("Access-Control-Max-Age", "86400");
 
-    if (ctx.req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: ctx.headers });
-    }
+  if (ctx.req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: merge(ctx.headers) });
+  }
 
-    return await next();
-  };
+  const response = await next();
+  return new Response(response.body, { status: response.status, headers: merge(response.headers, ctx.headers) });
+}
+
 
 export const customCors: ((options?: {
   origin?: string;
@@ -413,84 +415,95 @@ export class Xerus {
     this.register("HEAD", path, handler, middlewares);
   }
 
-	async handleRequest(req: Request): Promise<Response> {
-		try {
-			const url = new URL(req.url);
-			const pathname = url.pathname;
-			const segments = pathname.split("/").filter(Boolean);
-	
-			let node: RouteNode | null = this.trie;
-			let ctx = new Context(req);
-	
-			let paramMatches: Record<string, string> = {};
-			let exactMatchNode: RouteNode | null = node;
-			let paramMatchNode: RouteNode | null = null;
-			let wildcardNode: RouteNode | null = null;
-			let wildcardMatch: string | null = null;
-	
-			for (let i = 0; i < segments.length; i++) {
-				const segment = segments[i];
-	
-				if (exactMatchNode?.children[segment]) {
-					exactMatchNode = exactMatchNode.children[segment];
-				} else {
-					exactMatchNode = null;
-				}
-	
-				const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
-				if (paramKey) {
-					paramMatches[paramKey.slice(1)] = segment;
-					paramMatchNode = node.children[paramKey];
-				}
-	
-				if (node.wildcard) {
-					wildcardMatch = segments.slice(i).join("/");
-					wildcardNode = node.wildcard;
-					break;
-				}
-	
-				if (node.children[segment]) {
-					node = node.children[segment];
-				} else if (paramMatchNode) {
-					node = paramMatchNode;
-				} else {
-					node = wildcardNode;
-					break;
-				}
-			}
-	
-			let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
-			if (!matchedNode) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404, headers: new Headers({ "Content-Type": "application/json" }) });
-	
-			const methodHandlers = matchedNode.handlers[req.method];
-			if (!methodHandlers) {
-				return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-					status: 405,
-					headers: new Headers({ "Content-Type": "application/json" }),
-				});
-			}
-	
-			ctx.params = { ...ctx.params, ...paramMatches };
-			if (wildcardMatch) ctx.params["*"] = wildcardMatch;
-	
-			return this.runMiddlewares(
-				[...this.globalMiddlewares, ...methodHandlers.handlers, async (c: Context) => methodHandlers.finalHandler(c)],
-				ctx
-			);
-		} catch (err) {
-			return this.globalErrorHandler(new Context(req), err);
-		}
-	}	
-
+  async handleRequest(req: Request): Promise<Response> {
+    try {
+      const url = new URL(req.url);
+      const pathname = url.pathname;
+      const segments = pathname.split("/").filter(Boolean);
+  
+      let node: RouteNode | null = this.trie;
+      let ctx = new Context(req);
+  
+      let paramMatches: Record<string, string> = {};
+      let exactMatchNode: RouteNode | null = node;
+      let paramMatchNode: RouteNode | null = null;
+      let wildcardNode: RouteNode | null = null;
+      let wildcardMatch: string | null = null;
+  
+      // Traverse the Trie to find the route
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+  
+        if (exactMatchNode?.children[segment]) {
+          exactMatchNode = exactMatchNode.children[segment];
+        } else {
+          exactMatchNode = null;
+        }
+  
+        const paramKey: any = Object.keys(node.children).find((k) => k.startsWith(":"));
+        if (paramKey) {
+          paramMatches[paramKey.slice(1)] = segment;
+          paramMatchNode = node.children[paramKey];
+        }
+  
+        if (node.wildcard) {
+          wildcardMatch = segments.slice(i).join("/");
+          wildcardNode = node.wildcard;
+          break;
+        }
+  
+        if (node.children[segment]) {
+          node = node.children[segment];
+        } else if (paramMatchNode) {
+          node = paramMatchNode;
+        } else {
+          node = wildcardNode;
+          break;
+        }
+      }
+  
+      let matchedNode = exactMatchNode || paramMatchNode || wildcardNode;
+      if (!matchedNode) {
+        return new Response(JSON.stringify({ error: "Not Found" }), {
+          status: 404,
+          headers: new Headers({ "Content-Type": "application/json" }),
+        });
+      }
+  
+      const methodHandlers = matchedNode.handlers[req.method];
+      if (!methodHandlers) {
+        return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
+          status: 405,
+          headers: new Headers({ "Content-Type": "application/json" }),
+        });
+      }
+  
+      ctx.params = { ...ctx.params, ...paramMatches };
+      if (wildcardMatch) ctx.params["*"] = wildcardMatch;
+  
+      // **Ensuring global middlewares run first**
+      const middlewaresToRun = [
+        ...this.globalMiddlewares, // Global middlewares first
+        ...methodHandlers.handlers, // Route-specific middlewares
+        async (c: Context) => methodHandlers.finalHandler(c), // Final handler
+      ];
+  
+      return this.runMiddlewares(middlewaresToRun, ctx);
+    } catch (err) {
+      return this.globalErrorHandler(new Context(req), err);
+    }
+  }
+  
 
   private async runMiddlewares(handlers: (Middleware | Handler)[], ctx: Context): Promise<Response> {
     let index = -1;
     const next = async (): Promise<Response> => {
       index++;
       if (index >= handlers.length) return new Response("Unexpected server error", { status: 500 });
-
+  
       try {
-        return await handlers[index](ctx, next);
+        const response = await handlers[index](ctx, next);
+        return new Response(response.body, { status: response.status, headers: merge(response.headers, ctx.headers) });
       } catch (err) {
         return this.globalErrorHandler(ctx, err);
       }

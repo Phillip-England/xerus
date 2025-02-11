@@ -166,6 +166,29 @@ app.get("/search", async (c: Context) => {
   return c.json({ term, allParams });
 });
 
+export const middlewareA = makeMiddleware(async (c, next) => {
+  c.store.order = (c.store.order || "") + "A->";
+  return await next();
+});
+
+export const middlewareB = makeMiddleware(async (c, next) => {
+  c.store.order = (c.store.order || "") + "B->";
+  return await next();
+});
+
+export const middlewareC = makeMiddleware(async (c, next) => {
+  c.store.order = (c.store.order || "") + "C->";
+  return await next();
+});
+
+app.use(middlewareA, middlewareB); // Global Middlewares
+
+app.get("/test-middleware-order", async (c) => {
+  c.store.order += "Handler";
+  return c.json({ order: c.store.order });
+}, middlewareC); // Route-specific Middleware
+
+
 let server = Bun.serve({
   port: 8080,
   idleTimeout: 10,
