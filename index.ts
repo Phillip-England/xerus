@@ -36,7 +36,7 @@ app.post("/", async (c: Context) => {
   return c.json({ "user": "phillip" }, 200);
 });
 
-app.get("/static/*", staticHandler("./static"), logger);
+app.get("/static/*", staticHandler("./static"));
 
 app.get("/user/settings", async (c: Context) => {
   return c.html("<h1>User Settings</h1>");

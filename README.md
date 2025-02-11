@@ -12,9 +12,21 @@ bun add github:phillip-england/xerus
 Get a server up and running!
 
 ```ts
-import { type Context, Xerus } from "xerus/xerus";
+import { type Context, Xerus, logger, errorHandler, staticHandler } from "xerus/xerus";
 
 const app = new Xerus();
+
+app.use(logger, errorHandler);
+
+app.setErrorHandler(async (c, err) => {
+  console.error("Custom Error:", err);
+  return c.json({
+    error: "Something went wrong",
+    details: (err as Error).message,
+  }, 500);
+});
+
+app.get("/static/*", staticHandler("./static"));
 
 app.get("/", async (c: Context) => {
   return c.html("<h1>Hello, World!</h1>");
@@ -30,6 +42,13 @@ let server = Bun.serve({
 });
 
 console.log(`starting server on port ${server.port}! 🚀`);
+```
+
+## Static Files
+Xerus can serve static files using a built in handler. In this example, I show how to serve static files from `./static` using a wildcard `*` path:
+
+```ts
+app.get("/static/*", staticHandler("./static"));
 ```
 
 ## Middleware
