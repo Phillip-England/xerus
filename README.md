@@ -6,6 +6,56 @@ HTTP primitives for Bun.
 bun add github:phillip-england/xerus
 ```
 
+## Hello, World
+Create an `index.ts` and paste in the following code:
+
+```ts
+import { Router } from 'xerus/router'
+import { Handler } from 'xerus/handler'
+import { Context } from 'xerus/context'
+import { logger } from 'xerus/middleware';
+
+const r = new Router();
+
+r.get("/static/*", new Handler(async (c: Context): Promise<Response> => {
+	let file = await c.file("."+c.path)
+	if (!file) {
+		return c.status(404).send('file not found')
+	}
+	return file
+}));
+
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
+  return c.html("<h1>Hello, World!</h1>");
+}, logger));
+
+const server = Bun.serve({
+  port: 8080,
+  fetch: async (req: Request) => {
+		try {
+      const { handler, c } = r.find(req);
+      if (handler) {
+        return handler.execute(c);
+      }
+      return c.status(404).send("404 Not Found");
+    } catch (e: any) {
+      console.error(e);
+      return new Response("internal server error", { status: 500 });
+
+    }
+  },
+});
+
+console.log(`Server running on ${server.port}`);
+```
+
+Run the application using:
+```bash
+bun run --hot index.ts
+```
+
+Visit `localhost:8080`
+
 ## Router
 The `Router` class does one thing: it takes a request, parses it's path, and gets you the associated `Handler`. That's it. Use it along with `Bun.serve` like so:
 
