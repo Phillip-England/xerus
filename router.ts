@@ -52,7 +52,7 @@ export class Router {
     node.handlers.set(method, handler);
   }
 
-  find(req: Request): { handler?: Handler; context: Context } {
+  find(req: Request): { handler?: Handler; c: Context } {
     const method = req.method;
     const url = new URL(req.url);
     const path = url.pathname;
@@ -72,7 +72,7 @@ export class Router {
         node = node!.wildcard;
         break;
       } else {
-        return { handler: undefined, context: new Context(req) };
+        return { handler: undefined, c: new Context(req) };
       }
     }
 
@@ -80,6 +80,6 @@ export class Router {
     const handler = node!.handlers.get(method);
     
     // If no handler is found for the specific method, return undefined.
-    return { handler, context: new Context(req, params) };
+    return { handler, c: new Context(req, params) };
   }
 }

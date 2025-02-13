@@ -22,7 +22,7 @@ const server = Bun.serve({
 		try { // use a try-catch so you can catch all errors in your application
       const { handler, c } = r.find(req); // find the route (and it's context)
       if (handler) {
-        return handler.execute(context);
+        return handler.execute(c);
       }
       return c.status(404).send("404 Not Found"); // return a 404 if a route does not exist
     } catch (e: any) { // catch and log all errors
@@ -167,11 +167,11 @@ const server = Bun.serve({
   port: 8080,
   fetch: async (req: Request) => {
     try {
-      const { handler, context } = r.find(req);
+      const { handler, c } = r.find(req);
       if (handler) {
-        return handler.execute(context);
+        return handler.execute(c);
       }
-      return context.status(404).send("404 Not Found");
+      return c.status(404).send("404 Not Found");
     } catch (e: any) {
       console.error(e);
       return new Response("internal server error", { status: 500 });
