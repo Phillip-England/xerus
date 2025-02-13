@@ -1,12 +1,7 @@
-import { Handler } from "../handler";
-import { logger, Middleware } from "../middleware";
-import { Context } from "../context";
-import { Router } from "../router";
+import { Handler, logger, Middleware, Context, Router } from "../primitives";
 
 // define router
 const r = new Router();
-
-
 
 // middleware to test
 let mwEcho1 = new Middleware(async (c, next) => {
@@ -36,6 +31,14 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
   console.log('mwEarlyResponse created response');
   return response;
 });
+
+//==========================================
+// basic endpoint for speed tests
+//==========================================
+
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
+	return c.html("<h1>Hello, World!</h1>")
+}, logger))
 
 //==========================================
 // testing basic context methods
@@ -75,11 +78,11 @@ const server = Bun.serve({
   port: 8080,
   fetch: async (req: Request) => {
     try {
-      const { handler, context } = r.find(req);
+      const { handler, c } = r.find(req);
       if (handler) {
-        return handler.execute(context);
+        return handler.execute(c);
       }
-      return context.status(404).send("404 Not Found");
+      return c.status(404).send("404 Not Found");
     } catch (e: any) {
       console.error(e);
       return new Response("internal server error", { status: 500 });

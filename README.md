@@ -10,10 +10,7 @@ bun add github:phillip-england/xerus
 Create an `index.ts` and paste in the following code:
 
 ```ts
-import { Router } from 'xerus/router'
-import { Handler } from 'xerus/handler'
-import { Context } from 'xerus/context'
-import { logger } from 'xerus/middleware';
+import { Router, Handler, Context, logger } from 'xerus/primitives'
 
 const r = new Router();
 

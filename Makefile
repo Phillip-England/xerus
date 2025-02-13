@@ -17,4 +17,4 @@ run:
 	bun run --hot index.ts
 
 combine:
-	cat ./primitives/*.ts > combined.ts
+	cat ./*.ts > combined.ts
