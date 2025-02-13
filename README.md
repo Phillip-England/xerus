@@ -1,6 +1,11 @@
 # Xerus
 HTTP primitives for Bun.
 
+## Installation
+```bash
+bun add github:phillip-england/xerus
+```
+
 ## Router
 The `Router` class does one thing: it takes a request, parses it's path, and gets you the associated `Handler`. That's it. Use it along with `Bun.serve` like so:
 
@@ -14,21 +19,13 @@ r.get("/", new Handler(async (c: Context): Promise<Response> => {
 const server = Bun.serve({
   port: 8080,
   fetch: async (req: Request) => {
-		// use a try-catch so you can catch all errors in your application
-    try {
-
-			// find the route (and it's context)
-      const { handler, c } = r.find(req);
+		try { // use a try-catch so you can catch all errors in your application
+      const { handler, c } = r.find(req); // find the route (and it's context)
       if (handler) {
         return handler.execute(context);
       }
-
-			// return a 404 if a route does not exist
-      return c.status(404).send("404 Not Found");
-
-    } catch (e: any) {
-			
-			// catch and log all errors
+      return c.status(404).send("404 Not Found"); // return a 404 if a route does not exist
+    } catch (e: any) { // catch and log all errors
       console.error(e);
       return new Response("internal server error", { status: 500 });
 
@@ -68,8 +65,6 @@ let handleHome = new Handler(async (c: Context): Promise<Response> => {
 })
 
 r.get("/", handlerHome);
-
-// serve the app
 ```
 
 ## MutResponse
