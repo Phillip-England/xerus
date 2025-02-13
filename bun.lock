@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "xerus",
+      "name": "bun-server",
       "devDependencies": {
         "@types/bun": "latest",
       },

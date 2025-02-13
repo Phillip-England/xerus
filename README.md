@@ -1,193 +1,188 @@
 # Xerus
-A minimal http framework for Bun!
+HTTP primitives for Bun.
 
-## Installation
-Install Xerus from github.
-
-```bash
-bun add github:phillip-england/xerus
-```
-
-## Hello, World!
-Get a server up and running!
+## Router
+The `Router` class does one thing: it takes a request, parses it's path, and gets you the associated `Handler`. That's it. Use it along with `Bun.serve` like so:
 
 ```ts
-import { type Context, Xerus, logger, errorHandler, staticHandler } from "xerus/xerus";
+const r = new Router();
 
-const app = new Xerus();
-
-app.use(logger, errorHandler);
-
-app.setErrorHandler(async (c, err) => {
-  console.error("Custom Error:", err);
-  return c.json({
-    error: "Something went wrong",
-    details: (err as Error).message,
-  }, 500);
-});
-
-app.get("/static/*", staticHandler("./static"));
-
-app.get("/", async (c: Context) => {
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
   return c.html("<h1>Hello, World!</h1>");
-});
+}));
 
-let server = Bun.serve({
+const server = Bun.serve({
   port: 8080,
-  idleTimeout: 10,
-  development: false,
-  async fetch(req) {
-    return await app.handleRequest(req);
+  fetch: async (req: Request) => {
+		// use a try-catch so you can catch all errors in your application
+    try {
+
+			// find the route (and it's context)
+      const { handler, c } = r.find(req);
+      if (handler) {
+        return handler.execute(context);
+      }
+
+			// return a 404 if a route does not exist
+      return c.status(404).send("404 Not Found");
+
+    } catch (e: any) {
+			
+			// catch and log all errors
+      console.error(e);
+      return new Response("internal server error", { status: 500 });
+
+    }
   },
 });
 
-console.log(`starting server on port ${server.port}! 🚀`);
+console.log(`Server running on ${server.port}`);
 ```
 
-## Static Files
-Xerus can serve static files using a built in handler. In this example, I show how to serve static files from `./static` using a wildcard `*` path:
+You can also use routes with parameters like so:
+```ts
+r.get("/user/:id", new Handler(async (c: Context): Promise<Response> => {
+  return c.html(`<h1>${c.param('id')}</h1>`);
+}));
+```
+
+Or you can use a wildcard, like in this example for serving static files from `./static`:
+```ts
+r.get("/static/*", new Handler(async (c: Context): Promise<Response> => {
+	let file = await c.file("."+c.path)
+	if (!file) {
+		return c.status(404).send('file not found')
+	}
+	return file
+}));
+```
+
+## Handler
+The `Handler` class is used to create endpoints for our application. In this example, we seperate concerns by first creating a handler, then adding it to our router:
 
 ```ts
-app.get("/static/*", staticHandler("./static"));
+const r = new Router();
+
+let handleHome = new Handler(async (c: Context): Promise<Response> => {
+  return c.html("<h1>Hello, World!</h1>");
+})
+
+r.get("/", handlerHome);
+
+// serve the app
+```
+
+## MutResponse
+In Bun, the `Response` object is immutable. This makes implementing middleware difficult as different middlewares are unable to make alterations to the `Response` throughout it's lifecycle.
+
+That is where `MutResponse` comes into play.
+
+You'll mainly work with `MutResponse` via the `Context` object. For example:
+
+```ts
+// here we work directly with the Context object
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
+  return c.html("<h1>Hello, World!</h1>");
+}));
+
+// here, we access MutResponse directly
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
+  return c.res.header('content-type', 'text/html').body('<h1>Hello, World!</h1>').send();
+}));
+```
+
+As you can see in the above example, `Context` abstracts on top of `MutResponse`.
+
+## Context
+Each `Handler` instance is given access to a `Context` instance. `Context` is used to work with the `MutResponse` as well as the `Response` type provided by the Bun runtime.
+
+`Context` allow us to:
+- get, set, and delete cookies
+- parse the incoming request body
+- get a url param like :id in "/user/:id"
+- set the response status code
+- set a header in the response
+- send an html response
+- send a json response
+- steam a `ReadableStream` as a response
+- send or stream a file as a response
+- store and retrieve data from the global store
+- get a url query param like name in "/?name=bob"
+
+## Static Files
+Serving static files can be accomplished by using a wildcard path `/static/*` in conjunction with the `Context.file` method.
+
+In this example, I am serving static files from `./static`:
+```ts
+r.get("/static/*", new Handler(async (c: Context): Promise<Response> => {
+	let file = await c.file("."+c.path)
+	if (!file) {
+		// what to do if we can't find the requested file
+		return c.status(404).send('file not found')
+	}
+	return file
+}));
 ```
 
 ## Middleware
-In Xerus, middlewares are either applied globally, or chained onto the end of a specific handler.
+`Middleware` can be applied to a route by chaining it on to the end of a `Handler`. this is the ONLY way to apply `Middleware` to a route, by design. 
 
-### Creating Custom Middleware
-Xerus provides the `makeMiddleware` function to be used for creating custom middleware.
+I made this decision because I do not intend for Xerus to be a fully fledged framework. Instead, I intend to provide primitives others can use in their own projects.
 
-Creating a middleware with `makeMiddleware` and applying it globally:
+Here, I will show you how to create and use the `logger` middleware. This `Middleware` is provided by Xerus and can be used by importing it, but it provides a good example of how to use create and use `Middleware`.
+
+First, here is a `Middleware` template for quick use:
 ```ts
-export const echo = makeMiddleware(async (ctx, next) => {
-  console.log('echo')
-  return await next();
-});
-
-app.use(echo)
-```
-
-### Chaining Middleware on a Handler
-Middleware can also be chained onto the end of a handler
-
-Using the global store to set a value in a middleware:
-```ts
-export const testStore = makeMiddleware(async (ctx, next) => {
-  ctx.store.test = "testing"; // setting value in global store
-  return await next();
+export const logger = new Middleware(async (c: Context, next) => {
+	// things that happen before the request
+  await next();
+	// things that happen after the request
 });
 ```
 
-Chaining `testStore` to the end of a handler and retrieving the value from the global store:
+Then, for our `logger` we can do this:
 ```ts
-app.get("/testing-store", async (c: Context) => {
-  return c.html(`<h1>${c.store.test}</h1>`); // using value from global store
-}, testStore);
-```
-
-### Built-In Middleware
-Xerus provides a few built-in middlewares as listed below.
-
-`logger` is used to log request details.
-`cors` is used to setup default cors configuration.
-`errorHandler` is used to setup default error handling for each request.
-
-### Custom Cors
-`customCors` is a provided function which allows us to create new middleware with custom cors configuration. It is used like so:
-
-```ts
-const corsMiddleware = customCors({
-  origin: "http://example.com",
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  exposedHeaders: ["X-Custom-Header"],
-  credentials: true,
-  maxAge: 600,
-});
-
-app.get("/cors-test", async (ctx) => {
-  return ctx.json({ message: "CORS is working!" });
-}, corsMiddleware); // chaining the middleware on here
-```
-
-### Custom Error Handling
-`Xerus` had a method called, `setErrorHandler` which allows us to override the default error handling and setup our own custom solution. Here is an example of what setting up custom error handling looks like:
-
-```ts
-const app = new Xerus();
-
-app.use(errorHandler)
-
-app.setErrorHandler(async (ctx, err) => {
-  console.error("Custom Error:", err);
-  return ctx.json({
-    error: "Something went wrong",
-    details: (err as Error).message,
-  }, 500);
+export const logger = new Middleware(async (c: Context, next) => {
+  const start = performance.now(); // get the start time before the request
+  await next();
+  const duration = performance.now() - start; // calculate time taken after request
+  console.log(`[${c.req.method}][${c.path}][${duration.toFixed(2)}ms]`); // print
 });
 ```
 
-## Cookies
-`Context` provides a few methods, `setCookie` and `deleteCookie`, to work with cookies.
-
-Setting a cookie:
+We can then use our `Middleware` by chaining it onto the end of a `Handler`:
 ```ts
-app.get("/set-cookie", async (c: Context) => {
-  c.setCookie("user", "phillip", { httpOnly: true, maxAge: 3600 });
-  return c.html("<h1>Cookie Set!</h1>");
-});
+r.get("/", new Handler(async (c: Context): Promise<Response> => {
+  return c.html("<h1>Hello, World!</h1>");
+}, logger)); // <====== chain middleware here
 ```
 
-Deleting a cookie:
+## Serving
+Xerus applications are served using `Bun.serve`. This is another design decision made to help keep Xerus a tool to be used in other projects. Xerus just provides the primitives, you can create the abstractions on top of them.
+
+Here is a simple application served using `Bun.serve`:
 ```ts
-app.get("/delete-cookie", async (c: Context) => {
-  c.deleteCookie("user");
-  return c.html("<h1>Cookie Deleted!</h1>");
+const r = new Router();
+
+r.get("/context", new Handler(async (c: Context): Promise<Response> => {
+  return c.html("<h1>Hello, World!</h1>");
+}, logger));
+
+const server = Bun.serve({
+  port: 8080,
+  fetch: async (req: Request) => {
+    try {
+      const { handler, context } = r.find(req);
+      if (handler) {
+        return handler.execute(context);
+      }
+      return context.status(404).send("404 Not Found");
+    } catch (e: any) {
+      console.error(e);
+      return new Response("internal server error", { status: 500 });
+    }
+  },
 });
+
+console.log(`Server running on ${server.port}`);
 ```
-
-## Response Methods
-`Context` provides a few methods to enable easy response handling.
-
-JSON support:
-```ts
-app.post("/", async (c: Context) => {
-  return c.json({ "user": "phillip" }, 200);
-});
-```
-
-HTML support:
-```ts
-app.get("/", async (c: Context) => {
-  return c.html("<h1>GET /</h1>");
-});
-```
-
-## Dynamic Paths
-Xerus supports dynamic paths.
-
-```ts
-app.get("/user/:id", async (c: Context) => {
-  return c.json({ "user": "phillip", "id": c.params.id });
-});
-```
-
-## Query Params
-Xerus supports query parameters.
-
-```ts
-app.get("/search", async () => {
-  const term = ctx.query("q");
-  return ctx.html(`<h1>${term}</h1>`);
-});
-```
-
-## Wildcards
-Xerus supports wildcard paths.
-
-```ts
-app.get("/wild/*", async (c) => {
-  return c.json({ path: c.params["*"] });
-});
-```
-
