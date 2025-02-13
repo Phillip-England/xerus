@@ -1,5 +1,3 @@
-
-
 //==============================
 // cookies
 //==============================
@@ -42,24 +40,87 @@ export class Context {
     this.storeData = {};
   }
 
-  async parseBody(): Promise<string | Record<string, any> | FormData | undefined> {
-    if (this._body !== undefined) return this._body; // Cache parsed body
+  async parseBody(): Promise<
+    { data?: string | Record<string, any> | FormData; err?: Error }
+  > {
+    if (this._body !== undefined) return { data: this._body }; // Return cached parsed body
     const contentType = this.req.headers.get("Content-Type") || "";
-    if (contentType.includes("application/json")) {
-      try {
+    try {
+      if (contentType.includes("application/json")) {
         this._body = await this.req.json();
-      } catch (error) {
-        throw new Error("Invalid JSON body");
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        const text = await this.req.text();
+        this._body = Object.fromEntries(new URLSearchParams(text));
+      } else if (contentType.includes("multipart/form-data")) {
+        this._body = await this.req.formData();
+      } else {
+        this._body = await this.req.text(); // Default to plain text
       }
-    } else if (contentType.includes("application/x-www-form-urlencoded")) {
-      const text = await this.req.text();
-      this._body = Object.fromEntries(new URLSearchParams(text));
-    } else if (contentType.includes("multipart/form-data")) {
-      this._body = await this.req.formData();
-    } else {
-      this._body = await this.req.text(); // Default to plain text
+      return { data: this._body };
+    } catch (error) {
+      return { err: new Error("Failed to parse request body") };
     }
-    return this._body;
+  }
+
+  async parseJSON(): Promise<{ data?: Record<string, any>; err?: Error }> {
+    try {
+      const contentType = this.req.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/json")) {
+        return {
+          err: new Error("Invalid Content-Type, expected application/json"),
+        };
+      }
+      const jsonData = await this.req.json();
+      this._body = jsonData;
+      return { data: jsonData };
+    } catch (error) {
+      return { err: new Error("Failed to parse JSON body") };
+    }
+  }
+
+  async parseForm(): Promise<{ data?: Record<string, string>; err?: Error }> {
+    try {
+      const contentType = this.req.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/x-www-form-urlencoded")) {
+        return {
+          err: new Error(
+            "Invalid Content-Type, expected application/x-www-form-urlencoded",
+          ),
+        };
+      }
+      const text = await this.req.text();
+      const formData = Object.fromEntries(new URLSearchParams(text));
+      this._body = formData;
+      return { data: formData };
+    } catch (error) {
+      return { err: new Error("Failed to parse form data") };
+    }
+  }
+
+  async parseMultipartForm(): Promise<{ data?: FormData; err?: Error }> {
+    try {
+      const contentType = this.req.headers.get("Content-Type") || "";
+      if (!contentType.includes("multipart/form-data")) {
+        return {
+          err: new Error("Invalid Content-Type, expected multipart/form-data"),
+        };
+      }
+      const formData = await this.req.formData();
+      this._body = formData;
+      return { data: formData };
+    } catch (error) {
+      return { err: new Error("Failed to parse multipart form data") };
+    }
+  }
+
+  async parseText(): Promise<{ data?: string; err?: Error }> {
+    try {
+      const textData = await this.req.text();
+      this._body = textData;
+      return { data: textData };
+    } catch (error) {
+      return { err: new Error("Failed to parse text body") };
+    }
   }
 
   param(name: string, defaultValue?: string): string | undefined {
@@ -98,7 +159,10 @@ export class Context {
     });
   }
 
-  async file(filePath: string, stream: boolean = false): Promise<Response | undefined> {
+  async file(
+    filePath: string,
+    stream: boolean = false,
+  ): Promise<Response | undefined> {
     const file = await Bun.file(filePath);
     if (!(await file.exists())) {
       return undefined;
@@ -133,7 +197,7 @@ export class Context {
     if (!cookies) return undefined;
 
     const cookieMap = Object.fromEntries(
-      cookies.split("; ").map((c) => c.split("="))
+      cookies.split("; ").map((c) => c.split("=")),
     );
 
     return cookieMap[name];
@@ -144,8 +208,12 @@ export class Context {
 
     if (options.path) cookieString += `; Path=${options.path}`;
     if (options.domain) cookieString += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
-    if (options.expires) cookieString += `; Expires=${options.expires.toUTCString()}`;
+    if (options.maxAge !== undefined) {
+      cookieString += `; Max-Age=${options.maxAge}`;
+    }
+    if (options.expires) {
+      cookieString += `; Expires=${options.expires.toUTCString()}`;
+    }
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
@@ -230,7 +298,10 @@ export class Middleware {
     this.callback = callback;
   }
 
-  async execute(c: Context, next: () => Promise<void | Response>): Promise<void | Response> {
+  async execute(
+    c: Context,
+    next: () => Promise<void | Response>,
+  ): Promise<void | Response> {
     return this.callback(c, next);
   }
 }
@@ -242,7 +313,6 @@ export const logger = new Middleware(async (c: Context, next) => {
   const duration = performance.now() - start;
   console.log(`[${c.req.method}][${c.path}][${duration.toFixed(2)}ms]`);
 });
-
 
 export class MutResponse {
   statusCode: number;
@@ -265,11 +335,12 @@ export class MutResponse {
     return this;
   }
 
-	body(content: string | object): this {
-		this.bodyContent = typeof content === "object" ? JSON.stringify(content) : content;
-		return this;
-	}
-	
+  body(content: string | object): this {
+    this.bodyContent = typeof content === "object"
+      ? JSON.stringify(content)
+      : content;
+    return this;
+  }
 
   send(): Response {
     return new Response(this.bodyContent, {
@@ -293,12 +364,26 @@ class TrieNode {
 export class Router {
   private root: TrieNode = new TrieNode();
   private staticRoutes: Map<string, Map<string, Handler>> = new Map();
-  private resolvedRoutes: Map<string, { handler?: Handler; params: Record<string, string> }> = new Map();
+  private resolvedRoutes: Map<
+    string,
+    { handler?: Handler; params: Record<string, string> }
+  > = new Map();
 
-  get(path: string, handler: Handler) { this.add("GET", path, handler); }
-  post(path: string, handler: Handler) { this.add("POST", path, handler); }
-  put(path: string, handler: Handler) { this.add("PUT", path, handler); }
-  delete(path: string, handler: Handler) { this.add("DELETE", path, handler); }
+  get(path: string, handler: Handler) {
+    this.add("GET", path, handler);
+  }
+  post(path: string, handler: Handler) {
+    this.add("POST", path, handler);
+  }
+  put(path: string, handler: Handler) {
+    this.add("PUT", path, handler);
+  }
+  delete(path: string, handler: Handler) {
+    this.add("DELETE", path, handler);
+  }
+  patch(path: string, handler: Handler) {
+    this.add("PATCH", path, handler);
+  }
 
   private add(method: string, path: string, handler: Handler) {
     if (!path.includes(":") && !path.includes("*")) {

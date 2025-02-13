@@ -18,3 +18,9 @@ run:
 
 combine:
 	cat ./*.ts > combined.ts
+
+test:
+	bun test ./apps/app.test.ts
+
+bench:
+	bun test ./apps/bench.test.ts
