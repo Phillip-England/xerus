@@ -1,5 +1,5 @@
 import { Middleware } from "./middleware";
-import type { Context } from "./context";
+import type { Context } from "./primitives/context";
 
 export class Handler {
   private mainHandler: (c: Context) => Promise<Response>;

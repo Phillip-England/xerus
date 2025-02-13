@@ -1,7 +1,7 @@
-import { Handler } from "../primitives/handler";
-import { logger, Middleware } from "../primitives/middleware";
-import { Context } from "../primitives/context";
-import { Router } from "../primitives/router";
+import { Handler } from "../handler";
+import { logger, Middleware } from "../middleware";
+import { Context } from "../context";
+import { Router } from "../router";
 
 // define router
 const r = new Router();
