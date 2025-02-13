@@ -352,9 +352,9 @@ r.get(
     async (c: Context): Promise<Response> => {
       return c.json({ message: "Middleware order test" });
     },
+    logger,
     mwOrderTest1,
     mwOrderTest2,
-    logger,
   ),
 );
 
