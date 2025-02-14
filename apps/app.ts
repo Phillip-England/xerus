@@ -1,20 +1,7 @@
-import { Context, Handler, logger, Middleware, Router } from "../primitives";
+import { BodyType, Context, Handler, logger, Middleware, Router } from "../primitives";
 
 // define router
 const r = new Router();
-
-// middleware to test
-let mwEcho1 = new Middleware(async (c, next) => {
-  console.log("echo 1 BEFORE");
-  await next();
-  console.log("echo 1 AFTER");
-});
-
-let mwEcho2 = new Middleware(async (c, next) => {
-  console.log("echo 2 BEFORE");
-  await next();
-  console.log("echo 2 AFTER");
-});
 
 const mwOrderTest1 = new Middleware(async (c, next) => {
   console.log("Middleware 1 BEFORE");
@@ -29,7 +16,7 @@ const mwOrderTest2 = new Middleware(async (c, next) => {
 });
 
 let mwStore = new Middleware(async (c, next) => {
-  c.store("test", "testvalue");
+  c.setStore("test", "testvalue");
   await next();
 });
 
@@ -76,7 +63,7 @@ r.get(
 r.post(
   "/context/parseJSON/invalidJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseJSON();
+    let { data, err } = await c.parseBody(BodyType.JSON);
     if (err) {
       return new Response("invalid json", {
         status: 500,
@@ -89,7 +76,7 @@ r.post(
 r.post(
   "/context/parseJSON/validJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody();
+    let { data, err } = await c.parseBody(BodyType.JSON);
     if (err) {
       return new Response("invalid json", {
         status: 500,
@@ -117,7 +104,7 @@ r.get(
 r.get(
   "/context/get-cookie",
   new Handler(async (c: Context): Promise<Response> => {
-    return c.json({ cookieValue: c.cookie("testCookie") });
+    return c.json({ cookieValue: c.getCookie("testCookie") });
   }, logger),
 );
 
@@ -132,7 +119,7 @@ r.get(
 r.post(
   "/context/parseText",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseText();
+    let { data, err } = await c.parseBody(BodyType.TEXT);
     if (err) {
       return c.status(500).send("Failed to parse text");
     }
@@ -143,7 +130,7 @@ r.post(
 r.post(
   "/context/parseForm",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseForm();
+    let { data, err } = await c.parseBody(BodyType.FORM);
     if (err) {
       return c.status(500).send("Failed to parse form data");
     }
@@ -154,17 +141,19 @@ r.post(
 r.post(
   "/context/parseMultipartForm",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseMultipartForm();
+    let { data, err } = await c.parseBody(BodyType.MULTIPART_FORM);
+
     if (err) {
-      return c.status(500).send("Failed to parse multipart form data");
+      return c.status(400).send(err.message);
     }
     const formDataObject: Record<string, any> = {};
-    data!.forEach((value, key) => {
+    data!.forEach((value: any, key: any) => {
       formDataObject[key] = value;
     });
     return c.json({ receivedMultipartFormData: formDataObject });
   }, logger),
 );
+
 
 
 r.get(
@@ -294,18 +283,19 @@ r.get(
 r.post(
   "/context/parseBody/empty",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody();
+    let { data, err } = await c.parseBody(BodyType.JSON);
     if (err) {
-      return c.status(500).send("Failed to parse body");
+      return c.status(500).send("Failed to parse request body");
     }
     return c.json({ receivedBody: data });
   }, logger),
 );
 
+
 r.post(
   "/context/parseBody/largeJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseJSON();
+    let { data, err } = await c.parseBody(BodyType.JSON);
     if (err) {
       return c.status(500).send("Failed to parse large JSON");
     }

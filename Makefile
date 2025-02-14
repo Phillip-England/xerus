@@ -14,7 +14,7 @@ kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
 run:
-	bun run --hot index.ts
+	bun run --hot ./apps/app.ts
 
 combine:
 	cat ./*.ts > combined.ts

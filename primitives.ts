@@ -16,6 +16,14 @@ export interface CookieOptions {
 // context
 //==============================
 
+export enum BodyType {
+  JSON = "json",
+  TEXT = "string",
+  FORM = "form",
+  MULTIPART_FORM = "multipart_form",
+}
+
+
 export class Context {
   req: Request;
   res: MutResponse;
@@ -40,88 +48,52 @@ export class Context {
     this.storeData = {};
   }
 
-  async parseBody(): Promise<
-    { data?: string | Record<string, any> | FormData; err?: Error }
-  > {
-    if (this._body !== undefined) return { data: this._body }; // Return cached parsed body
-    const contentType = this.req.headers.get("Content-Type") || "";
-    try {
-      if (contentType.includes("application/json")) {
-        this._body = await this.req.json();
-      } else if (contentType.includes("application/x-www-form-urlencoded")) {
-        const text = await this.req.text();
-        this._body = Object.fromEntries(new URLSearchParams(text));
-      } else if (contentType.includes("multipart/form-data")) {
-        this._body = await this.req.formData();
-      } else {
-        this._body = await this.req.text(); // Default to plain text
-      }
-      return { data: this._body };
-    } catch (error) {
-      return { err: new Error("Failed to parse request body") };
-    }
-  }
-
-  async parseJSON(): Promise<{ data?: Record<string, any>; err?: Error }> {
-    try {
-      const contentType = this.req.headers.get("Content-Type") || "";
-      if (!contentType.includes("application/json")) {
-        return {
-          err: new Error("Invalid Content-Type, expected application/json"),
-        };
-      }
-      const jsonData = await this.req.json();
-      this._body = jsonData;
-      return { data: jsonData };
-    } catch (error) {
-      return { err: new Error("Failed to parse JSON body") };
-    }
-  }
-
-  async parseForm(): Promise<{ data?: Record<string, string>; err?: Error }> {
-    try {
-      const contentType = this.req.headers.get("Content-Type") || "";
-      if (!contentType.includes("application/x-www-form-urlencoded")) {
-        return {
-          err: new Error(
-            "Invalid Content-Type, expected application/x-www-form-urlencoded",
-          ),
-        };
-      }
-      const text = await this.req.text();
-      const formData = Object.fromEntries(new URLSearchParams(text));
-      this._body = formData;
-      return { data: formData };
-    } catch (error) {
-      return { err: new Error("Failed to parse form data") };
-    }
-  }
-
-  async parseMultipartForm(): Promise<{ data?: FormData; err?: Error }> {
-    try {
-      const contentType = this.req.headers.get("Content-Type") || "";
-      if (!contentType.includes("multipart/form-data")) {
-        return {
-          err: new Error("Invalid Content-Type, expected multipart/form-data"),
-        };
-      }
-      const formData = await this.req.formData();
-      this._body = formData;
-      return { data: formData };
-    } catch (error) {
-      return { err: new Error("Failed to parse multipart form data") };
-    }
-  }
-
-  async parseText(): Promise<{ data?: string; err?: Error }> {
-    try {
-      const textData = await this.req.text();
-      this._body = textData;
-      return { data: textData };
-    } catch (error) {
-      return { err: new Error("Failed to parse text body") };
-    }
-  }
+	async parseBody<T extends BodyType>(
+		expectedType: T
+	): Promise<{ data?: T extends BodyType.JSON ? Record<string, any> :
+											T extends BodyType.TEXT ? string :
+											T extends BodyType.FORM ? Record<string, string> :
+											T extends BodyType.MULTIPART_FORM ? FormData :
+											never; err?: Error }> {
+		if (this._body !== undefined) {
+			return { data: this._body as any };
+		}
+	
+		const contentType = this.req.headers.get("Content-Type") || "";
+	
+		try {
+			let parsedData: any;
+	
+			if (contentType.includes("application/json")) {
+				parsedData = await this.req.json();
+				if (expectedType !== BodyType.JSON) {
+					return { err: new Error("Expected JSON data") };
+				}
+			} else if (contentType.includes("application/x-www-form-urlencoded")) {
+				const text = await this.req.text();
+				parsedData = Object.fromEntries(new URLSearchParams(text));
+				if (expectedType !== BodyType.FORM) {
+					return { err: new Error("Expected FORM data") };
+				}
+			} else if (contentType.includes("multipart/form-data")) {
+				parsedData = await this.req.formData();
+				if (expectedType !== BodyType.MULTIPART_FORM) {
+					return { err: new Error("Expected MULTIPART_FORM data") };
+				}
+			} else {
+				parsedData = await this.req.text();
+				if (expectedType !== BodyType.TEXT) {
+					return { err: new Error("Expected TEXT data") };
+				}
+			}
+	
+			this._body = parsedData;
+			return { data: parsedData };
+		} catch {
+			return { err: new Error("Failed to parse request body") };
+		}
+	}
+	
 
   param(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
@@ -180,11 +152,11 @@ export class Context {
     });
   }
 
-  store(key: string, value: any): void {
+  setStore(key: string, value: any): void {
     this.storeData[key] = value;
   }
 
-  retrieve(key: string): any {
+  getStore(key: string): any {
     return this.storeData[key] || undefined;
   }
 
@@ -192,7 +164,7 @@ export class Context {
     return this.url.searchParams.get(name) ?? defaultValue;
   }
 
-  cookie(name: string): string | undefined {
+  getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
 
