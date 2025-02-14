@@ -42,21 +42,24 @@ r.get(
   "/",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "Hello, world!" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/html",
   new Handler(async (c: Context): Promise<Response> => {
     return c.html("<h1>Hello, World!</h1>");
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/json",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ "testing": "json" });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -64,7 +67,8 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -72,14 +76,16 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/query",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ queryValue: c.query("key", "default") });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -87,14 +93,16 @@ r.get(
   new Handler(async (c: Context): Promise<Response> => {
     c.setCookie("testCookie", "cookieValue", { path: "/", maxAge: 3600 });
     return c.json({ message: "Cookie set!" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/get-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ cookieValue: c.getCookie("testCookie") });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -102,7 +110,8 @@ r.get(
   new Handler(async (c: Context): Promise<Response> => {
     c.clearCookie("testCookie");
     return c.json({ message: "Cookie cleared!" });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -110,7 +119,8 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.TEXT);
     return c.json({ receivedText: data });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -118,7 +128,8 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.FORM);
     return c.json({ receivedFormData: data });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -130,14 +141,16 @@ r.post(
       formDataObject[key] = value;
     });
     return c.json({ receivedMultipartFormData: formDataObject });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/headers",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ userAgent: c.req.headers.get("User-Agent") });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -148,7 +161,8 @@ r.get(
       return c.status(404).send("File not found");
     }
     return file;
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -166,28 +180,32 @@ r.put(
   "/context/method/put",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "PUT method received" });
-  }, logger),
+  }),
+	logger
 );
 
 r.delete(
   "/context/method/delete",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "DELETE method received" });
-  }, logger),
+  }),
+	logger
 );
 
 r.patch(
   "/context/method/patch",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "PATCH method received" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/params/:id",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ paramValue: c.param("id") });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -197,7 +215,8 @@ r.get(
       id: c.param("id"),
       detailId: c.param("detailId"),
     });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -207,28 +226,32 @@ r.get(
       key1: c.query("key1", "default1"),
       key2: c.query("key2", "default2"),
     });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/status/200",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "OK" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/status/400",
   new Handler(async (c: Context): Promise<Response> => {
     return c.status(400).json({ error: "Bad Request" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/context/status/500",
   new Handler(async (c: Context): Promise<Response> => {
     return c.status(500).json({ error: "Internal Server Error" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -236,7 +259,8 @@ r.get(
   new Handler(async (c: Context): Promise<Response> => {
     c.setHeader("X-Custom-Header", "CustomValue");
     return c.json({ message: "Custom header set" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -244,7 +268,8 @@ r.get(
   new Handler(async (c: Context): Promise<Response> => {
     c.setCookie("secureTest", "secureValue", { secure: true, httpOnly: true });
     return c.json({ message: "Secure cookie set!" });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -254,7 +279,8 @@ r.get(
       maxAge: 10,
     });
     return c.json({ message: "Expiring cookie set!" });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -262,7 +288,8 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
-  }, logger),
+  }),
+	logger
 );
 
 r.post(
@@ -270,7 +297,8 @@ r.post(
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -281,7 +309,8 @@ r.get(
       return c.status(404).send("File not found");
     }
     return file;
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -292,7 +321,8 @@ r.get(
       return c.status(404).send("File not found");
     }
     return file;
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -301,9 +331,9 @@ r.get(
     async (c: Context): Promise<Response> => {
       return c.json({ message: "This should not execute" });
     },
-    mwEarlyResponse,
-    logger,
   ),
+	mwEarlyResponse,
+    logger,
 );
 
 r.get(
@@ -311,25 +341,27 @@ r.get(
   new Handler(
     async (c: Context): Promise<Response> => {
       return c.json({ message: "Middleware order test" });
-    },
-    logger,
-    mwOrderTest1,
-    mwOrderTest2,
+    }
   ),
+	logger,
+	mwOrderTest1,
+	mwOrderTest2,
 );
 
 r.get(
   "/wildcard/*",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: `Matched wildcard route for ${c.path}` });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
   "/wildcard/deep/*",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: `Matched deep wildcard route for ${c.path}` });
-  }, logger),
+  }),
+	logger
 );
 
 r.get(
@@ -340,6 +372,7 @@ r.get(
 
     return c.json({ message: "Cookies set" });
   }),
+	logger
 );
 
 r.get(
@@ -350,6 +383,7 @@ r.get(
       session: c.getCookie("session"),
     });
   }),
+	logger
 );
 
 const mwModifyContext = new Middleware(async (c, next) => {
@@ -362,10 +396,10 @@ r.get(
   new Handler(
     async (c: Context): Promise<Response> => {
       return c.json({ message: c.getStore("modified") });
-    },
-    logger,
-    mwModifyContext,
+    }
   ),
+	logger,
+	mwModifyContext,
 );
 
 const server = Bun.serve({

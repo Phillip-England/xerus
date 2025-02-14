@@ -221,13 +221,14 @@ export class Handler {
   private mainHandler: (c: Context) => Promise<Response>;
   private middlewares: Middleware[];
 
-  constructor(
-    mainHandler: (c: Context) => Promise<Response>,
-    ...middlewares: Middleware[]
-  ) {
+  constructor(mainHandler: (c: Context) => Promise<Response>) {
     this.mainHandler = mainHandler;
-    this.middlewares = middlewares;
+    this.middlewares = [];
   }
+
+	setMiddlewares(middlewares: Middleware[]) {
+		this.middlewares = middlewares
+	}
 
   async execute(c: Context): Promise<Response> {
     let chain = async (context: Context): Promise<Response> => {
@@ -367,23 +368,28 @@ export class Router {
 
   private readonly MAX_CACHE_SIZE = 100; // Adjust size as needed
 
-  get(path: string, handler: Handler): Router {
-    this.add("GET", path, handler);
+  get(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
+    handler.setMiddlewares(middlewares)
+		this.add("GET", path, handler);
     return this;
   }
-  post(path: string, handler: Handler): Router {
+  post(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
+    handler.setMiddlewares(middlewares)
     this.add("POST", path, handler);
     return this;
   }
-  put(path: string, handler: Handler): Router {
+  put(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
+    handler.setMiddlewares(middlewares)
     this.add("PUT", path, handler);
     return this;
   }
-  delete(path: string, handler: Handler): Router {
+  delete(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
+    handler.setMiddlewares(middlewares)
     this.add("DELETE", path, handler);
     return this;
   }
-  patch(path: string, handler: Handler): Router {
+  patch(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
+    handler.setMiddlewares(middlewares)
     this.add("PATCH", path, handler);
     return this;
   }
