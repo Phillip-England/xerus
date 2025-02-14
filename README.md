@@ -261,7 +261,9 @@ r.get(
 
 ## Parsing Incoming Requests
 
-`Context` has the `parseBody` method which takes in member from the `BodyType` enum. We can require the incoming request to have a body of a specific primitive type. For example, here we enforce the incoming request body to be JSON:
+`Context` has the `parseBody` method which takes in member from the `BodyType`
+enum. We can require the incoming request to have a body of a specific primitive
+type. For example, here we enforce the incoming request body to be JSON:
 
 ```ts
 r.post(

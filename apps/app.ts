@@ -1,4 +1,11 @@
-import { BodyType, Context, Handler, logger, Middleware, Router } from "../primitives";
+import {
+  BodyType,
+  Context,
+  Handler,
+  logger,
+  Middleware,
+  Router,
+} from "../primitives";
 
 // define router
 const r = new Router();
@@ -38,7 +45,7 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
 r.get(
   "/",
   new Handler(async (c: Context): Promise<Response> => {
-    return c.json({message: "Hello, world!"});
+    return c.json({ message: "Hello, world!" });
   }, logger),
 );
 
@@ -154,8 +161,6 @@ r.post(
   }, logger),
 );
 
-
-
 r.get(
   "/context/headers",
   new Handler(async (c: Context): Promise<Response> => {
@@ -257,7 +262,7 @@ r.get(
 r.get(
   "/context/headers/custom",
   new Handler(async (c: Context): Promise<Response> => {
-    c.header("X-Custom-Header", "CustomValue");
+    c.setHeader("X-Custom-Header", "CustomValue");
     return c.json({ message: "Custom header set" });
   }, logger),
 );
@@ -290,7 +295,6 @@ r.post(
     return c.json({ receivedBody: data });
   }, logger),
 );
-
 
 r.post(
   "/context/parseBody/largeJSON",
@@ -360,6 +364,32 @@ r.get(
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: `Matched deep wildcard route for ${c.path}` });
   }, logger),
+);
+
+r.get("/set-cookies", new Handler(async (c) => {
+	c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
+	c.setCookie("session", "xyz123", { path: "/", secure: true });
+
+	return c.json({ message: "Cookies set" });
+}));
+
+r.get("/get-cookies", new Handler(async (c) => {
+	return c.json({
+			user: c.getCookie("user"),
+			session: c.getCookie("session"),
+	});
+}));
+
+const mwModifyContext = new Middleware(async (c, next) => {
+  c.setStore("modified", "This was set by middleware!");
+  await next();
+});
+
+r.get(
+  "/middleware/modify-context",
+  new Handler(async (c: Context): Promise<Response> => {
+    return c.json({ message: c.getStore("modified") });
+  }, logger, mwModifyContext),
 );
 
 const server = Bun.serve({

@@ -23,7 +23,6 @@ export enum BodyType {
   MULTIPART_FORM = "multipart_form",
 }
 
-
 export class Context {
   req: Request;
   res: MutResponse;
@@ -48,52 +47,45 @@ export class Context {
     this.storeData = {};
   }
 
-	async parseBody<T extends BodyType>(
-		expectedType: T
-	): Promise<{ data?: T extends BodyType.JSON ? Record<string, any> :
-											T extends BodyType.TEXT ? string :
-											T extends BodyType.FORM ? Record<string, string> :
-											T extends BodyType.MULTIPART_FORM ? FormData :
-											never; err?: Error }> {
-		if (this._body !== undefined) {
-			return { data: this._body as any };
-		}
-	
-		const contentType = this.req.headers.get("Content-Type") || "";
-	
+  async parseBody<T extends BodyType>(
+    expectedType: T,
+  ): Promise<{
+    data?: T extends BodyType.JSON ? Record<string, any>
+      : T extends BodyType.TEXT ? string
+      : T extends BodyType.FORM ? Record<string, string>
+      : T extends BodyType.MULTIPART_FORM ? FormData
+      : never;
+    err?: Error;
+  }> {
+    if (this._body !== undefined) {
+      return { data: this._body as any };
+    }
+
+    const contentType = this.req.headers.get("Content-Type") || "";
+
 		try {
 			let parsedData: any;
 	
 			if (contentType.includes("application/json")) {
-				parsedData = await this.req.json();
-				if (expectedType !== BodyType.JSON) {
-					return { err: new Error("Expected JSON data") };
-				}
+					parsedData = await this.req.json();
+					if (expectedType !== BodyType.JSON) throw new Error("Unexpected JSON data");
 			} else if (contentType.includes("application/x-www-form-urlencoded")) {
-				const text = await this.req.text();
-				parsedData = Object.fromEntries(new URLSearchParams(text));
-				if (expectedType !== BodyType.FORM) {
-					return { err: new Error("Expected FORM data") };
-				}
+					parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
+					if (expectedType !== BodyType.FORM) throw new Error("Unexpected FORM data");
 			} else if (contentType.includes("multipart/form-data")) {
-				parsedData = await this.req.formData();
-				if (expectedType !== BodyType.MULTIPART_FORM) {
-					return { err: new Error("Expected MULTIPART_FORM data") };
-				}
+					parsedData = await this.req.formData();
+					if (expectedType !== BodyType.MULTIPART_FORM) throw new Error("Unexpected MULTIPART_FORM data");
 			} else {
-				parsedData = await this.req.text();
-				if (expectedType !== BodyType.TEXT) {
-					return { err: new Error("Expected TEXT data") };
-				}
+					parsedData = await this.req.text();
+					if (expectedType !== BodyType.TEXT) throw new Error("Unexpected TEXT data");
 			}
 	
 			this._body = parsedData;
 			return { data: parsedData };
-		} catch {
-			return { err: new Error("Failed to parse request body") };
-		}
+	} catch (err: any) {
+			return { err: new Error(`Body parsing failed: ${err.message}`) };
 	}
-	
+  }
 
   param(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
@@ -104,9 +96,13 @@ export class Context {
     return this;
   }
 
-  header(name: string, value: string): this {
-    this.res.header(name, value);
+  setHeader(name: string, value: string): this {
+    this.res.setHeader(name, value);
     return this;
+  }
+
+  getHeader(name: string): string | null {
+    return this.res.getHeader(name);
   }
 
   send(content: string): Response {
@@ -114,42 +110,37 @@ export class Context {
   }
 
   html(content: string): Response {
-    this.res.header("Content-Type", "text/html");
+    this.setHeader("Content-Type", "text/html");
     return this.send(content);
   }
 
   json(data: any): Response {
-    this.res.header("Content-Type", "application/json");
+    this.setHeader("Content-Type", "application/json");
     return this.send(JSON.stringify(data));
   }
 
   async stream(stream: ReadableStream): Promise<Response> {
-    this.res.header("Content-Type", "application/octet-stream");
+    this.setHeader("Content-Type", "application/octet-stream");
     return new Response(stream, {
       status: this.res.statusCode,
       headers: this.res.headers,
     });
   }
 
-  async file(
-    filePath: string,
-    stream: boolean = false,
-  ): Promise<Response | undefined> {
-    const file = await Bun.file(filePath);
-    if (!(await file.exists())) {
-      return undefined;
-    }
-    this.res.header("Content-Type", file.type || "application/octet-stream");
-    if (stream) {
-      return new Response(file.stream(), {
+  async file(filePath: string, stream = false): Promise<Response | undefined> {
+    const file = Bun.file(filePath);
+    if (!file) return undefined;
+
+    this.res.setHeader("Content-Type", file.type || "application/octet-stream");
+    return stream
+      ? new Response(file.stream(), {
+        status: this.res.statusCode,
+        headers: this.res.headers,
+      })
+      : new Response(file, {
         status: this.res.statusCode,
         headers: this.res.headers,
       });
-    }
-    return new Response(file, {
-      status: this.res.statusCode,
-      headers: this.res.headers,
-    });
   }
 
   setStore(key: string, value: any): void {
@@ -175,7 +166,7 @@ export class Context {
     return cookieMap[name];
   }
 
-  setCookie(name: string, value: string, options: CookieOptions = {}): void {
+	setCookie(name: string, value: string, options: CookieOptions = {}): void {
     let cookieString = `${name}=${encodeURIComponent(value)}`;
 
     if (options.path) cookieString += `; Path=${options.path}`;
@@ -190,15 +181,18 @@ export class Context {
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
 
-    this.res.header("Set-Cookie", cookieString);
-  }
+    // Fix: Use append instead of setHeader to allow multiple cookies
+    this.res.headers.append("Set-Cookie", cookieString);
+}
 
-  clearCookie(name: string): void {
-    this.setCookie(name, "", {
-      maxAge: 0,
-      expires: new Date(0),
-    });
-  }
+
+clearCookie(name: string): void {
+	this.setCookie(name, "", {
+		maxAge: 0,
+		expires: new Date(0),
+	});
+}
+
 }
 
 //==============================
@@ -302,9 +296,13 @@ export class MutResponse {
     return this;
   }
 
-  header(name: string, value: string): this {
+  setHeader(name: string, value: string): this {
     this.headers.set(name, value);
     return this;
+  }
+
+  getHeader(name: string): string | null {
+    return this.headers.get(name);
   }
 
   body(content: string | object): this {
@@ -341,58 +339,73 @@ export class Router {
     { handler?: Handler; params: Record<string, string> }
   > = new Map();
 
-  get(path: string, handler: Handler) {
+  private readonly MAX_CACHE_SIZE = 100; // Adjust size as needed
+
+  get(path: string, handler: Handler): Router {
     this.add("GET", path, handler);
+    return this;
   }
-  post(path: string, handler: Handler) {
+  post(path: string, handler: Handler): Router {
     this.add("POST", path, handler);
+    return this;
   }
-  put(path: string, handler: Handler) {
+  put(path: string, handler: Handler): Router {
     this.add("PUT", path, handler);
+    return this;
   }
-  delete(path: string, handler: Handler) {
+  delete(path: string, handler: Handler): Router {
     this.add("DELETE", path, handler);
+    return this;
   }
-  patch(path: string, handler: Handler) {
+  patch(path: string, handler: Handler): Router {
     this.add("PATCH", path, handler);
+    return this;
   }
 
-  private add(method: string, path: string, handler: Handler) {
+	private add(method: string, path: string, handler: Handler) {
     if (!path.includes(":") && !path.includes("*")) {
-      // Store static routes in O(1) lookup table
-      if (!this.staticRoutes.has(path)) {
-        this.staticRoutes.set(path, new Map());
-      }
-      this.staticRoutes.get(path)!.set(method, handler);
-      return;
+        if (!this.staticRoutes.has(path)) {
+            this.staticRoutes.set(path, new Map());
+        }
+
+        if (this.staticRoutes.get(path)!.has(method)) {
+            throw new Error(`Route ${method} ${path} has already been registered`);
+        }
+
+        this.staticRoutes.get(path)!.set(method, handler);
+        return;
     }
 
-    // Insert into the trie for dynamic routes
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
 
     for (const part of parts) {
-      if (part.startsWith(":")) {
-        if (!node.children.has(":param")) {
-          node.children.set(":param", new TrieNode());
-          node.children.get(":param")!.paramKey = part.slice(1);
+        if (part.startsWith(":")) {
+            if (!node.children.has(":param")) {
+                node.children.set(":param", new TrieNode());
+                node.children.get(":param")!.paramKey = part.slice(1);
+            }
+            node = node.children.get(":param")!;
+        } else if (part === "*") {
+            if (!node.wildcard) {
+                node.wildcard = new TrieNode();
+            }
+            node = node.wildcard;
+        } else {
+            if (!node.children.has(part)) {
+                node.children.set(part, new TrieNode());
+            }
+            node = node.children.get(part)!;
         }
-        node = node.children.get(":param")!;
-      } else if (part === "*") {
-        if (!node.wildcard) {
-          node.wildcard = new TrieNode();
-        }
-        node = node.wildcard;
-      } else {
-        if (!node.children.has(part)) {
-          node.children.set(part, new TrieNode());
-        }
-        node = node.children.get(part)!;
-      }
+    }
+
+    if (node.handlers.has(method)) {
+        throw new Error(`Route ${method} ${path} has already been registered`);
     }
 
     node.handlers.set(method, handler);
-  }
+}
+
 
   find(req: Request): { handler?: Handler; c: Context } {
     const { method } = req;
@@ -401,16 +414,19 @@ export class Router {
 
     // 1️⃣ Fast O(1) lookup for static routes
     if (this.staticRoutes.has(path)) {
-      const methodHandlers = this.staticRoutes.get(path)!;
-      const handler = methodHandlers.get(method);
-      return { handler, c: new Context(req) };
+        const methodHandlers = this.staticRoutes.get(path)!;
+        const handler = methodHandlers.get(method);
+        return { handler, c: new Context(req) };
     }
 
     // 2️⃣ Cached lookup for previously resolved paths
     const cacheKey = `${method} ${path}`;
     if (this.resolvedRoutes.has(cacheKey)) {
-      const cached = this.resolvedRoutes.get(cacheKey)!;
-      return { handler: cached.handler, c: new Context(req, cached.params) };
+        // Move accessed key to the end (mark as most recently used)
+        const cached = this.resolvedRoutes.get(cacheKey)!;
+        this.resolvedRoutes.delete(cacheKey);
+        this.resolvedRoutes.set(cacheKey, cached);
+        return { handler: cached.handler, c: new Context(req, cached.params) };
     }
 
     // 3️⃣ Trie traversal for dynamic routes
@@ -419,25 +435,33 @@ export class Router {
     let params: Record<string, string> = {};
 
     for (const part of parts) {
-      if (node!.children.has(part)) {
-        node = node!.children.get(part);
-      } else if (node!.children.has(":param")) {
-        let paramNode = node!.children.get(":param")!;
-        params[paramNode.paramKey!] = part;
-        node = paramNode;
-      } else if (node!.wildcard) {
-        node = node!.wildcard;
-        break;
-      } else {
-        return { handler: undefined, c: new Context(req) };
-      }
+        if (node!.children.has(part)) {
+            node = node!.children.get(part);
+        } else if (node!.children.has(":param")) {
+            let paramNode = node!.children.get(":param")!;
+            params[paramNode.paramKey!] = part;
+            node = paramNode;
+        } else if (node!.wildcard) {
+            node = node!.wildcard;
+            break;
+        } else {
+            return { handler: undefined, c: new Context(req) };
+        }
     }
 
     const handler = node!.handlers.get(method);
 
-    // 4️⃣ Cache resolved dynamic routes for faster future lookups
+    // 4️⃣ Cache resolved dynamic routes
+    if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
+        const firstKey = this.resolvedRoutes.keys().next().value;
+        if (firstKey !== undefined) {  // ✅ Fix: Ensure firstKey is not undefined
+            this.resolvedRoutes.delete(firstKey);
+        }
+    }
     this.resolvedRoutes.set(cacheKey, { handler, params });
 
     return { handler, c: new Context(req, params) };
-  }
 }
+
+}
+

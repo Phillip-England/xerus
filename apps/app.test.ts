@@ -56,7 +56,6 @@ test("POST /context/parseText should parse text body", async () => {
   expect(data.receivedText).toBe("Hello, World!");
 });
 
-
 test("POST /context/parseForm should parse URL-encoded form data", async () => {
   const res = await fetch(`${BASE_URL}/context/parseForm`, {
     method: "POST",
@@ -101,9 +100,12 @@ test("GET /context/stream-file should return a file", async () => {
 const methods = ["PUT", "DELETE", "PATCH"];
 methods.forEach((method) => {
   test(`${method} /context/method/${method.toLowerCase()} should return method received`, async () => {
-    const res = await fetch(`${BASE_URL}/context/method/${method.toLowerCase()}`, {
-      method,
-    });
+    const res = await fetch(
+      `${BASE_URL}/context/method/${method.toLowerCase()}`,
+      {
+        method,
+      },
+    );
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.message).toBe(`${method} method received`);
@@ -125,7 +127,9 @@ test("GET /context/params/:id/details/:detailId should return both parameters", 
 });
 
 test("GET /context/query/multiple should return query parameters with defaults", async () => {
-  const res = await fetch(`${BASE_URL}/context/query/multiple?key1=foo&key2=bar`);
+  const res = await fetch(
+    `${BASE_URL}/context/query/multiple?key1=foo&key2=bar`,
+  );
   const data = await res.json();
   expect(res.status).toBe(200);
   expect(data).toEqual({ key1: "foo", key2: "bar" });
@@ -201,9 +205,9 @@ test("GET /context/serve-text-file should return text file", async () => {
 
 test("GET /middleware/early-response should return early response", async () => {
   const res = await fetch(`${BASE_URL}/middleware/early-response`);
-  const data = await res.text()
+  const data = await res.text();
   expect(res.status).toBe(200);
-  console.log(data)
+  console.log(data);
   expect(data).toBe("hello from middleware");
 });
 
@@ -225,5 +229,40 @@ test("GET /wildcard/deep/* should match deep wildcard route", async () => {
   const res = await fetch(`${BASE_URL}/wildcard/deep/anything/here`);
   const data = await res.json();
   expect(res.status).toBe(200);
-  expect(data.message).toBe("Matched deep wildcard route for /wildcard/deep/anything/here");
+  expect(data.message).toBe(
+    "Matched deep wildcard route for /wildcard/deep/anything/here",
+  );
 });
+
+test("GET /set-cookies should set multiple cookies", async () => {
+  const res = await fetch(`${BASE_URL}/set-cookies`);
+  expect(res.status).toBe(200);
+  const setCookieHeader = res.headers.getSetCookie();
+  expect(setCookieHeader).toBeTruthy();
+  expect(setCookieHeader.some(cookie => cookie.includes("user=john_doe"))).toBe(true);
+  expect(setCookieHeader.some(cookie => cookie.includes("session=xyz123"))).toBe(true);
+});
+
+test("GET /get-cookies should return previously set cookies", async () => {
+  await fetch(`${BASE_URL}/set-cookies`);
+  const res = await fetch(`${BASE_URL}/get-cookies`, {
+    headers: {
+      Cookie: "user=john_doe; session=xyz123"
+    }
+  });
+  expect(res.status).toBe(200);
+  const data = await res.json();
+  expect(data).toEqual({
+    user: "john_doe",
+    session: "xyz123"
+  });
+});
+
+test("GET /middleware/modify-context should modify context and return stored value", async () => {
+  const res = await fetch(`${BASE_URL}/middleware/modify-context`);
+  const data = await res.json();
+  
+  expect(res.status).toBe(200);
+  expect(data.message).toBe("This was set by middleware!");
+});
+
