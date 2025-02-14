@@ -167,9 +167,10 @@ export class Context {
     return this.storeData[key] || undefined;
   }
 
-  query(name: string, defaultValue?: string): string | undefined {
-    return this.url.searchParams.get(name) ?? defaultValue;
-  }
+	query(name: string, defaultValue: string = ""): string {
+		return this.url.searchParams.get(name) ?? defaultValue;
+	}
+	
 
   getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
