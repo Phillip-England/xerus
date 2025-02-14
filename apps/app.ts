@@ -38,20 +38,12 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
   return response;
 });
 
-//==========================================
-// basic endpoint for speed tests
-//==========================================
-
 r.get(
   "/",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "Hello, world!" });
   }, logger),
 );
-
-//==========================================
-// testing basic context methods
-//==========================================
 
 r.get(
   "/context/html",
@@ -241,7 +233,7 @@ r.get(
 r.get(
   "/context/status/200",
   new Handler(async (c: Context): Promise<Response> => {
-    return c.status(200).json({ message: "OK" });
+    return c.json({ message: "OK" });
   }, logger),
 );
 
