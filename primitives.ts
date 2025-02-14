@@ -47,6 +47,12 @@ export class Context {
     this.storeData = {};
   }
 
+  redirect(location: string, status: number = 302): Response {
+    this.res.status(status);
+    this.res.setHeader("Location", location);
+    return this.res.send();
+  }
+
   async parseBody<T extends BodyType>(
     expectedType: T,
   ): Promise<{
