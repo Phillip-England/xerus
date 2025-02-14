@@ -56,7 +56,7 @@ export class Context {
   async parseBody<T extends BodyType>(
     expectedType: T,
   ): Promise<{
-    data?: T extends BodyType.JSON ? Record<string, any>
+    data: T extends BodyType.JSON ? Record<string, any>
       : T extends BodyType.TEXT ? string
       : T extends BodyType.FORM ? Record<string, string>
       : T extends BodyType.MULTIPART_FORM ? FormData
@@ -66,12 +66,12 @@ export class Context {
     if (this._body !== undefined) {
       return { data: this._body as any };
     }
-
+  
     const contentType = this.req.headers.get("Content-Type") || "";
-
+  
     try {
       let parsedData: any;
-
+  
       if (contentType.includes("application/json")) {
         parsedData = await this.req.json();
         if (expectedType !== BodyType.JSON) {
@@ -95,13 +95,23 @@ export class Context {
           throw new Error("Unexpected TEXT data");
         }
       }
-
+  
       this._body = parsedData;
       return { data: parsedData };
     } catch (err: any) {
-      return { err: new Error(`Body parsing failed: ${err.message}`) };
+      return {
+        data: (expectedType === BodyType.JSON
+          ? {}
+          : expectedType === BodyType.FORM
+          ? {}
+          : expectedType === BodyType.MULTIPART_FORM
+          ? new FormData()
+          : "") as any, // Ensure a valid default value
+        err: new Error(`Body parsing failed: ${err.message}`),
+      };
     }
   }
+  
 
   param(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
