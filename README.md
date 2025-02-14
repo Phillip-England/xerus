@@ -259,6 +259,31 @@ r.get(
 ); // <====== chain middleware here
 ```
 
+## Parsing Incoming Requests
+
+`Context` has the `parseBody` method which takes in member from the `BodyType` enum. We can require the incoming request to have a body of a specific primitive type. For example, here we enforce the incoming request body to be JSON:
+
+```ts
+r.post(
+  "/",
+  new Handler(async (c: Context): Promise<Response> => {
+    let { data, err } = await c.parseBody(BodyType.JSON);
+    if (err) {
+      return c.status(500).send("failed to parse the request body");
+    }
+    return c.json({ receivedBody: data });
+  }, logger),
+);
+```
+
+Other options include:
+
+```ts
+c.parseBody(BodyType.TEXT);
+c.parseBody(BodyType.FORM);
+c.parseBody(BodyType.MULTIPART_FORM);
+```
+
 ## Serving
 
 Xerus applications are served using `Bun.serve`. This is another design decision
