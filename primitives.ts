@@ -63,28 +63,38 @@ export class Context {
 
     const contentType = this.req.headers.get("Content-Type") || "";
 
-		try {
-			let parsedData: any;
-	
-			if (contentType.includes("application/json")) {
-					parsedData = await this.req.json();
-					if (expectedType !== BodyType.JSON) throw new Error("Unexpected JSON data");
-			} else if (contentType.includes("application/x-www-form-urlencoded")) {
-					parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
-					if (expectedType !== BodyType.FORM) throw new Error("Unexpected FORM data");
-			} else if (contentType.includes("multipart/form-data")) {
-					parsedData = await this.req.formData();
-					if (expectedType !== BodyType.MULTIPART_FORM) throw new Error("Unexpected MULTIPART_FORM data");
-			} else {
-					parsedData = await this.req.text();
-					if (expectedType !== BodyType.TEXT) throw new Error("Unexpected TEXT data");
-			}
-	
-			this._body = parsedData;
-			return { data: parsedData };
-	} catch (err: any) {
-			return { err: new Error(`Body parsing failed: ${err.message}`) };
-	}
+    try {
+      let parsedData: any;
+
+      if (contentType.includes("application/json")) {
+        parsedData = await this.req.json();
+        if (expectedType !== BodyType.JSON) {
+          throw new Error("Unexpected JSON data");
+        }
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        parsedData = Object.fromEntries(
+          new URLSearchParams(await this.req.text()),
+        );
+        if (expectedType !== BodyType.FORM) {
+          throw new Error("Unexpected FORM data");
+        }
+      } else if (contentType.includes("multipart/form-data")) {
+        parsedData = await this.req.formData();
+        if (expectedType !== BodyType.MULTIPART_FORM) {
+          throw new Error("Unexpected MULTIPART_FORM data");
+        }
+      } else {
+        parsedData = await this.req.text();
+        if (expectedType !== BodyType.TEXT) {
+          throw new Error("Unexpected TEXT data");
+        }
+      }
+
+      this._body = parsedData;
+      return { data: parsedData };
+    } catch (err: any) {
+      return { err: new Error(`Body parsing failed: ${err.message}`) };
+    }
   }
 
   param(name: string, defaultValue?: string): string | undefined {
@@ -166,7 +176,7 @@ export class Context {
     return cookieMap[name];
   }
 
-	setCookie(name: string, value: string, options: CookieOptions = {}): void {
+  setCookie(name: string, value: string, options: CookieOptions = {}): void {
     let cookieString = `${name}=${encodeURIComponent(value)}`;
 
     if (options.path) cookieString += `; Path=${options.path}`;
@@ -183,16 +193,14 @@ export class Context {
 
     // Fix: Use append instead of setHeader to allow multiple cookies
     this.res.headers.append("Set-Cookie", cookieString);
-}
+  }
 
-
-clearCookie(name: string): void {
-	this.setCookie(name, "", {
-		maxAge: 0,
-		expires: new Date(0),
-	});
-}
-
+  clearCookie(name: string): void {
+    this.setCookie(name, "", {
+      maxAge: 0,
+      expires: new Date(0),
+    });
+  }
 }
 
 //==============================
@@ -362,50 +370,49 @@ export class Router {
     return this;
   }
 
-	private add(method: string, path: string, handler: Handler) {
+  private add(method: string, path: string, handler: Handler) {
     if (!path.includes(":") && !path.includes("*")) {
-        if (!this.staticRoutes.has(path)) {
-            this.staticRoutes.set(path, new Map());
-        }
+      if (!this.staticRoutes.has(path)) {
+        this.staticRoutes.set(path, new Map());
+      }
 
-        if (this.staticRoutes.get(path)!.has(method)) {
-            throw new Error(`Route ${method} ${path} has already been registered`);
-        }
+      if (this.staticRoutes.get(path)!.has(method)) {
+        throw new Error(`Route ${method} ${path} has already been registered`);
+      }
 
-        this.staticRoutes.get(path)!.set(method, handler);
-        return;
+      this.staticRoutes.get(path)!.set(method, handler);
+      return;
     }
 
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
 
     for (const part of parts) {
-        if (part.startsWith(":")) {
-            if (!node.children.has(":param")) {
-                node.children.set(":param", new TrieNode());
-                node.children.get(":param")!.paramKey = part.slice(1);
-            }
-            node = node.children.get(":param")!;
-        } else if (part === "*") {
-            if (!node.wildcard) {
-                node.wildcard = new TrieNode();
-            }
-            node = node.wildcard;
-        } else {
-            if (!node.children.has(part)) {
-                node.children.set(part, new TrieNode());
-            }
-            node = node.children.get(part)!;
+      if (part.startsWith(":")) {
+        if (!node.children.has(":param")) {
+          node.children.set(":param", new TrieNode());
+          node.children.get(":param")!.paramKey = part.slice(1);
         }
+        node = node.children.get(":param")!;
+      } else if (part === "*") {
+        if (!node.wildcard) {
+          node.wildcard = new TrieNode();
+        }
+        node = node.wildcard;
+      } else {
+        if (!node.children.has(part)) {
+          node.children.set(part, new TrieNode());
+        }
+        node = node.children.get(part)!;
+      }
     }
 
     if (node.handlers.has(method)) {
-        throw new Error(`Route ${method} ${path} has already been registered`);
+      throw new Error(`Route ${method} ${path} has already been registered`);
     }
 
     node.handlers.set(method, handler);
-}
-
+  }
 
   find(req: Request): { handler?: Handler; c: Context } {
     const { method } = req;
@@ -414,19 +421,19 @@ export class Router {
 
     // 1️⃣ Fast O(1) lookup for static routes
     if (this.staticRoutes.has(path)) {
-        const methodHandlers = this.staticRoutes.get(path)!;
-        const handler = methodHandlers.get(method);
-        return { handler, c: new Context(req) };
+      const methodHandlers = this.staticRoutes.get(path)!;
+      const handler = methodHandlers.get(method);
+      return { handler, c: new Context(req) };
     }
 
     // 2️⃣ Cached lookup for previously resolved paths
     const cacheKey = `${method} ${path}`;
     if (this.resolvedRoutes.has(cacheKey)) {
-        // Move accessed key to the end (mark as most recently used)
-        const cached = this.resolvedRoutes.get(cacheKey)!;
-        this.resolvedRoutes.delete(cacheKey);
-        this.resolvedRoutes.set(cacheKey, cached);
-        return { handler: cached.handler, c: new Context(req, cached.params) };
+      // Move accessed key to the end (mark as most recently used)
+      const cached = this.resolvedRoutes.get(cacheKey)!;
+      this.resolvedRoutes.delete(cacheKey);
+      this.resolvedRoutes.set(cacheKey, cached);
+      return { handler: cached.handler, c: new Context(req, cached.params) };
     }
 
     // 3️⃣ Trie traversal for dynamic routes
@@ -435,33 +442,31 @@ export class Router {
     let params: Record<string, string> = {};
 
     for (const part of parts) {
-        if (node!.children.has(part)) {
-            node = node!.children.get(part);
-        } else if (node!.children.has(":param")) {
-            let paramNode = node!.children.get(":param")!;
-            params[paramNode.paramKey!] = part;
-            node = paramNode;
-        } else if (node!.wildcard) {
-            node = node!.wildcard;
-            break;
-        } else {
-            return { handler: undefined, c: new Context(req) };
-        }
+      if (node!.children.has(part)) {
+        node = node!.children.get(part);
+      } else if (node!.children.has(":param")) {
+        let paramNode = node!.children.get(":param")!;
+        params[paramNode.paramKey!] = part;
+        node = paramNode;
+      } else if (node!.wildcard) {
+        node = node!.wildcard;
+        break;
+      } else {
+        return { handler: undefined, c: new Context(req) };
+      }
     }
 
     const handler = node!.handlers.get(method);
 
     // 4️⃣ Cache resolved dynamic routes
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
-        const firstKey = this.resolvedRoutes.keys().next().value;
-        if (firstKey !== undefined) {  // ✅ Fix: Ensure firstKey is not undefined
-            this.resolvedRoutes.delete(firstKey);
-        }
+      const firstKey = this.resolvedRoutes.keys().next().value;
+      if (firstKey !== undefined) { // ✅ Fix: Ensure firstKey is not undefined
+        this.resolvedRoutes.delete(firstKey);
+      }
     }
     this.resolvedRoutes.set(cacheKey, { handler, params });
 
     return { handler, c: new Context(req, params) };
+  }
 }
-
-}
-

@@ -358,19 +358,25 @@ r.get(
   }, logger),
 );
 
-r.get("/set-cookies", new Handler(async (c) => {
-	c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
-	c.setCookie("session", "xyz123", { path: "/", secure: true });
+r.get(
+  "/set-cookies",
+  new Handler(async (c) => {
+    c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
+    c.setCookie("session", "xyz123", { path: "/", secure: true });
 
-	return c.json({ message: "Cookies set" });
-}));
+    return c.json({ message: "Cookies set" });
+  }),
+);
 
-r.get("/get-cookies", new Handler(async (c) => {
-	return c.json({
-			user: c.getCookie("user"),
-			session: c.getCookie("session"),
-	});
-}));
+r.get(
+  "/get-cookies",
+  new Handler(async (c) => {
+    return c.json({
+      user: c.getCookie("user"),
+      session: c.getCookie("session"),
+    });
+  }),
+);
 
 const mwModifyContext = new Middleware(async (c, next) => {
   c.setStore("modified", "This was set by middleware!");
@@ -379,9 +385,13 @@ const mwModifyContext = new Middleware(async (c, next) => {
 
 r.get(
   "/middleware/modify-context",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.json({ message: c.getStore("modified") });
-  }, logger, mwModifyContext),
+  new Handler(
+    async (c: Context): Promise<Response> => {
+      return c.json({ message: c.getStore("modified") });
+    },
+    logger,
+    mwModifyContext,
+  ),
 );
 
 const server = Bun.serve({

@@ -239,30 +239,31 @@ test("GET /set-cookies should set multiple cookies", async () => {
   expect(res.status).toBe(200);
   const setCookieHeader = res.headers.getSetCookie();
   expect(setCookieHeader).toBeTruthy();
-  expect(setCookieHeader.some(cookie => cookie.includes("user=john_doe"))).toBe(true);
-  expect(setCookieHeader.some(cookie => cookie.includes("session=xyz123"))).toBe(true);
+  expect(setCookieHeader.some((cookie) => cookie.includes("user=john_doe")))
+    .toBe(true);
+  expect(setCookieHeader.some((cookie) => cookie.includes("session=xyz123")))
+    .toBe(true);
 });
 
 test("GET /get-cookies should return previously set cookies", async () => {
   await fetch(`${BASE_URL}/set-cookies`);
   const res = await fetch(`${BASE_URL}/get-cookies`, {
     headers: {
-      Cookie: "user=john_doe; session=xyz123"
-    }
+      Cookie: "user=john_doe; session=xyz123",
+    },
   });
   expect(res.status).toBe(200);
   const data = await res.json();
   expect(data).toEqual({
     user: "john_doe",
-    session: "xyz123"
+    session: "xyz123",
   });
 });
 
 test("GET /middleware/modify-context should modify context and return stored value", async () => {
   const res = await fetch(`${BASE_URL}/middleware/modify-context`);
   const data = await res.json();
-  
+
   expect(res.status).toBe(200);
   expect(data.message).toBe("This was set by middleware!");
 });
-
