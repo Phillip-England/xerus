@@ -62,12 +62,7 @@ r.get(
 r.post(
   "/context/parseJSON/invalidJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.JSON);
-    if (err) {
-      return new Response("invalid json", {
-        status: 500,
-      });
-    }
+    let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   }, logger),
 );
@@ -75,12 +70,7 @@ r.post(
 r.post(
   "/context/parseJSON/validJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.JSON);
-    if (err) {
-      return new Response("invalid json", {
-        status: 500,
-      });
-    }
+    let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   }, logger),
 );
@@ -118,10 +108,7 @@ r.get(
 r.post(
   "/context/parseText",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.TEXT);
-    if (err) {
-      return c.status(500).send("Failed to parse text");
-    }
+    let data = await c.parseBody(BodyType.TEXT);
     return c.json({ receivedText: data });
   }, logger),
 );
@@ -129,10 +116,7 @@ r.post(
 r.post(
   "/context/parseForm",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.FORM);
-    if (err) {
-      return c.status(500).send("Failed to parse form data");
-    }
+    let data = await c.parseBody(BodyType.FORM);
     return c.json({ receivedFormData: data });
   }, logger),
 );
@@ -140,11 +124,7 @@ r.post(
 r.post(
   "/context/parseMultipartForm",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.MULTIPART_FORM);
-
-    if (err) {
-      return c.status(400).send(err.message);
-    }
+    let data = await c.parseBody(BodyType.MULTIPART_FORM);
     const formDataObject: Record<string, any> = {};
     data!.forEach((value: any, key: any) => {
       formDataObject[key] = value;
@@ -280,10 +260,7 @@ r.get(
 r.post(
   "/context/parseBody/empty",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.JSON);
-    if (err) {
-      return c.status(500).send("Failed to parse request body");
-    }
+    let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   }, logger),
 );
@@ -291,10 +268,7 @@ r.post(
 r.post(
   "/context/parseBody/largeJSON",
   new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.JSON);
-    if (err) {
-      return c.status(500).send("Failed to parse large JSON");
-    }
+    let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   }, logger),
 );
@@ -400,14 +374,18 @@ const server = Bun.serve({
     try {
       const { handler, c } = r.find(req);
       if (handler) {
-        return handler.execute(c);
+        return await handler.execute(c);
       }
-      return c.status(404).send("404 Not Found");
+      return new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
       console.error(e);
-      return new Response("internal server error", { status: 500 });
+      return new Response("internal server error", {
+        status: 500,
+        headers: { "Content-Type": "text/plain" }, // Ensure text response
+      });
     }
   },
 });
+
 
 console.log(`Server running on ${server.port}`);

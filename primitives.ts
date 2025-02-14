@@ -53,65 +53,55 @@ export class Context {
     return this.res.send();
   }
 
-  async parseBody<T extends BodyType>(
-    expectedType: T,
-  ): Promise<{
-    data: T extends BodyType.JSON ? Record<string, any>
-      : T extends BodyType.TEXT ? string
-      : T extends BodyType.FORM ? Record<string, string>
-      : T extends BodyType.MULTIPART_FORM ? FormData
-      : never;
-    err?: Error;
-  }> {
-    if (this._body !== undefined) {
-      return { data: this._body as any };
-    }
-  
-    const contentType = this.req.headers.get("Content-Type") || "";
-  
-    try {
-      let parsedData: any;
-  
-      if (contentType.includes("application/json")) {
-        parsedData = await this.req.json();
-        if (expectedType !== BodyType.JSON) {
-          throw new Error("Unexpected JSON data");
-        }
-      } else if (contentType.includes("application/x-www-form-urlencoded")) {
-        parsedData = Object.fromEntries(
-          new URLSearchParams(await this.req.text()),
-        );
-        if (expectedType !== BodyType.FORM) {
-          throw new Error("Unexpected FORM data");
-        }
-      } else if (contentType.includes("multipart/form-data")) {
-        parsedData = await this.req.formData();
-        if (expectedType !== BodyType.MULTIPART_FORM) {
-          throw new Error("Unexpected MULTIPART_FORM data");
-        }
-      } else {
-        parsedData = await this.req.text();
-        if (expectedType !== BodyType.TEXT) {
-          throw new Error("Unexpected TEXT data");
-        }
-      }
-  
-      this._body = parsedData;
-      return { data: parsedData };
-    } catch (err: any) {
-      return {
-        data: (expectedType === BodyType.JSON
-          ? {}
-          : expectedType === BodyType.FORM
-          ? {}
-          : expectedType === BodyType.MULTIPART_FORM
-          ? new FormData()
-          : "") as any, // Ensure a valid default value
-        err: new Error(`Body parsing failed: ${err.message}`),
-      };
-    }
-  }
-  
+	async parseBody<T extends BodyType>(
+		expectedType: T,
+	): Promise<
+		T extends BodyType.JSON ? Record<string, any>
+			: T extends BodyType.TEXT ? string
+			: T extends BodyType.FORM ? Record<string, string>
+			: T extends BodyType.MULTIPART_FORM ? FormData
+			: never
+	> {
+		if (this._body !== undefined) {
+			return this._body as any;
+		}
+	
+		const contentType = this.req.headers.get("Content-Type") || "";
+	
+		try {
+			let parsedData: any;
+	
+			if (contentType.includes("application/json")) {
+				parsedData = await this.req.json();
+				if (expectedType !== BodyType.JSON) {
+					throw new Error("Unexpected JSON data");
+				}
+			} else if (contentType.includes("application/x-www-form-urlencoded")) {
+				parsedData = Object.fromEntries(
+					new URLSearchParams(await this.req.text()),
+				);
+				if (expectedType !== BodyType.FORM) {
+					throw new Error("Unexpected FORM data");
+				}
+			} else if (contentType.includes("multipart/form-data")) {
+				parsedData = await this.req.formData();
+				if (expectedType !== BodyType.MULTIPART_FORM) {
+					throw new Error("Unexpected MULTIPART_FORM data");
+				}
+			} else {
+				parsedData = await this.req.text();
+				if (expectedType !== BodyType.TEXT) {
+					throw new Error("Unexpected TEXT data");
+				}
+			}
+	
+			this._body = parsedData;
+			return parsedData;
+		} catch (err: any) {
+			throw new Error(`Body parsing failed: ${err.message}`);
+		}
+	}
+	
 
   param(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
@@ -236,34 +226,41 @@ export class Handler {
   }
 
   async execute(c: Context): Promise<Response> {
-    // Build the execution chain from the inside out
-    let chain = this.mainHandler;
+    let chain = async (context: Context): Promise<Response> => {
+      try {
+        return await this.mainHandler(context);
+      } catch (error) {
+        throw error; // Ensure error propagates up
+      }
+    };
 
-    // Work backwards through middleware array to build chain from inside out
+    // Apply middlewares in reverse order
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const middleware = this.middlewares[i];
       const nextChain = chain;
       chain = async (context: Context): Promise<Response> => {
-        let finalResponse: Response | undefined;
+        try {
+          let finalResponse: Response | undefined;
 
-        // Execute the current middleware
-        const result = await middleware.execute(context, async () => {
-          const response = await nextChain(context);
-          finalResponse = response;
-          return response;
-        });
+          // Execute the middleware and handle the next function
+          const result = await middleware.execute(context, async () => {
+            const response = await nextChain(context);
+            finalResponse = response;
+            return response;
+          });
 
-        // Return early response from middleware if present
-        if (result instanceof Response) {
-          return result;
+          if (result instanceof Response) {
+            return result;
+          }
+
+          if (finalResponse) {
+            return finalResponse;
+          }
+
+          return new Response("no response generated", { status: 500 });
+        } catch (error) {
+          throw error; // Propagate error up
         }
-
-        // Return the response from the next handler in chain
-        if (finalResponse) {
-          return finalResponse;
-        }
-
-        return new Response("no response generated", { status: 500 });
       };
     }
 
@@ -271,6 +268,7 @@ export class Handler {
     return chain(c);
   }
 }
+
 
 //==============================
 // middleware
