@@ -202,12 +202,15 @@ export class Context {
     this.res.headers.append("Set-Cookie", cookieString);
   }
 
-  clearCookie(name: string): void {
-    this.setCookie(name, "", {
-      maxAge: 0,
-      expires: new Date(0),
-    });
-  }
+	clearCookie(name: string, path: string = "/", domain?: string): void {
+		this.setCookie(name, "", {
+			maxAge: 0,
+			expires: new Date(0),
+			path: path,
+			domain: domain,  // Match the domain of the original cookie
+		});
+	}
+	
 }
 
 //==============================
