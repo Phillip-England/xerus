@@ -13,44 +13,30 @@ bun add github:phillip-england/xerus
 Create an `index.ts` and paste in the following code:
 
 ```ts
-import { Context, Handler, logger, Router } from "xerus/primitives";
+import { Context, Handler, logger, Xerus } from "xerus/xerus";
 
-const r = new Router();
+const app = new Xerus();
 
-r.get(
-  "/static/*",
-  new Handler(async (c: Context): Promise<Response> => {
-    let file = await c.file("." + c.path);
-    if (!file) {
+// basic endpoint
+app.get('/', async (c: Context) => {
+  return c.html('<h1>Hello, World!</h1>')
+})
+
+// serve static files from ./static
+app.get('/static/*', async (c: Context) => {
+    let file = Bun.file('.'+c.path)
+    if (!file.exists) {
       return c.status(404).send("file not found");
     }
-    return file;
-  }),
+    return await c.file(file);
+  },
 );
 
-r.get(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html("<h1>Hello, World!</h1>");
-  }, logger),
-);
-
+// running the application
 const server = Bun.serve({
   port: 8080,
   fetch: async (req: Request) => {
-    try {
-      const { handler, c } = r.find(req);
-      if (handler) {
-        return await handler.execute(c);
-      }
-      return new Response("404 Not Found", { status: 404 });
-    } catch (e: any) {
-      console.error(e);
-      return new Response("internal server error", {
-        status: 500,
-        headers: { "Content-Type": "text/plain" }, // Ensure text response
-      });
-    }
+    return await app.run(req);
   },
 });
 
@@ -65,263 +51,135 @@ bun run --hot index.ts
 
 Visit `localhost:8080`
 
-## Router
+## Routing
 
-The `Router` class does one thing: it takes a request, parses it's path, and
-gets you the associated `Handler`. That's it. Use it along with `Bun.serve` like
-so:
+`Xerus` supports static, dynamic, and wildcard paths.
 
+Static path:
 ```ts
-const r = new Router();
-
-r.get(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html("<h1>Hello, World!</h1>");
-  }),
-);
-
-const server = Bun.serve({
-  port: 8080,
-  fetch: async (req: Request) => {
-    try { // use a try-catch so you can catch all errors in your application
-      const { handler, c } = r.find(req); // find the route (and it's context)
-      if (handler) {
-        return handler.execute(c);
-      }
-      return c.status(404).send("404 Not Found"); // return a 404 if a route does not exist
-    } catch (e: any) { // catch and log all errors
-      console.error(e);
-      return new Response("internal server error", { status: 500 });
-    }
-  },
-});
-
-console.log(`Server running on ${server.port}`);
+app.get('/', async (c: Context) => {
+  return c.html('<h1>Hello, World!</h1>')
+})
 ```
 
-You can also use routes with parameters like so:
-
+Dynamic path:
 ```ts
-r.get(
-  "/user/:id",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html(`<h1>${c.param("id")}</h1>`);
-  }),
-);
+r.post('/user/:id', async (c: Context) => {
+  return c.json({id: c.param('id')});
+})
 ```
 
-Or you can use a wildcard, like in this example for serving static files from
-`./static`:
-
+Wildcard path:
 ```ts
-r.get(
-  "/static/*",
-  new Handler(async (c: Context): Promise<Response> => {
-    let file = await c.file("." + c.path);
-    if (!file) {
+app.get('/static/*', async (c: Context) => {
+    let file = Bun.file('.'+c.path)
+    if (!file.exists) {
       return c.status(404).send("file not found");
     }
-    return file;
-  }),
+    return await c.file(file);
+  },
 );
 ```
-
-## Handler
-
-The `Handler` class is used to create endpoints for our application. In this
-example, we seperate concerns by first creating a handler, then adding it to our
-router:
-
-```ts
-const r = new Router();
-
-let handleHome = new Handler(async (c: Context): Promise<Response> => {
-  return c.html("<h1>Hello, World!</h1>");
-});
-
-r.get("/", handlerHome);
-```
-
-## MutResponse
-
-In Bun, the `Response` object is immutable. This makes implementing middleware
-difficult as different middlewares are unable to make alterations to the
-`Response` throughout it's lifecycle.
-
-That is where `MutResponse` comes into play.
-
-You'll mainly work with `MutResponse` via the `Context` object. For example:
-
-```ts
-// here we work directly with the Context object
-r.get(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html("<h1>Hello, World!</h1>");
-  }),
-);
-
-// here, we access MutResponse directly
-r.get(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.res.header("content-type", "text/html").body(
-      "<h1>Hello, World!</h1>",
-    ).send();
-  }),
-);
-```
-
-As you can see in the above example, `Context` abstracts on top of
-`MutResponse`.
 
 ## Context
+`Context` allows us to work with the incoming requests and prepare responses.
 
-Each `Handler` instance is given access to a `Context` instance. `Context` is
-used to work with the `MutResponse` as well as the `Response` type provided by
-the Bun runtime.
+Supported methods:
 
-`Context` allow us to:
+1. `c.redirect` - redirect to a new endpoint
+```ts
+return c.redirect('/')
+```
 
-- get, set, and delete cookies
-- parse the incoming request body
-- get a url param like :id in "/user/:id"
-- set the response status code
-- set a header in the response
-- send an html response
-- send a json response
-- steam a `ReadableStream` as a response
-- send or stream a file as a response
-- store and retrieve data from the global store
-- get a url query param like name in "/?name=bob"
+2. `c.parseBody` - parse the incoming request body while enforcing a specific type
+```ts
+let data = await c.parseBody(BodyType.TEXT);
+let data = await c.parseBody(BodyType.JSON);
+let data = await c.parseBody(BodyType.MULTIPART_FORM);
+let data = await c.parseBody(BodyType.JSON);
+```
+
+3. `c.param` - access dynamic path params like ':id' in '/user/:id'
+```ts
+c.param('id')
+```
+
+4. `c.status` - update the current status code
+```ts
+c.status(404)
+```
+
+5. `c.setHeader` and `c.getHeader` - set/get a response header
+```ts
+c.setHeader('content-type', 'text/html')
+console.log(c.getHeader('content-type')) // text/html
+```
+
+6. `c.html` - send an html response
+```ts
+return c.html('<h1>Hello, World!</h1>')
+```
+
+7. `c.text` - send a plain text response
+```ts
+return c.text('Hello, World!')
+```
+
+8. `c.json` - send a json response
+```ts
+return c.json({message: 'Hello, World!'})
+```
+
+9. `c.stream` - stream a `ReadableStream`
+```ts
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(encoder.encode("Chunk 1: Hello, this is a streaming response!\n"));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      controller.enqueue(encoder.encode("Chunk 2: Streaming world, one chunk at a time!\n"));
+      controller.close();
+    },
+  });
+  return await c.stream(stream)
+```
+
+10. `c.file` - send a file in a response
+```ts
+let file = Bun.file('./path/to/file')
+if (!file.exists) {
+  // handle missing file
+}
+return c.file(file)
+```
+
+11. `c.setStore` and `c.getStore` - set/get values on the request store
+```ts
+c.setStore('key', 'value')
+console.log(c.getStore('key')) // value
+```
+
+12. `c.setCookie`, `c.getCookie`, and `c.clearCookie` - set/get/clear a cookie
+```ts
+    c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
+    console.log(c.getCookie('user')) // john_doe
+    c.clearCookie('user')
+    console.log(c.getCookie('user')) // undefined
+```
+
 
 ## Static Files
 
-Serving static files can be accomplished by using a wildcard path `/static/*` in
-conjunction with the `Context.file` method.
-
-In this example, I am serving static files from `./static`:
-
+Use a wildcard to setup static files:
 ```ts
-r.get(
-  "/static/*",
-  new Handler(async (c: Context): Promise<Response> => {
-    let file = await c.file("." + c.path);
-    if (!file) {
-      // what to do if we can't find the requested file
+app.get('/static/*', async (c: Context) => {
+    let file = Bun.file('.'+c.path)
+    if (!file.exists) {
       return c.status(404).send("file not found");
     }
-    return file;
-  }),
+    return await c.file(file);
+  },
 );
 ```
 
 ## Middleware
 
-`Middleware` can be applied to a route by chaining it on to the end of a
-`Handler`. this is the ONLY way to apply `Middleware` to a route, by design.
-
-I made this decision because I do not intend for Xerus to be a fully fledged
-framework. Instead, I intend to provide primitives others can use in their own
-projects.
-
-Here, I will show you how to create and use the `logger` middleware. This
-`Middleware` is provided by Xerus and can be used by importing it, but it
-provides a good example of how to use create and use `Middleware`.
-
-First, here is a `Middleware` template for quick use:
-
-```ts
-export const logger = new Middleware(async (c: Context, next) => {
-  // things that happen before the request
-  await next();
-  // things that happen after the request
-});
-```
-
-Then, for our `logger` we can do this:
-
-```ts
-export const logger = new Middleware(async (c: Context, next) => {
-  const start = performance.now(); // get the start time before the request
-  await next();
-  const duration = performance.now() - start; // calculate time taken after request
-  console.log(`[${c.req.method}][${c.path}][${duration.toFixed(2)}ms]`); // print
-});
-```
-
-We can then use our `Middleware` by chaining it onto the end of a `Handler`:
-
-```ts
-r.get(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html("<h1>Hello, World!</h1>");
-  }, logger),
-); // <====== chain middleware here
-```
-
-## Parsing Incoming Requests
-
-`Context` has the `parseBody` method which takes in member from the `BodyType`
-enum. We can require the incoming request to have a body of a specific primitive
-type. For example, here we enforce the incoming request body to be JSON:
-
-```ts
-r.post(
-  "/",
-  new Handler(async (c: Context): Promise<Response> => {
-    let { data, err } = await c.parseBody(BodyType.JSON);
-    if (err) {
-      return c.status(500).send("failed to parse the request body");
-    }
-    return c.json({ receivedBody: data });
-  }, logger),
-);
-```
-
-Other options include:
-
-```ts
-c.parseBody(BodyType.TEXT);
-c.parseBody(BodyType.FORM);
-c.parseBody(BodyType.MULTIPART_FORM);
-```
-
-## Serving
-
-Xerus applications are served using `Bun.serve`. This is another design decision
-made to help keep Xerus a tool to be used in other projects. Xerus just provides
-the primitives, you can create the abstractions on top of them.
-
-Here is a simple application served using `Bun.serve`:
-
-```ts
-const r = new Router();
-
-r.get(
-  "/context",
-  new Handler(async (c: Context): Promise<Response> => {
-    return c.html("<h1>Hello, World!</h1>");
-  }, logger),
-);
-
-const server = Bun.serve({
-  port: 8080,
-  fetch: async (req: Request) => {
-    try {
-      const { handler, c } = r.find(req);
-      if (handler) {
-        return handler.execute(c);
-      }
-      return c.status(404).send("404 Not Found");
-    } catch (e: any) {
-      console.error(e);
-      return new Response("internal server error", { status: 500 });
-    }
-  },
-});
-
-console.log(`Server running on ${server.port}`);
-```

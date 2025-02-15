@@ -27,7 +27,7 @@ let apiMiddleware = new Middleware(
 );
 
 app.group("/api", apiMiddleware)
-  .get("/user/:id", async (c: Context): Promise<Response> => {
+  .get("/user/:id", async (c: Context) => {
     let userId = c.param("id");
     let storeValue = c.getStore("secretTreasure");
     return c.json({
@@ -178,7 +178,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file("./static/test.txt")
     if (!file.exists) {
-      return c.status(404).send("File not found");
+      return c.status(404).text("File not found");
     }
     return await c.file(file, true);
   },
@@ -189,7 +189,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file('.'+c.path)
     if (!file.exists) {
-      return c.status(404).send("file not found");
+      return c.status(404).text("file not found");
     }
     return await c.file(file);
   },
@@ -311,7 +311,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file('./static/image.png')
     if (!file.exists) {
-      return c.status(404).send("File not found");
+      return c.status(404).text("File not found");
     }
     return await c.file(file);
   },
@@ -322,7 +322,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file('./static/sample.txt')
     if (!file.exists) {
-      return c.status(404).send("File not found");
+      return c.status(404).text("File not found");
     }
     return await c.file(file);
   },

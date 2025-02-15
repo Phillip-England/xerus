@@ -122,7 +122,7 @@ export class Context {
     return this.res.getHeader(name);
   }
 
-  send(content: string): Response {
+  private send(content: string): Response {
     return this.res.body(content).send();
   }
 
