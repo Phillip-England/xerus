@@ -160,10 +160,10 @@ console.log(c.getStore('key')) // value
 
 12. `c.setCookie`, `c.getCookie`, and `c.clearCookie` - set/get/clear a cookie
 ```ts
-    c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
-    console.log(c.getCookie('user')) // john_doe
-    c.clearCookie('user')
-    console.log(c.getCookie('user')) // undefined
+c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
+console.log(c.getCookie('user')) // john_doe
+c.clearCookie('user')
+console.log(c.getCookie('user')) // undefined
 ```
 
 
