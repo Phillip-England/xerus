@@ -187,7 +187,6 @@ export class Context {
 
   setCookie(name: string, value: string, options: CookieOptions = {}): void {
     let cookieString = `${name}=${encodeURIComponent(value)}`;
-
     if (options.path) cookieString += `; Path=${options.path}`;
     if (options.domain) cookieString += `; Domain=${options.domain}`;
     if (options.maxAge !== undefined) {
@@ -199,10 +198,12 @@ export class Context {
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
-
-    // Fix: Use append instead of setHeader to allow multiple cookies
-    this.res.headers.append("Set-Cookie", cookieString);
+    const existingCookies = this.res.headers.get("Set-Cookie");
+    const cookieArray = existingCookies ? existingCookies.split("; ") : [];
+    cookieArray.push(cookieString);
+    this.res.headers.set("Set-Cookie", cookieArray.join(", "));
   }
+  
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
     this.setCookie(name, "", {
