@@ -214,11 +214,13 @@ export class Context {
 // handler
 //==============================
 
+type HandlerFunc = (c: Context) => Promise<Response>;
+
 export class Handler {
-  private mainHandler: (c: Context) => Promise<Response>;
+  private mainHandler: HandlerFunc;
   private middlewares: Middleware[];
 
-  constructor(mainHandler: (c: Context) => Promise<Response>) {
+  constructor(mainHandler: HandlerFunc) {
     this.mainHandler = mainHandler;
     this.middlewares = [];
   }
@@ -355,36 +357,39 @@ class TrieNode {
 }
 
 export class RouteGroup {
-  app: Xerus
-  prefixPath: string
-  middlewares: Middleware[]
+  app: Xerus;
+  prefixPath: string;
+  middlewares: Middleware[];
   constructor(app: Xerus, prefixPath: string, ...middlewares: Middleware[]) {
-    this.app = app
-    this.prefixPath = prefixPath
-    this.middlewares = middlewares
+    this.app = app;
+    this.prefixPath = prefixPath;
+    this.middlewares = middlewares;
   }
 
-  get(path: string, handler: Handler) {
-    this.app.get(this.prefixPath+path, handler, ...this.middlewares)
+  get(path: string, handler: HandlerFunc) {
+    this.app.get(this.prefixPath + path, handler, ...this.middlewares);
   }
-  post(path: string, handler: Handler) {
-    this.app.post(this.prefixPath+path, handler, ...this.middlewares)
+  post(path: string, handler: HandlerFunc) {
+    this.app.post(this.prefixPath + path, handler, ...this.middlewares);
   }
-  put(path: string, handler: Handler) {
-    this.app.put(this.prefixPath+path, handler, ...this.middlewares)
+  put(path: string, handler: HandlerFunc) {
+    this.app.put(this.prefixPath + path, handler, ...this.middlewares);
   }
-  delete(path: string, handler: Handler) {
-    this.app.delete(this.prefixPath+path, handler, ...this.middlewares)
+  delete(path: string, handler: HandlerFunc) {
+    this.app.delete(this.prefixPath + path, handler, ...this.middlewares);
   }
-  patch(path: string, handler: Handler) {
-    this.app.patch(this.prefixPath+path, handler, ...this.middlewares)
+  patch(path: string, handler: HandlerFunc) {
+    this.app.patch(this.prefixPath + path, handler, ...this.middlewares);
   }
 }
 
 export class Xerus {
+  DEBUG_MODE = false;
   private root: TrieNode = new TrieNode();
   private staticRoutes: Map<string, Map<string, Handler>> = new Map();
   private globalMiddlewares: Middleware[] = [];
+  private notFoundHandler: Handler | undefined;
+  private errHandler: Handler | undefined;
   private resolvedRoutes: Map<
     string,
     { handler?: Handler; params: Record<string, string> }
@@ -397,40 +402,60 @@ export class Xerus {
   }
 
   group(prefixPath: string, ...middlewares: Middleware[]) {
-    return new RouteGroup(this, prefixPath, ...middlewares)
+    return new RouteGroup(this, prefixPath, ...middlewares);
   }
 
-  get(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
-    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
-    handler.setMiddlewares(combinedMiddlewares);
+  get(
+    path: string,
+    handlerFunc: HandlerFunc,
+    ...middlewares: Middleware[]
+  ): Xerus {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
     this.add("GET", path, handler);
     return this;
   }
 
-  post(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
-    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
-    handler.setMiddlewares(combinedMiddlewares);
+  post(
+    path: string,
+    handlerFunc: HandlerFunc,
+    ...middlewares: Middleware[]
+  ): Xerus {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
     this.add("POST", path, handler);
     return this;
   }
 
-  put(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
-    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
-    handler.setMiddlewares(combinedMiddlewares);
+  put(
+    path: string,
+    handlerFunc: HandlerFunc,
+    ...middlewares: Middleware[]
+  ): Xerus {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
     this.add("PUT", path, handler);
     return this;
   }
 
-  delete(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
-    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
-    handler.setMiddlewares(combinedMiddlewares);
+  delete(
+    path: string,
+    handlerFunc: HandlerFunc,
+    ...middlewares: Middleware[]
+  ): Xerus {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
     this.add("DELETE", path, handler);
     return this;
   }
 
-  patch(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
-    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
-    handler.setMiddlewares(combinedMiddlewares);
+  patch(
+    path: string,
+    handlerFunc: HandlerFunc,
+    ...middlewares: Middleware[]
+  ): Xerus {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
     this.add("PATCH", path, handler);
     return this;
   }
@@ -533,5 +558,43 @@ export class Xerus {
     this.resolvedRoutes.set(cacheKey, { handler, params });
 
     return { handler, c: new Context(req, params) };
+  }
+
+  onNotFound(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
+    this.notFoundHandler = handler;
+  }
+
+  onErr(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
+    let handler = new Handler(handlerFunc);
+    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
+    this.errHandler = handler;
+  }
+
+  async run(req: Request): Promise<Response> {
+    try {
+      const { handler, c } = this.find(req);
+      if (handler) {
+        return await handler.execute(c);
+      }
+      if (this.notFoundHandler) {
+        return this.notFoundHandler.execute(new Context(req));
+      }
+      // default 404 handling
+      return new Response("404 Not Found", { status: 404 });
+    } catch (e: any) {
+      if (this.DEBUG_MODE) {
+        console.error(e);
+      }
+      if (this.errHandler) {
+        return this.errHandler.execute(new Context(req));
+      }
+      // default 500 handling
+      return new Response("internal server error", {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
   }
 }
