@@ -219,22 +219,25 @@ type HandlerFunc = (c: Context) => Promise<Response>;
 export class Handler {
   private mainHandler: HandlerFunc;
   private middlewares: Middleware[];
+  private compiledChain: (c: Context) => Promise<Response>;
 
   constructor(mainHandler: HandlerFunc) {
     this.mainHandler = mainHandler;
     this.middlewares = [];
+    this.compiledChain = async (c: Context) => await this.mainHandler(c); // Default
   }
 
   setMiddlewares(middlewares: Middleware[]) {
     this.middlewares = middlewares;
+    this.precompileChain();
   }
 
-  async execute(c: Context): Promise<Response> {
+  private precompileChain() {
     let chain = async (context: Context): Promise<Response> => {
       try {
         return await this.mainHandler(context);
       } catch (error) {
-        throw error; // Ensure error propagates up
+        throw error; // Ensure error propagates
       }
     };
 
@@ -246,30 +249,24 @@ export class Handler {
         try {
           let finalResponse: Response | undefined;
 
-          // Execute the middleware and handle the next function
           const result = await middleware.execute(context, async () => {
             const response = await nextChain(context);
             finalResponse = response;
             return response;
           });
 
-          if (result instanceof Response) {
-            return result;
-          }
-
-          if (finalResponse) {
-            return finalResponse;
-          }
-
-          return new Response("no response generated", { status: 500 });
+          return result instanceof Response ? result : finalResponse || new Response("no response generated", { status: 500 });
         } catch (error) {
-          throw error; // Propagate error up
+          throw error;
         }
       };
     }
 
-    // Execute the final chain
-    return chain(c);
+    this.compiledChain = chain;
+  }
+
+  async execute(c: Context): Promise<Response> {
+    return this.compiledChain(c); // Use precompiled middleware chain
   }
 }
 
@@ -598,3 +595,7 @@ export class Xerus {
     }
   }
 }
+
+//=============================
+// errors
+//=============================
