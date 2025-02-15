@@ -393,7 +393,7 @@ export class Xerus {
   private globalMiddlewares: Middleware[] = [];
   private notFoundHandler?: Handler;
   private errHandler?: Handler;
-  private resolvedRoutes: Record<string, { handler?: Handler; params: Record<string, string> }> = {}; // Replacing Map with object
+  private resolvedRoutes = new Map<string, { handler?: Handler; params: Record<string, string> }>();
   private readonly MAX_CACHE_SIZE = 100;
 
   use(...middlewares: Middleware[]) {
@@ -479,23 +479,28 @@ export class Xerus {
     const { method } = req;
     const url = new URL(req.url);
     const path = url.pathname;
-
-    if (this.routes[`${method} ${path}`]) {
-      return { handler: this.routes[`${method} ${path}`], c: new Context(req) };
-    }
-
     const cacheKey = `${method} ${path}`;
-    if (this.resolvedRoutes[cacheKey]) {
-      return { handler: this.resolvedRoutes[cacheKey].handler, c: new Context(req, this.resolvedRoutes[cacheKey].params) };
+  
+    if (this.routes[cacheKey]) {
+      return { handler: this.routes[cacheKey], c: new Context(req) };
     }
-
+  
+    // Check cache
+    if (this.resolvedRoutes.has(cacheKey)) {
+      const { handler, params } = this.resolvedRoutes.get(cacheKey)!;
+      // (Optional) Move this key to the end to mark it as recently used:
+      this.resolvedRoutes.delete(cacheKey);
+      this.resolvedRoutes.set(cacheKey, { handler, params });
+      return { handler, c: new Context(req, params) };
+    }
+  
     const parts = path.split("/").filter(Boolean);
     let node: TrieNode | undefined = this.root;
     let params: Record<string, string> = {};
-
+  
     for (const part of parts) {
+      // Try literal first, then parameter:
       let nextNode: TrieNode | undefined = node.children[part] ?? node.children[":param"];
-
       if (nextNode) {
         if (nextNode.paramKey) {
           params[nextNode.paramKey] = part;
@@ -508,17 +513,21 @@ export class Xerus {
         return { handler: undefined, c: new Context(req) };
       }
     }
-
+  
     const matchedHandler = node.handlers[method];
     if (!matchedHandler) {
       return { handler: undefined, c: new Context(req) };
     }
-
-    if (Object.keys(this.resolvedRoutes).length >= this.MAX_CACHE_SIZE) {
-      delete this.resolvedRoutes[Object.keys(this.resolvedRoutes)[0]];
+  
+    // Evict the oldest entry if the cache is full:
+    if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
+      const oldestKey = this.resolvedRoutes.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.resolvedRoutes.delete(oldestKey);
+      }
     }
-
-    this.resolvedRoutes[cacheKey] = { handler: matchedHandler, params };
+  
+    this.resolvedRoutes.set(cacheKey, { handler: matchedHandler, params });
     return { handler: matchedHandler, c: new Context(req, params) };
   }
 
