@@ -268,3 +268,15 @@ test("GET /middleware/modify-context should modify context and return stored val
   expect(res.status).toBe(200);
   expect(data.message).toBe("This was set by middleware!");
 });
+
+test("GET /api/user/:id should return user id and stored value", async () => {
+  const userId = "42";
+  const res = await fetch(`${BASE_URL}/api/user/${userId}`);
+  const data = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(data).toEqual({
+    userId: userId,
+    secret: "booty",
+  });
+});

@@ -355,11 +355,30 @@ class TrieNode {
 }
 
 export class RouteGroup {
-  prefix: string
-  constructor(prefix: string) {
-    this.prefix = prefix
+  app: Xerus
+  prefixPath: string
+  middlewares: Middleware[]
+  constructor(app: Xerus, prefixPath: string, ...middlewares: Middleware[]) {
+    this.app = app
+    this.prefixPath = prefixPath
+    this.middlewares = middlewares
   }
-  
+
+  get(path: string, handler: Handler) {
+    this.app.get(this.prefixPath+path, handler, ...this.middlewares)
+  }
+  post(path: string, handler: Handler) {
+    this.app.post(this.prefixPath+path, handler, ...this.middlewares)
+  }
+  put(path: string, handler: Handler) {
+    this.app.put(this.prefixPath+path, handler, ...this.middlewares)
+  }
+  delete(path: string, handler: Handler) {
+    this.app.delete(this.prefixPath+path, handler, ...this.middlewares)
+  }
+  patch(path: string, handler: Handler) {
+    this.app.patch(this.prefixPath+path, handler, ...this.middlewares)
+  }
 }
 
 export class Xerus {
@@ -377,8 +396,8 @@ export class Xerus {
     this.globalMiddlewares.push(...middlewares);
   }
 
-  group(prefixPath: string) {
-    let routeGroup = new RouteGroup(prefixPath)
+  group(prefixPath: string, ...middlewares: Middleware[]) {
+    return new RouteGroup(this, prefixPath, ...middlewares)
   }
 
   get(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {

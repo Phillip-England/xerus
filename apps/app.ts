@@ -12,6 +12,21 @@ const app = new Xerus();
 
 app.use(logger);
 
+let apiMiddleware = new Middleware(async (c: Context, next): Promise<void | Response> => {
+  c.setStore('secretTreasure', 'booty')
+  next()
+})
+
+app.group('/api', apiMiddleware)
+  .get("/user/:id", new Handler(async (c: Context): Promise<Response> => {
+    let userId = c.param('id')
+    let storeValue = c.getStore('secretTreasure')
+    return c.json({
+      userId: userId,
+      secret: storeValue
+    })
+  }))
+
 app.get(
   "/person/melody",
   new Handler(async (c: Context): Promise<Response> => {
