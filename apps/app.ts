@@ -5,7 +5,7 @@ import {
   logger,
   Middleware,
   Xerus,
-} from "../primitives";
+} from "../xerus";
 
 // define router
 const app = new Xerus();
