@@ -176,22 +176,22 @@ app.get(
 app.get(
   "/context/stream-file",
   async (c: Context): Promise<Response> => {
-    let file = await c.file("./static/test.txt", true);
-    if (!file) {
+    let file = Bun.file("./static/test.txt")
+    if (!file.exists) {
       return c.status(404).send("File not found");
     }
-    return file;
+    return await c.file(file, true);
   },
 );
 
 app.get(
   "/static/*",
   async (c: Context): Promise<Response> => {
-    let file = await c.file("." + c.path);
-    if (!file) {
+    let file = Bun.file('.'+c.path)
+    if (!file.exists) {
       return c.status(404).send("file not found");
     }
-    return file;
+    return await c.file(file);
   },
 );
 
@@ -309,22 +309,22 @@ app.post(
 app.get(
   "/context/serve-image",
   async (c: Context): Promise<Response> => {
-    let file = await c.file("./static/image.png");
-    if (!file) {
+    let file = Bun.file('./static/image.png')
+    if (!file.exists) {
       return c.status(404).send("File not found");
     }
-    return file;
+    return await c.file(file);
   },
 );
 
 app.get(
   "/context/serve-text-file",
   async (c: Context): Promise<Response> => {
-    let file = await c.file("./static/sample.txt");
-    if (!file) {
+    let file = Bun.file('./static/sample.txt')
+    if (!file.exists) {
       return c.status(404).send("File not found");
     }
-    return file;
+    return await c.file(file);
   },
 );
 

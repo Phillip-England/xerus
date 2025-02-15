@@ -2,6 +2,8 @@
 // cookies
 //==============================
 
+import type { BunFile } from "bun";
+
 export interface CookieOptions {
   path?: string;
   domain?: string;
@@ -147,10 +149,7 @@ export class Context {
     });
   }
 
-  async file(filePath: string, stream = false): Promise<Response | undefined> {
-    const file = Bun.file(filePath);
-    if (!file) return undefined;
-
+  async file(file: BunFile, stream = false): Promise<Response> {
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     return stream
       ? new Response(file.stream(), {
