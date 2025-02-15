@@ -31,7 +31,7 @@ test("POST /context/parseJSON/invalidJSON should return error for invalid JSON",
   });
   const data = await res.text();
   expect(res.status).toBe(500);
-	console.log(data)
+  console.log(data);
   expect(data).toBe("internal server error");
 });
 

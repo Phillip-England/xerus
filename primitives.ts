@@ -53,55 +53,54 @@ export class Context {
     return this.res.send();
   }
 
-	async parseBody<T extends BodyType>(
-		expectedType: T,
-	): Promise<
-		T extends BodyType.JSON ? Record<string, any>
-			: T extends BodyType.TEXT ? string
-			: T extends BodyType.FORM ? Record<string, string>
-			: T extends BodyType.MULTIPART_FORM ? FormData
-			: never
-	> {
-		if (this._body !== undefined) {
-			return this._body as any;
-		}
-	
-		const contentType = this.req.headers.get("Content-Type") || "";
-	
-		try {
-			let parsedData: any;
-	
-			if (contentType.includes("application/json")) {
-				parsedData = await this.req.json();
-				if (expectedType !== BodyType.JSON) {
-					throw new Error("Unexpected JSON data");
-				}
-			} else if (contentType.includes("application/x-www-form-urlencoded")) {
-				parsedData = Object.fromEntries(
-					new URLSearchParams(await this.req.text()),
-				);
-				if (expectedType !== BodyType.FORM) {
-					throw new Error("Unexpected FORM data");
-				}
-			} else if (contentType.includes("multipart/form-data")) {
-				parsedData = await this.req.formData();
-				if (expectedType !== BodyType.MULTIPART_FORM) {
-					throw new Error("Unexpected MULTIPART_FORM data");
-				}
-			} else {
-				parsedData = await this.req.text();
-				if (expectedType !== BodyType.TEXT) {
-					throw new Error("Unexpected TEXT data");
-				}
-			}
-	
-			this._body = parsedData;
-			return parsedData;
-		} catch (err: any) {
-			throw new Error(`Body parsing failed: ${err.message}`);
-		}
-	}
-	
+  async parseBody<T extends BodyType>(
+    expectedType: T,
+  ): Promise<
+    T extends BodyType.JSON ? Record<string, any>
+      : T extends BodyType.TEXT ? string
+      : T extends BodyType.FORM ? Record<string, string>
+      : T extends BodyType.MULTIPART_FORM ? FormData
+      : never
+  > {
+    if (this._body !== undefined) {
+      return this._body as any;
+    }
+
+    const contentType = this.req.headers.get("Content-Type") || "";
+
+    try {
+      let parsedData: any;
+
+      if (contentType.includes("application/json")) {
+        parsedData = await this.req.json();
+        if (expectedType !== BodyType.JSON) {
+          throw new Error("Unexpected JSON data");
+        }
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        parsedData = Object.fromEntries(
+          new URLSearchParams(await this.req.text()),
+        );
+        if (expectedType !== BodyType.FORM) {
+          throw new Error("Unexpected FORM data");
+        }
+      } else if (contentType.includes("multipart/form-data")) {
+        parsedData = await this.req.formData();
+        if (expectedType !== BodyType.MULTIPART_FORM) {
+          throw new Error("Unexpected MULTIPART_FORM data");
+        }
+      } else {
+        parsedData = await this.req.text();
+        if (expectedType !== BodyType.TEXT) {
+          throw new Error("Unexpected TEXT data");
+        }
+      }
+
+      this._body = parsedData;
+      return parsedData;
+    } catch (err: any) {
+      throw new Error(`Body parsing failed: ${err.message}`);
+    }
+  }
 
   param(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
@@ -167,10 +166,9 @@ export class Context {
     return this.storeData[key] || undefined;
   }
 
-	query(name: string, defaultValue: string = ""): string {
-		return this.url.searchParams.get(name) ?? defaultValue;
-	}
-	
+  query(name: string, defaultValue: string = ""): string {
+    return this.url.searchParams.get(name) ?? defaultValue;
+  }
 
   getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
@@ -202,15 +200,14 @@ export class Context {
     this.res.headers.append("Set-Cookie", cookieString);
   }
 
-	clearCookie(name: string, path: string = "/", domain?: string): void {
-		this.setCookie(name, "", {
-			maxAge: 0,
-			expires: new Date(0),
-			path: path,
-			domain: domain,  // Match the domain of the original cookie
-		});
-	}
-	
+  clearCookie(name: string, path: string = "/", domain?: string): void {
+    this.setCookie(name, "", {
+      maxAge: 0,
+      expires: new Date(0),
+      path: path,
+      domain: domain, // Match the domain of the original cookie
+    });
+  }
 }
 
 //==============================
@@ -226,9 +223,9 @@ export class Handler {
     this.middlewares = [];
   }
 
-	setMiddlewares(middlewares: Middleware[]) {
-		this.middlewares = middlewares
-	}
+  setMiddlewares(middlewares: Middleware[]) {
+    this.middlewares = middlewares;
+  }
 
   async execute(c: Context): Promise<Response> {
     let chain = async (context: Context): Promise<Response> => {
@@ -273,7 +270,6 @@ export class Handler {
     return chain(c);
   }
 }
-
 
 //==============================
 // middleware
@@ -358,9 +354,18 @@ class TrieNode {
   wildcard?: TrieNode;
 }
 
-export class Router {
+export class RouteGroup {
+  prefix: string
+  constructor(prefix: string) {
+    this.prefix = prefix
+  }
+  
+}
+
+export class Xerus {
   private root: TrieNode = new TrieNode();
   private staticRoutes: Map<string, Map<string, Handler>> = new Map();
+  private globalMiddlewares: Middleware[] = [];
   private resolvedRoutes: Map<
     string,
     { handler?: Handler; params: Record<string, string> }
@@ -368,28 +373,45 @@ export class Router {
 
   private readonly MAX_CACHE_SIZE = 100; // Adjust size as needed
 
-  get(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
-    handler.setMiddlewares(middlewares)
-		this.add("GET", path, handler);
+  use(...middlewares: Middleware[]) {
+    this.globalMiddlewares.push(...middlewares);
+  }
+
+  group(prefixPath: string) {
+    let routeGroup = new RouteGroup(prefixPath)
+  }
+
+  get(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
+    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
+    handler.setMiddlewares(combinedMiddlewares);
+    this.add("GET", path, handler);
     return this;
   }
-  post(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
-    handler.setMiddlewares(middlewares)
+
+  post(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
+    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
+    handler.setMiddlewares(combinedMiddlewares);
     this.add("POST", path, handler);
     return this;
   }
-  put(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
-    handler.setMiddlewares(middlewares)
+
+  put(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
+    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
+    handler.setMiddlewares(combinedMiddlewares);
     this.add("PUT", path, handler);
     return this;
   }
-  delete(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
-    handler.setMiddlewares(middlewares)
+
+  delete(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
+    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
+    handler.setMiddlewares(combinedMiddlewares);
     this.add("DELETE", path, handler);
     return this;
   }
-  patch(path: string, handler: Handler, ...middlewares: Middleware[]): Router {
-    handler.setMiddlewares(middlewares)
+
+  patch(path: string, handler: Handler, ...middlewares: Middleware[]): Xerus {
+    let combinedMiddlewares = [...this.globalMiddlewares, ...middlewares];
+    handler.setMiddlewares(combinedMiddlewares);
     this.add("PATCH", path, handler);
     return this;
   }

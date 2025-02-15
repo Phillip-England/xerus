@@ -4,11 +4,20 @@ import {
   Handler,
   logger,
   Middleware,
-  Router,
+  Xerus,
 } from "../primitives";
 
 // define router
-const r = new Router();
+const app = new Xerus();
+
+app.use(logger);
+
+app.get(
+  "/person/melody",
+  new Handler(async (c: Context): Promise<Response> => {
+    return c.html("<h1>Hello, Melody!</h1>");
+  }),
+);
 
 const mwOrderTest1 = new Middleware(async (c, next) => {
   console.log("Middleware 1 BEFORE");
@@ -38,101 +47,90 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
   return response;
 });
 
-r.get(
+app.get(
   "/",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "Hello, world!" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/html",
   new Handler(async (c: Context): Promise<Response> => {
     return c.html("<h1>Hello, World!</h1>");
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/json",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ "testing": "json" });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseJSON/invalidJSON",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseJSON/validJSON",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/query",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ queryValue: c.query("key", "default") });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/set-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     c.setCookie("testCookie", "cookieValue", { path: "/", maxAge: 3600 });
     return c.json({ message: "Cookie set!" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/get-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ cookieValue: c.getCookie("testCookie") });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/clear-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     c.clearCookie("testCookie");
     return c.json({ message: "Cookie cleared!" });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseText",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.TEXT);
     return c.json({ receivedText: data });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseForm",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.FORM);
     return c.json({ receivedFormData: data });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseMultipartForm",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.MULTIPART_FORM);
@@ -142,18 +140,16 @@ r.post(
     });
     return c.json({ receivedMultipartFormData: formDataObject });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/headers",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ userAgent: c.req.headers.get("User-Agent") });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/stream-file",
   new Handler(async (c: Context): Promise<Response> => {
     let file = await c.file("./static/test.txt", true);
@@ -162,10 +158,9 @@ r.get(
     }
     return file;
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/static/*",
   new Handler(async (c: Context): Promise<Response> => {
     let file = await c.file("." + c.path);
@@ -176,39 +171,35 @@ r.get(
   }),
 );
 
-r.put(
+app.put(
   "/context/method/put",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "PUT method received" });
   }),
-	logger
 );
 
-r.delete(
+app.delete(
   "/context/method/delete",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "DELETE method received" });
   }),
-	logger
 );
 
-r.patch(
+app.patch(
   "/context/method/patch",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "PATCH method received" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/params/:id",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ paramValue: c.param("id") });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/params/:id/details/:detailId",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({
@@ -216,10 +207,9 @@ r.get(
       detailId: c.param("detailId"),
     });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/query/multiple",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({
@@ -227,52 +217,46 @@ r.get(
       key2: c.query("key2", "default2"),
     });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/status/200",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: "OK" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/status/400",
   new Handler(async (c: Context): Promise<Response> => {
     return c.status(400).json({ error: "Bad Request" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/status/500",
   new Handler(async (c: Context): Promise<Response> => {
     return c.status(500).json({ error: "Internal Server Error" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/headers/custom",
   new Handler(async (c: Context): Promise<Response> => {
     c.setHeader("X-Custom-Header", "CustomValue");
     return c.json({ message: "Custom header set" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/set-secure-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     c.setCookie("secureTest", "secureValue", { secure: true, httpOnly: true });
     return c.json({ message: "Secure cookie set!" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/set-expiring-cookie",
   new Handler(async (c: Context): Promise<Response> => {
     c.setCookie("expiringTest", "willExpire", {
@@ -280,28 +264,25 @@ r.get(
     });
     return c.json({ message: "Expiring cookie set!" });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseBody/empty",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   }),
-	logger
 );
 
-r.post(
+app.post(
   "/context/parseBody/largeJSON",
   new Handler(async (c: Context): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/serve-image",
   new Handler(async (c: Context): Promise<Response> => {
     let file = await c.file("./static/image.png");
@@ -310,10 +291,9 @@ r.get(
     }
     return file;
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/context/serve-text-file",
   new Handler(async (c: Context): Promise<Response> => {
     let file = await c.file("./static/sample.txt");
@@ -322,49 +302,44 @@ r.get(
     }
     return file;
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/middleware/early-response",
   new Handler(
     async (c: Context): Promise<Response> => {
       return c.json({ message: "This should not execute" });
     },
   ),
-	mwEarlyResponse,
-    logger,
+  mwEarlyResponse,
 );
 
-r.get(
+app.get(
   "/middleware/order-test",
   new Handler(
     async (c: Context): Promise<Response> => {
       return c.json({ message: "Middleware order test" });
-    }
+    },
   ),
-	logger,
-	mwOrderTest1,
-	mwOrderTest2,
+  mwOrderTest1,
+  mwOrderTest2,
 );
 
-r.get(
+app.get(
   "/wildcard/*",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: `Matched wildcard route for ${c.path}` });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/wildcard/deep/*",
   new Handler(async (c: Context): Promise<Response> => {
     return c.json({ message: `Matched deep wildcard route for ${c.path}` });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/set-cookies",
   new Handler(async (c) => {
     c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
@@ -372,10 +347,9 @@ r.get(
 
     return c.json({ message: "Cookies set" });
   }),
-	logger
 );
 
-r.get(
+app.get(
   "/get-cookies",
   new Handler(async (c) => {
     return c.json({
@@ -383,7 +357,6 @@ r.get(
       session: c.getCookie("session"),
     });
   }),
-	logger
 );
 
 const mwModifyContext = new Middleware(async (c, next) => {
@@ -391,22 +364,21 @@ const mwModifyContext = new Middleware(async (c, next) => {
   await next();
 });
 
-r.get(
+app.get(
   "/middleware/modify-context",
   new Handler(
     async (c: Context): Promise<Response> => {
       return c.json({ message: c.getStore("modified") });
-    }
+    },
   ),
-	logger,
-	mwModifyContext,
+  mwModifyContext,
 );
 
 const server = Bun.serve({
   port: 8080,
   fetch: async (req: Request) => {
     try {
-      const { handler, c } = r.find(req);
+      const { handler, c } = app.find(req);
       if (handler) {
         return await handler.execute(c);
       }
@@ -420,6 +392,5 @@ const server = Bun.serve({
     }
   },
 });
-
 
 console.log(`Server running on ${server.port}`);
