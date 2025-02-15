@@ -129,6 +129,11 @@ export class Context {
     return this.send(content);
   }
 
+  text(content: string): Response {
+    this.setHeader("Content-Type", "text/plain");
+    return this.send(content);
+  }
+
   json(data: any): Response {
     this.setHeader("Content-Type", "application/json");
     return this.send(JSON.stringify(data));
@@ -255,7 +260,8 @@ export class Handler {
             return response;
           });
 
-          return result instanceof Response ? result : finalResponse || new Response("no response generated", { status: 500 });
+          return result instanceof Response ? result : finalResponse ||
+            new Response("no response generated", { status: 500 });
         } catch (error) {
           throw error;
         }
@@ -347,8 +353,8 @@ export class MutResponse {
 //==============================
 
 class TrieNode {
-  handlers: Map<string, Handler> = new Map();
-  children: Map<string, TrieNode> = new Map();
+  handlers: Record<string, Handler> = {}; // Replacing Map with object
+  children: Record<string, TrieNode> = {}; // Replacing Map with object
   paramKey?: string;
   wildcard?: TrieNode;
 }
@@ -383,16 +389,12 @@ export class RouteGroup {
 export class Xerus {
   DEBUG_MODE = false;
   private root: TrieNode = new TrieNode();
-  private staticRoutes: Map<string, Map<string, Handler>> = new Map();
+  private routes: Record<string, Handler> = {}; // Replacing Map with object
   private globalMiddlewares: Middleware[] = [];
-  private notFoundHandler: Handler | undefined;
-  private errHandler: Handler | undefined;
-  private resolvedRoutes: Map<
-    string,
-    { handler?: Handler; params: Record<string, string> }
-  > = new Map();
-
-  private readonly MAX_CACHE_SIZE = 100; // Adjust size as needed
+  private notFoundHandler?: Handler;
+  private errHandler?: Handler;
+  private resolvedRoutes: Record<string, { handler?: Handler; params: Record<string, string> }> = {}; // Replacing Map with object
+  private readonly MAX_CACHE_SIZE = 100;
 
   use(...middlewares: Middleware[]) {
     this.globalMiddlewares.push(...middlewares);
@@ -402,103 +404,75 @@ export class Xerus {
     return new RouteGroup(this, prefixPath, ...middlewares);
   }
 
-  get(
-    path: string,
-    handlerFunc: HandlerFunc,
-    ...middlewares: Middleware[]
-  ): Xerus {
+  onErr(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
     let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.add("GET", path, handler);
-    return this;
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
+    this.errHandler = handler;
   }
 
-  post(
-    path: string,
-    handlerFunc: HandlerFunc,
-    ...middlewares: Middleware[]
-  ): Xerus {
+  onNotFound(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
     let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.add("POST", path, handler);
-    return this;
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
+    this.notFoundHandler = handler;
   }
 
-  put(
-    path: string,
-    handlerFunc: HandlerFunc,
-    ...middlewares: Middleware[]
-  ): Xerus {
+  private register(method: string, path: string, handlerFunc: HandlerFunc, middlewares: Middleware[]) {
     let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.add("PUT", path, handler);
-    return this;
-  }
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
-  delete(
-    path: string,
-    handlerFunc: HandlerFunc,
-    ...middlewares: Middleware[]
-  ): Xerus {
-    let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.add("DELETE", path, handler);
-    return this;
-  }
-
-  patch(
-    path: string,
-    handlerFunc: HandlerFunc,
-    ...middlewares: Middleware[]
-  ): Xerus {
-    let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.add("PATCH", path, handler);
-    return this;
-  }
-
-  private add(method: string, path: string, handler: Handler) {
     if (!path.includes(":") && !path.includes("*")) {
-      if (!this.staticRoutes.has(path)) {
-        this.staticRoutes.set(path, new Map());
-      }
-
-      if (this.staticRoutes.get(path)!.has(method)) {
-        throw new Error(`Route ${method} ${path} has already been registered`);
-      }
-
-      this.staticRoutes.get(path)!.set(method, handler);
+      this.routes[`${method} ${path}`] = handler;
       return;
     }
 
+    // Optimized Trie Insertion
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
 
     for (const part of parts) {
-      if (part.startsWith(":")) {
-        if (!node.children.has(":param")) {
-          node.children.set(":param", new TrieNode());
-          node.children.get(":param")!.paramKey = part.slice(1);
-        }
-        node = node.children.get(":param")!;
-      } else if (part === "*") {
-        if (!node.wildcard) {
-          node.wildcard = new TrieNode();
-        }
+      let isParam = part.startsWith(":");
+      let isWildcard = part === "*";
+
+      if (isParam) {
+        node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
+        node.paramKey ||= part.slice(1);
+      } else if (isWildcard) {
+        node.wildcard = node.wildcard ?? new TrieNode();
         node = node.wildcard;
       } else {
-        if (!node.children.has(part)) {
-          node.children.set(part, new TrieNode());
-        }
-        node = node.children.get(part)!;
+        node = node.children[part] ?? (node.children[part] = new TrieNode());
       }
     }
 
-    if (node.handlers.has(method)) {
+    if (node.handlers[method]) {
       throw new Error(`Route ${method} ${path} has already been registered`);
     }
+    node.handlers[method] = handler;
+  }
 
-    node.handlers.set(method, handler);
+  get(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.register("GET", path, handler, middlewares);
+    return this;
+  }
+
+  post(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.register("POST", path, handler, middlewares);
+    return this;
+  }
+
+  put(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.register("PUT", path, handler, middlewares);
+    return this;
+  }
+
+  delete(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.register("DELETE", path, handler, middlewares);
+    return this;
+  }
+
+  patch(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.register("PATCH", path, handler, middlewares);
+    return this;
   }
 
   find(req: Request): { handler?: Handler; c: Context } {
@@ -506,95 +480,61 @@ export class Xerus {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // 1️⃣ Fast O(1) lookup for static routes
-    if (this.staticRoutes.has(path)) {
-      const methodHandlers = this.staticRoutes.get(path)!;
-      const handler = methodHandlers.get(method);
-      return { handler, c: new Context(req) };
+    if (this.routes[`${method} ${path}`]) {
+      return { handler: this.routes[`${method} ${path}`], c: new Context(req) };
     }
 
-    // 2️⃣ Cached lookup for previously resolved paths
     const cacheKey = `${method} ${path}`;
-    if (this.resolvedRoutes.has(cacheKey)) {
-      // Move accessed key to the end (mark as most recently used)
-      const cached = this.resolvedRoutes.get(cacheKey)!;
-      this.resolvedRoutes.delete(cacheKey);
-      this.resolvedRoutes.set(cacheKey, cached);
-      return { handler: cached.handler, c: new Context(req, cached.params) };
+    if (this.resolvedRoutes[cacheKey]) {
+      return { handler: this.resolvedRoutes[cacheKey].handler, c: new Context(req, this.resolvedRoutes[cacheKey].params) };
     }
 
-    // 3️⃣ Trie traversal for dynamic routes
     const parts = path.split("/").filter(Boolean);
     let node: TrieNode | undefined = this.root;
     let params: Record<string, string> = {};
 
     for (const part of parts) {
-      if (node!.children.has(part)) {
-        node = node!.children.get(part);
-      } else if (node!.children.has(":param")) {
-        let paramNode = node!.children.get(":param")!;
-        params[paramNode.paramKey!] = part;
-        node = paramNode;
-      } else if (node!.wildcard) {
-        node = node!.wildcard;
+      let nextNode: TrieNode | undefined = node.children[part] ?? node.children[":param"];
+
+      if (nextNode) {
+        if (nextNode.paramKey) {
+          params[nextNode.paramKey] = part;
+        }
+        node = nextNode;
+      } else if (node.wildcard) {
+        node = node.wildcard;
         break;
       } else {
         return { handler: undefined, c: new Context(req) };
       }
     }
 
-    const handler = node!.handlers.get(method);
-
-    // 4️⃣ Cache resolved dynamic routes
-    if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
-      const firstKey = this.resolvedRoutes.keys().next().value;
-      if (firstKey !== undefined) { // ✅ Fix: Ensure firstKey is not undefined
-        this.resolvedRoutes.delete(firstKey);
-      }
+    const matchedHandler = node.handlers[method];
+    if (!matchedHandler) {
+      return { handler: undefined, c: new Context(req) };
     }
-    this.resolvedRoutes.set(cacheKey, { handler, params });
 
-    return { handler, c: new Context(req, params) };
-  }
+    if (Object.keys(this.resolvedRoutes).length >= this.MAX_CACHE_SIZE) {
+      delete this.resolvedRoutes[Object.keys(this.resolvedRoutes)[0]];
+    }
 
-  onNotFound(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
-    let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.notFoundHandler = handler;
-  }
-
-  onErr(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
-    let handler = new Handler(handlerFunc);
-    handler.setMiddlewares([...this.globalMiddlewares, ...middlewares]);
-    this.errHandler = handler;
+    this.resolvedRoutes[cacheKey] = { handler: matchedHandler, params };
+    return { handler: matchedHandler, c: new Context(req, params) };
   }
 
   async run(req: Request): Promise<Response> {
     try {
       const { handler, c } = this.find(req);
-      if (handler) {
-        return await handler.execute(c);
-      }
-      if (this.notFoundHandler) {
-        return this.notFoundHandler.execute(new Context(req));
-      }
-      // default 404 handling
-      return new Response("404 Not Found", { status: 404 });
+      if (handler) return await handler.execute(c);
+      return this.notFoundHandler ? this.notFoundHandler.execute(new Context(req)) : new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
-      if (this.DEBUG_MODE) {
-        console.error(e);
-      }
-      if (this.errHandler) {
-        return this.errHandler.execute(new Context(req));
-      }
-      // default 500 handling
-      return new Response("internal server error", {
-        status: 500,
-        headers: { "Content-Type": "text/plain" },
-      });
+      if (this.DEBUG_MODE) console.error(e);
+      return this.errHandler ? this.errHandler.execute(new Context(req)) : new Response("internal server error", { status: 500 });
     }
   }
+
 }
+
 
 //=============================
 // errors
