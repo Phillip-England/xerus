@@ -176,7 +176,7 @@ app.get(
 app.get(
   "/context/stream-file",
   async (c: Context): Promise<Response> => {
-    let file = Bun.file("./static/test.txt")
+    let file = Bun.file("./static/test.txt");
     if (!file.exists) {
       return c.status(404).text("File not found");
     }
@@ -187,7 +187,7 @@ app.get(
 app.get(
   "/static/*",
   async (c: Context): Promise<Response> => {
-    let file = Bun.file('.'+c.path)
+    let file = Bun.file("." + c.path);
     if (!file.exists) {
       return c.status(404).text("file not found");
     }
@@ -309,7 +309,7 @@ app.post(
 app.get(
   "/context/serve-image",
   async (c: Context): Promise<Response> => {
-    let file = Bun.file('./static/image.png')
+    let file = Bun.file("./static/image.png");
     if (!file.exists) {
       return c.status(404).text("File not found");
     }
@@ -320,7 +320,7 @@ app.get(
 app.get(
   "/context/serve-text-file",
   async (c: Context): Promise<Response> => {
-    let file = Bun.file('./static/sample.txt')
+    let file = Bun.file("./static/sample.txt");
     if (!file.exists) {
       return c.status(404).text("File not found");
     }

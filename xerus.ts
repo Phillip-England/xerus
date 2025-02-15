@@ -203,7 +203,6 @@ export class Context {
     cookieArray.push(cookieString);
     this.res.headers.set("Set-Cookie", cookieArray.join(", "));
   }
-  
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
     this.setCookie(name, "", {
@@ -393,7 +392,10 @@ export class Xerus {
   private globalMiddlewares: Middleware[] = [];
   private notFoundHandler?: Handler;
   private errHandler?: Handler;
-  private resolvedRoutes = new Map<string, { handler?: Handler; params: Record<string, string> }>();
+  private resolvedRoutes = new Map<
+    string,
+    { handler?: Handler; params: Record<string, string> }
+  >();
   private readonly MAX_CACHE_SIZE = 100;
 
   use(...middlewares: Middleware[]) {
@@ -416,7 +418,12 @@ export class Xerus {
     this.notFoundHandler = handler;
   }
 
-  private register(method: string, path: string, handlerFunc: HandlerFunc, middlewares: Middleware[]) {
+  private register(
+    method: string,
+    path: string,
+    handlerFunc: HandlerFunc,
+    middlewares: Middleware[],
+  ) {
     let handler = new Handler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
@@ -434,7 +441,8 @@ export class Xerus {
       let isWildcard = part === "*";
 
       if (isParam) {
-        node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
+        node = node.children[":param"] ??
+          (node.children[":param"] = new TrieNode());
         node.paramKey ||= part.slice(1);
       } else if (isWildcard) {
         node.wildcard = node.wildcard ?? new TrieNode();
@@ -480,11 +488,11 @@ export class Xerus {
     const url = new URL(req.url);
     const path = url.pathname;
     const cacheKey = `${method} ${path}`;
-  
+
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], c: new Context(req) };
     }
-  
+
     // Check cache
     if (this.resolvedRoutes.has(cacheKey)) {
       const { handler, params } = this.resolvedRoutes.get(cacheKey)!;
@@ -493,14 +501,15 @@ export class Xerus {
       this.resolvedRoutes.set(cacheKey, { handler, params });
       return { handler, c: new Context(req, params) };
     }
-  
+
     const parts = path.split("/").filter(Boolean);
     let node: TrieNode | undefined = this.root;
     let params: Record<string, string> = {};
-  
+
     for (const part of parts) {
       // Try literal first, then parameter:
-      let nextNode: TrieNode | undefined = node.children[part] ?? node.children[":param"];
+      let nextNode: TrieNode | undefined = node.children[part] ??
+        node.children[":param"];
       if (nextNode) {
         if (nextNode.paramKey) {
           params[nextNode.paramKey] = part;
@@ -513,12 +522,12 @@ export class Xerus {
         return { handler: undefined, c: new Context(req) };
       }
     }
-  
+
     const matchedHandler = node.handlers[method];
     if (!matchedHandler) {
       return { handler: undefined, c: new Context(req) };
     }
-  
+
     // Evict the oldest entry if the cache is full:
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
@@ -526,7 +535,7 @@ export class Xerus {
         this.resolvedRoutes.delete(oldestKey);
       }
     }
-  
+
     this.resolvedRoutes.set(cacheKey, { handler: matchedHandler, params });
     return { handler: matchedHandler, c: new Context(req, params) };
   }
@@ -535,15 +544,19 @@ export class Xerus {
     try {
       const { handler, c } = this.find(req);
       if (handler) return await handler.execute(c);
-      return this.notFoundHandler ? this.notFoundHandler.execute(new Context(req)) : new Response("404 Not Found", { status: 404 });
+      return this.notFoundHandler
+        ? this.notFoundHandler.execute(new Context(req))
+        : new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
       if (this.DEBUG_MODE) console.error(e);
-      return this.errHandler ? this.errHandler.execute(new Context(req)) : new Response("internal server error", { status: 500 });
+      let c = new Context(req);
+      c.setStore("err", e);
+      return this.errHandler
+        ? this.errHandler.execute(c)
+        : new Response("internal server error", { status: 500 });
     }
   }
-
 }
-
 
 //=============================
 // errors
