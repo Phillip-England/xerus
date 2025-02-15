@@ -10,9 +10,14 @@ import {
 // define router
 const app = new Xerus();
 
+setInterval(() => {
+  const usage = process.memoryUsage();
+  console.log(`Memory Usage: RSS: ${(usage.rss / 1024 / 1024).toFixed(2)} MB, Heap Used: ${(usage.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+}, 100);
+
 app.DEBUG_MODE = true;
 
-app.use(logger);
+// app.use(logger);
 
 let apiMiddleware = new Middleware(
   async (c: Context, next): Promise<void | Response> => {
