@@ -368,24 +368,24 @@ export class RouteGroup {
     this.middlewares = middlewares;
   }
 
-  get(path: string, handler: HandlerFunc) {
-    this.app.get(this.prefixPath + path, handler, ...this.middlewares);
+  get(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.app.get(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
     return this
   }
-  post(path: string, handler: HandlerFunc) {
-    this.app.post(this.prefixPath + path, handler, ...this.middlewares);
+  post(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.app.post(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
     return this
   }
-  put(path: string, handler: HandlerFunc) {
-    this.app.put(this.prefixPath + path, handler, ...this.middlewares);
+  put(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.app.put(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
     return this
   }
-  delete(path: string, handler: HandlerFunc) {
-    this.app.delete(this.prefixPath + path, handler, ...this.middlewares);
+  delete(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.app.delete(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
     return this
   }
-  patch(path: string, handler: HandlerFunc) {
-    this.app.patch(this.prefixPath + path, handler, ...this.middlewares);
+  patch(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+    this.app.patch(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
     return this
   }
 }
