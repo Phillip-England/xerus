@@ -370,18 +370,23 @@ export class RouteGroup {
 
   get(path: string, handler: HandlerFunc) {
     this.app.get(this.prefixPath + path, handler, ...this.middlewares);
+    return this
   }
   post(path: string, handler: HandlerFunc) {
     this.app.post(this.prefixPath + path, handler, ...this.middlewares);
+    return this
   }
   put(path: string, handler: HandlerFunc) {
     this.app.put(this.prefixPath + path, handler, ...this.middlewares);
+    return this
   }
   delete(path: string, handler: HandlerFunc) {
     this.app.delete(this.prefixPath + path, handler, ...this.middlewares);
+    return this
   }
   patch(path: string, handler: HandlerFunc) {
     this.app.patch(this.prefixPath + path, handler, ...this.middlewares);
+    return this
   }
 }
 
