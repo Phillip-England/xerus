@@ -1,6 +1,5 @@
 # Xerus
-
-HTTP primitives for Bun.
+Build web applications with Bun.
 
 ## Installation
 
@@ -13,7 +12,7 @@ bun add github:phillip-england/xerus
 Create an `index.ts` and paste in the following code:
 
 ```ts
-import { Context, Handler, logger, Xerus } from "xerus/xerus";
+import { Context, logger, Xerus } from "xerus/xerus";
 
 const app = new Xerus();
 
