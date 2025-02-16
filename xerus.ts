@@ -41,6 +41,7 @@ export class Context {
   params: Record<string, string>;
   private _body?: string | Record<string, any> | FormData;
   storeData: Record<string, string>;
+  private err: Error | undefined | string
 
   constructor(req: Request, params: Record<string, string> = {}) {
     this.req = req;
@@ -52,6 +53,14 @@ export class Context {
     this.segments = this.path.split("/").filter(Boolean);
     this.params = params;
     this.storeData = {};
+  }
+
+  setErr(err: Error | undefined | string) {
+    this.err = err
+  }
+
+  getErr(): Error | undefined | string {
+    return this.err
   }
 
   redirect(location: string, status: number = 302): Response {
@@ -555,9 +564,8 @@ export class Xerus {
         ? this.notFoundHandler.execute(new Context(req))
         : new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
-      if (this.DEBUG_MODE) console.error(e);
       let c = new Context(req);
-      c.setStore("err", this.DEBUG_MODE ? e.message : "Internal server error");
+      c.setErr(e.message);
       return this.errHandler
         ? this.errHandler.execute(c)
         : new Response("Internal Server Error", { status: 500 });
@@ -565,7 +573,3 @@ export class Xerus {
   }
   
 }
-
-//=============================
-// errors
-//=============================

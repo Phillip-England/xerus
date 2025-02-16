@@ -24,6 +24,3 @@ test:
 
 bench:
 	bun test ./apps/bench.test.ts
-
-www:
-	bun run --hot ./app.ts

@@ -20,6 +20,18 @@ const app = new Xerus();
 // setup logging
 app.use(logger);
 
+// what to do if any errors are thrown
+app.onErr(async (c: Context): Promise<Response> => {
+  let err = c.getErr();
+  console.error(err)
+  return c.status(500).text("internal server error");
+});
+
+// what to do if a 404 is thrown
+app.onNotFound(async (c: Context): Promise<Response> => {
+  return c.status(404).text("404 Not Found");
+});
+
 // basic endpoint
 app.get("/", async (c: Context) => {
   return c.html("<h1>Hello, World!</h1>");
@@ -253,7 +265,8 @@ Customize the default error response:
 
 ```ts
 app.onErr(async (c: Context): Promise<Response> => {
-  let err = c.getStore("err"); // <=== get the err
+  let err = c.getErr();
+  console.error(err)
   return c.status(500).text("internal server error");
 });
 ```
