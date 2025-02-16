@@ -1,8 +1,13 @@
+import type { BunFile } from "bun";
+
+//==============================
+// 
+//==============================
+
 //==============================
 // cookies
 //==============================
 
-import type { BunFile } from "bun";
 
 export interface CookieOptions {
   path?: string;
@@ -177,39 +182,38 @@ export class Context {
   getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
-
-    const cookieMap = Object.fromEntries(
-      cookies.split("; ").map((c) => c.split("=")),
-    );
-
-    return cookieMap[name];
+    return cookies.split("; ")
+      .map(c => c.split(/=(.*)/s, 2)) // Preserve `=` inside values
+      .reduce<Record<string, string>>((acc, [key, val]) => {
+        acc[key] = val;
+        return acc;
+      }, {})[name];
   }
+  
+  
 
-  setCookie(name: string, value: string, options: CookieOptions = {}): void {
+  setCookie(name: string, value: string, options: CookieOptions = {}) {
     let cookieString = `${name}=${encodeURIComponent(value)}`;
-    if (options.path) cookieString += `; Path=${options.path}`;
+    options.path ??= "/";
+    options.httpOnly ??= true;
+    options.secure ??= true;
+    options.sameSite ??= "Lax";
     if (options.domain) cookieString += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) {
-      cookieString += `; Max-Age=${options.maxAge}`;
-    }
-    if (options.expires) {
-      cookieString += `; Expires=${options.expires.toUTCString()}`;
-    }
+    if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
+    if (options.expires) cookieString += `; Expires=${options.expires.toUTCString()}`;
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
-    const existingCookies = this.res.headers.get("Set-Cookie");
-    const cookieArray = existingCookies ? existingCookies.split("; ") : [];
-    cookieArray.push(cookieString);
-    this.res.headers.set("Set-Cookie", cookieArray.join(", "));
+    this.res.headers.append("Set-Cookie", cookieString);
   }
+  
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
     this.setCookie(name, "", {
+      path,
+      domain,
       maxAge: 0,
-      expires: new Date(0),
-      path: path,
-      domain: domain, // Match the domain of the original cookie
+      expires: new Date(0), // Ensure proper removal
     });
   }
 }
@@ -499,12 +503,10 @@ export class Xerus {
     }
 
     // Check cache
-    if (this.resolvedRoutes.has(cacheKey)) {
-      const { handler, params } = this.resolvedRoutes.get(cacheKey)!;
-      // (Optional) Move this key to the end to mark it as recently used:
-      this.resolvedRoutes.delete(cacheKey);
-      this.resolvedRoutes.set(cacheKey, { handler, params });
-      return { handler, c: new Context(req, params) };
+    const cached = this.resolvedRoutes.get(cacheKey);
+    if (cached) {
+      this.resolvedRoutes.set(cacheKey, cached); // Move to end (re-insert same object)
+      return { handler: cached.handler, c: new Context(req, cached.params) };
     }
 
     const parts = path.split("/").filter(Boolean);
@@ -555,12 +557,13 @@ export class Xerus {
     } catch (e: any) {
       if (this.DEBUG_MODE) console.error(e);
       let c = new Context(req);
-      c.setStore("err", e);
+      c.setStore("err", this.DEBUG_MODE ? e.message : "Internal server error");
       return this.errHandler
         ? this.errHandler.execute(c)
-        : new Response("internal server error", { status: 500 });
+        : new Response("Internal Server Error", { status: 500 });
     }
   }
+  
 }
 
 //=============================

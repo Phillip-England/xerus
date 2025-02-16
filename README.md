@@ -29,7 +29,7 @@ app.get("/", async (c: Context) => {
 app.get("/static/*", async (c: Context) => {
   let file = Bun.file("." + c.path);
   if (!file.exists) {
-    return c.status(404).send("file not found");
+    return c.status(404).text("file not found");
   }
   return await c.file(file);
 });
