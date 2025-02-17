@@ -1,4 +1,5 @@
 # Xerus
+
 Build web applications with Bun.
 
 ## Installation
@@ -22,7 +23,7 @@ app.use(logger);
 // what to do if any errors are thrown
 app.onErr(async (c: Context): Promise<Response> => {
   let err = c.getErr();
-  console.error(err)
+  console.error(err);
   return c.status(500).text("internal server error");
 });
 
@@ -265,7 +266,7 @@ Customize the default error response:
 ```ts
 app.onErr(async (c: Context): Promise<Response> => {
   let err = c.getErr();
-  console.error(err)
+  console.error(err);
   return c.status(500).text("internal server error");
 });
 ```

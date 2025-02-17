@@ -1,0 +1,24 @@
+<script>
+  const socket = new WebSocket("ws://localhost:8080/chat");
+
+  // Wait for the connection to be established before sending a message
+  socket.addEventListener("open", () => {
+    console.log("Connected to server");
+    socket.send("Hello, server!");
+  });
+
+  // Listen for messages from the server
+  socket.addEventListener("message", (event) => {
+    console.log("Received from server:", event.data);
+  });
+
+  // Handle errors
+  socket.addEventListener("error", (event) => {
+    console.error("WebSocket error:", event);
+  });
+
+  // Handle connection close
+  socket.addEventListener("close", () => {
+    console.log("Disconnected from server");
+  });
+</script>

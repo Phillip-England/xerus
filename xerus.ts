@@ -1,13 +1,12 @@
-import type { BunFile } from "bun";
+import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 //==============================
-// 
+//
 //==============================
 
 //==============================
 // cookies
 //==============================
-
 
 export interface CookieOptions {
   path?: string;
@@ -41,7 +40,7 @@ export class Context {
   params: Record<string, string>;
   private _body?: string | Record<string, any> | FormData;
   storeData: Record<string, string>;
-  private err: Error | undefined | string
+  private err: Error | undefined | string;
 
   constructor(req: Request, params: Record<string, string> = {}) {
     this.req = req;
@@ -56,11 +55,11 @@ export class Context {
   }
 
   setErr(err: Error | undefined | string) {
-    this.err = err
+    this.err = err;
   }
 
   getErr(): Error | undefined | string {
-    return this.err
+    return this.err;
   }
 
   redirect(location: string, status: number = 302): Response {
@@ -192,14 +191,12 @@ export class Context {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
     return cookies.split("; ")
-      .map(c => c.split(/=(.*)/s, 2)) // Preserve `=` inside values
+      .map((c) => c.split(/=(.*)/s, 2)) // Preserve `=` inside values
       .reduce<Record<string, string>>((acc, [key, val]) => {
         acc[key] = val;
         return acc;
       }, {})[name];
   }
-  
-  
 
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     let cookieString = `${name}=${encodeURIComponent(value)}`;
@@ -208,14 +205,17 @@ export class Context {
     options.secure ??= true;
     options.sameSite ??= "Lax";
     if (options.domain) cookieString += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
-    if (options.expires) cookieString += `; Expires=${options.expires.toUTCString()}`;
+    if (options.maxAge !== undefined) {
+      cookieString += `; Max-Age=${options.maxAge}`;
+    }
+    if (options.expires) {
+      cookieString += `; Expires=${options.expires.toUTCString()}`;
+    }
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
     this.res.headers.append("Set-Cookie", cookieString);
   }
-  
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
     this.setCookie(name, "", {
@@ -382,24 +382,44 @@ export class RouteGroup {
   }
 
   get(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
-    this.app.get(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
-    return this
+    this.app.get(
+      this.prefixPath + path,
+      handler,
+      ...this.middlewares.concat(middlewares),
+    );
+    return this;
   }
   post(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
-    this.app.post(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
-    return this
+    this.app.post(
+      this.prefixPath + path,
+      handler,
+      ...this.middlewares.concat(middlewares),
+    );
+    return this;
   }
   put(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
-    this.app.put(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
-    return this
+    this.app.put(
+      this.prefixPath + path,
+      handler,
+      ...this.middlewares.concat(middlewares),
+    );
+    return this;
   }
   delete(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
-    this.app.delete(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
-    return this
+    this.app.delete(
+      this.prefixPath + path,
+      handler,
+      ...this.middlewares.concat(middlewares),
+    );
+    return this;
   }
   patch(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
-    this.app.patch(this.prefixPath + path, handler, ...this.middlewares.concat(middlewares));
-    return this
+    this.app.patch(
+      this.prefixPath + path,
+      handler,
+      ...this.middlewares.concat(middlewares),
+    );
+    return this;
   }
 }
 
@@ -415,6 +435,45 @@ export class Xerus {
     { handler?: Handler; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 100;
+  private wsOpenRoutes: Record<string, (ws: ServerWebSocket<unknown>) => void> =
+    {}; // WebSocket routes
+  private wsMessageRoutes: Record<
+    string,
+    (
+      ws: ServerWebSocket<unknown>,
+      message: string | Buffer<ArrayBufferLike>,
+    ) => void
+  > = {}; // WebSocket routes
+  private wsCloseRoutes: Record<
+    string,
+    (ws: ServerWebSocket<unknown>, code: number, message: string) => void
+  > = {}; // WebSocket routes
+  private wsDrainRoutes: Record<
+    string,
+    (ws: ServerWebSocket<unknown>) => void
+  > = {}; // WebSocket routes
+
+  ws(
+    path: string,
+    handlers: {
+      open?: (ws: ServerWebSocket<unknown>) => void;
+      message?: (
+        ws: ServerWebSocket<unknown>,
+        message: string | Buffer<ArrayBufferLike>,
+      ) => void;
+      close?: (
+        ws: ServerWebSocket<unknown>,
+        code: number,
+        message: string,
+      ) => void;
+      drain?: (ws: ServerWebSocket<unknown>) => void;
+    },
+  ) {
+    if (handlers.open) this.wsOpenRoutes[path] = handlers.open;
+    if (handlers.message) this.wsMessageRoutes[path] = handlers.message;
+    if (handlers.close) this.wsCloseRoutes[path] = handlers.close;
+    if (handlers.drain) this.wsDrainRoutes[path] = handlers.drain;
+  }
 
   use(...middlewares: Middleware[]) {
     this.globalMiddlewares.push(...middlewares);
@@ -556,8 +615,13 @@ export class Xerus {
     return { handler: matchedHandler, c: new Context(req, params) };
   }
 
-  async run(req: Request): Promise<Response> {
+  async serve(req: Request, server: Server): Promise<Response | void> {
+    const url = new URL(req.url);
+    const path = url.pathname;
     try {
+      if (server.upgrade(req, { data: { path } })) {
+        return;
+      }
       const { handler, c } = this.find(req);
       if (handler) return await handler.execute(c);
       return this.notFoundHandler
@@ -571,5 +635,32 @@ export class Xerus {
         : new Response("Internal Server Error", { status: 500 });
     }
   }
-  
+
+  async open(ws: ServerWebSocket<unknown>) {
+    let data = ws.data as any;
+    let handler = this.wsOpenRoutes[data.path];
+    if (handler) handler(ws);
+  }
+
+  async message(
+    ws: ServerWebSocket<unknown>,
+    message: string | Buffer<ArrayBufferLike>,
+  ) {
+    let data = ws.data as any;
+    let handler = this.wsMessageRoutes[data.path];
+    if (handler) handler(ws, message);
+  }
+
+  async close(ws: ServerWebSocket<unknown>, code: number, message: string) {
+    let data = ws.data as any;
+    let handler = this.wsCloseRoutes[data.path];
+    if (handler) handler(ws, code, message);
+  }
+
+  async drain(ws: ServerWebSocket<unknown>) {
+    let data = ws.data as any;
+    let handler = this.wsDrainRoutes[data.path];
+    if (handler) handler(ws);
+  }
+
 }

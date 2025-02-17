@@ -1,11 +1,7 @@
-import {
-  BodyType,
-  Context,
-  Handler,
-  logger,
-  Middleware,
-  Xerus,
-} from "../xerus";
+import type { Server } from "bun";
+import { BodyType, Context, logger, Middleware, Xerus } from "../xerus";
+
+import wsScript from "../static/ws.html" with { type: "text" };
 
 // define router
 const app = new Xerus();
@@ -396,10 +392,43 @@ app.onErr(async (c: Context): Promise<Response> => {
   return c.setStatus(500).text("internal server error");
 });
 
+app.get("/ws/test", async (c) => {
+  return c.html(wsScript);
+});
+
+app.ws("/chat", {
+  open(ws) {
+    console.log("WebSocket connection opened");
+  },
+  message(ws, message) {
+    for (let i = 0; i < 1000; i++) {
+      ws.send(`Echo: ${message}`);
+    }
+    ws.close()
+  },
+  close(ws, code, message) {
+    console.log("WebSocket connection closed");
+  },
+});
+
 const server = Bun.serve({
   port: 8080,
-  fetch: async (req: Request) => {
-    return await app.run(req);
+  fetch: async (req: Request, server: Server) => {
+    return await app.serve(req, server);
+  },
+  websocket: {
+    async open(ws) {
+      await app.open(ws);
+    },
+    async message(ws, message) {
+      await app.message(ws, message);
+    },
+    async close(ws, code, message) {
+      await app.close(ws, code, message);
+    },
+    async drain(ws) {
+      await app.drain(ws);
+    },
   },
 });
 
