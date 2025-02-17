@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import { BodyType, HTTPContext, logger, Middleware, Xerus } from "../xerus";
+import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "../xerus";
 
 import wsScript from "../static/ws.html" with { type: "text" };
 
@@ -357,7 +357,7 @@ app.get(
 
 app.get(
   "/set-cookies",
-  async (c) => {
+  async (c: HTTPContext) => {
     c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
     c.setCookie("session", "xyz123", { path: "/", secure: true });
 
@@ -367,7 +367,7 @@ app.get(
 
 app.get(
   "/get-cookies",
-  async (c) => {
+  async (c: HTTPContext) => {
     return c.json({
       user: c.getCookie("user"),
       session: c.getCookie("session"),
@@ -380,9 +380,13 @@ const mwModifyContext = new Middleware(async (c, next) => {
   await next();
 });
 
-app.get("/middleware/modify-context", async (c: HTTPContext): Promise<Response> => {
-  return c.json({ message: c.getStore("modified") });
-}, mwModifyContext);
+app.get(
+  "/middleware/modify-context",
+  async (c: HTTPContext): Promise<Response> => {
+    return c.json({ message: c.getStore("modified") });
+  },
+  mwModifyContext,
+);
 
 app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
@@ -392,23 +396,26 @@ app.onErr(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(500).text("internal server error");
 });
 
-app.get("/ws/test", async (c) => {
+app.get("/ws/test", async (c: HTTPContext) => {
   return c.html(wsScript);
 });
 
 app.ws("/chat", {
-  open(ws) {
+  async open(ws) {
+    console.log(ws.data)
     console.log("WebSocket connection opened");
   },
-  message(ws, message) {
+  async message(ws, message) {
     for (let i = 0; i < 1000; i++) {
-      ws.send(`Echo: ${message}`);
+      // ws.send(`Echo: ${message}`);
     }
-    ws.close();
   },
-  close(ws, code, message) {
+  async close(ws, code, message) {
     console.log("WebSocket connection closed");
   },
+  async onConnect(c: WSContext) {
+    c.set('secret', 'booty')
+  }
 });
 
 await app.listen(8080);

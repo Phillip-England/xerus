@@ -15,7 +15,28 @@ export interface CookieOptions {
 }
 
 //==============================
-// context
+// ws context
+//==============================
+
+export class WSContext { 
+  headers?: HeadersInit
+  data: Record<string, any>
+  constructor(req: Request, path: string) {
+    this.data = {
+      req,
+      path,
+    }
+  }
+  get(key: string) {
+    return this.data[key]
+  }
+  set(key: string, value: any) {
+    this.data[key] = value
+  }
+}
+
+//==============================
+// http context
 //==============================
 
 export enum BodyType {
@@ -59,7 +80,7 @@ export class HTTPContext {
   }
 
   redirect(location: string, status: number = 302): Response {
-    this.res.status(status);
+    this.res.setStatus(status);
     this.res.setHeader("Location", location);
     return this.res.send();
   }
@@ -118,7 +139,7 @@ export class HTTPContext {
   }
 
   setStatus(code: number): this {
-    this.res.status(code);
+    this.res.setStatus(code);
     return this;
   }
 
@@ -224,17 +245,34 @@ export class HTTPContext {
 }
 
 //==============================
+// web socket handler
+//==============================
+
+export type WSOpenFunc = (ws: ServerWebSocket<unknown>) => Promise<void>;
+export type WSMessageFunc = (
+  ws: ServerWebSocket<unknown>,
+  message: string | Buffer<ArrayBufferLike>,
+) => Promise<void>;
+export type WSCloseFunc = (
+  ws: ServerWebSocket<unknown>,
+  code: number,
+  message: string,
+) => Promise<void>;
+export type WSDrainFunc = (ws: ServerWebSocket<unknown>) => Promise<void>;
+export type WSOnConnect = (c: WSContext) => Promise<void>;
+
+//==============================
 // handler
 //==============================
 
-type HandlerFunc = (c: HTTPContext) => Promise<Response>;
+type HTTPHandlerFunc = (c: HTTPContext) => Promise<Response>;
 
 export class HTTPHandler {
-  private mainHandler: HandlerFunc;
+  private mainHandler: HTTPHandlerFunc;
   private middlewares: Middleware[];
   private compiledChain: (c: HTTPContext) => Promise<Response>;
 
-  constructor(mainHandler: HandlerFunc) {
+  constructor(mainHandler: HTTPHandlerFunc) {
     this.mainHandler = mainHandler;
     this.middlewares = [];
     this.compiledChain = async (c: HTTPContext) => await this.mainHandler(c); // Default
@@ -327,7 +365,7 @@ export class MutResponse {
     this.bodyContent = "";
   }
 
-  status(code: number): this {
+  setStatus(code: number): this {
     this.statusCode = code;
     return this;
   }
@@ -377,7 +415,7 @@ export class RouteGroup {
     this.middlewares = middlewares;
   }
 
-  get(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.app.get(
       this.prefixPath + path,
       handler,
@@ -385,7 +423,7 @@ export class RouteGroup {
     );
     return this;
   }
-  post(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  post(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.app.post(
       this.prefixPath + path,
       handler,
@@ -393,7 +431,7 @@ export class RouteGroup {
     );
     return this;
   }
-  put(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  put(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.app.put(
       this.prefixPath + path,
       handler,
@@ -401,7 +439,7 @@ export class RouteGroup {
     );
     return this;
   }
-  delete(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  delete(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.app.delete(
       this.prefixPath + path,
       handler,
@@ -409,7 +447,7 @@ export class RouteGroup {
     );
     return this;
   }
-  patch(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  patch(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.app.patch(
       this.prefixPath + path,
       handler,
@@ -431,44 +469,30 @@ export class Xerus {
     { handler?: HTTPHandler; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 100;
-  private wsOpenRoutes: Record<string, (ws: ServerWebSocket<unknown>) => void> =
-    {}; // WebSocket routes
-  private wsMessageRoutes: Record<
-    string,
-    (
-      ws: ServerWebSocket<unknown>,
-      message: string | Buffer<ArrayBufferLike>,
-    ) => void
-  > = {}; // WebSocket routes
-  private wsCloseRoutes: Record<
-    string,
-    (ws: ServerWebSocket<unknown>, code: number, message: string) => void
-  > = {}; // WebSocket routes
-  private wsDrainRoutes: Record<
-    string,
-    (ws: ServerWebSocket<unknown>) => void
-  > = {}; // WebSocket routes
+  private wsOpenRoutes: Record<string, WSOpenFunc> =
+    {};
+  private wsMessageRoutes: Record<string, WSMessageFunc> = {};
+  private wsCloseRoutes: Record<string, WSCloseFunc> = {};
+  private wsDrainRoutes: Record<string, WSDrainFunc> = {};
+  private wsOnConnects: Record<string, WSOnConnect> = {};
+  private wsRoutes: Record<string, boolean> = {}
 
   ws(
     path: string,
     handlers: {
-      open?: (ws: ServerWebSocket<unknown>) => void;
-      message?: (
-        ws: ServerWebSocket<unknown>,
-        message: string | Buffer<ArrayBufferLike>,
-      ) => void;
-      close?: (
-        ws: ServerWebSocket<unknown>,
-        code: number,
-        message: string,
-      ) => void;
-      drain?: (ws: ServerWebSocket<unknown>) => void;
+      open?: WSOpenFunc;
+      message?: WSMessageFunc;
+      close?: WSCloseFunc;
+      drain?: WSDrainFunc;
+      onConnect?: WSOnConnect;
     },
   ) {
+    this.wsRoutes[path] = true
     if (handlers.open) this.wsOpenRoutes[path] = handlers.open;
     if (handlers.message) this.wsMessageRoutes[path] = handlers.message;
     if (handlers.close) this.wsCloseRoutes[path] = handlers.close;
     if (handlers.drain) this.wsDrainRoutes[path] = handlers.drain;
+    if (handlers.onConnect) this.wsOnConnects[path] = handlers.onConnect
   }
 
   use(...middlewares: Middleware[]) {
@@ -479,13 +503,13 @@ export class Xerus {
     return new RouteGroup(this, prefixPath, ...middlewares);
   }
 
-  onErr(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
+  onErr(handlerFunc: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.errHandler = handler;
   }
 
-  onNotFound(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
+  onNotFound(handlerFunc: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.notFoundHandler = handler;
@@ -494,7 +518,7 @@ export class Xerus {
   private register(
     method: string,
     path: string,
-    handlerFunc: HandlerFunc,
+    handlerFunc: HTTPHandlerFunc,
     middlewares: Middleware[],
   ) {
     let handler = new HTTPHandler(handlerFunc);
@@ -505,7 +529,6 @@ export class Xerus {
       return;
     }
 
-    // Optimized Trie Insertion
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
 
@@ -531,27 +554,27 @@ export class Xerus {
     node.handlers[method] = handler;
   }
 
-  get(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("GET", path, handler, middlewares);
     return this;
   }
 
-  post(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  post(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("POST", path, handler, middlewares);
     return this;
   }
 
-  put(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  put(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("PUT", path, handler, middlewares);
     return this;
   }
 
-  delete(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  delete(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("DELETE", path, handler, middlewares);
     return this;
   }
 
-  patch(path: string, handler: HandlerFunc, ...middlewares: Middleware[]) {
+  patch(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("PATCH", path, handler, middlewares);
     return this;
   }
@@ -561,27 +584,25 @@ export class Xerus {
     path: string,
   ): { handler?: HTTPHandler; params: Record<string, string> } {
     const cacheKey = `${method} ${path}`;
-  
-    // Check direct cache hit
+
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], params: {} };
     }
-  
-    // Check resolved route cache
+
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
       return cached;
     }
-  
+
     const parts = path.split("/").filter(Boolean);
-    let node: TrieNode = this.root; // Ensure node is always defined
+    let node: TrieNode = this.root;
     let params: Record<string, string> = {};
-  
+
     for (const part of parts) {
       let exactMatch: TrieNode | undefined = node.children[part];
       let paramMatch: TrieNode | undefined = node.children[":param"];
       let wildcardMatch: TrieNode | undefined = node.wildcard;
-  
+
       if (exactMatch) {
         node = exactMatch;
       } else if (paramMatch) {
@@ -591,39 +612,40 @@ export class Xerus {
         }
       } else if (wildcardMatch) {
         node = wildcardMatch;
-        break; // Wildcard consumes all remaining segments
+        break;
       } else {
         return { handler: undefined, params: {} };
       }
     }
-  
+
     const matchedHandler: HTTPHandler | undefined = node.handlers[method];
     if (!matchedHandler) {
       return { handler: undefined, params: {} };
     }
-  
-    // Maintain cache to optimize repeated lookups
+
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) {
         this.resolvedRoutes.delete(oldestKey);
       }
     }
-  
+
     const result = { handler: matchedHandler, params };
     this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
-  
 
   async handleHTTP(req: Request, server: Server): Promise<Response | void> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
+
+    // determine if a ws path has been hit
+    if (this.wsRoutes[path]) {
+      return await this.handleWS(req, server, path)
+    }
+
     try {
-      if (server.upgrade(req, { data: { path } })) {
-        return;
-      }
       const { handler, params } = this.find(method, path);
       if (handler) {
         const context = new HTTPContext(req, params);
@@ -641,10 +663,26 @@ export class Xerus {
     }
   }
 
+  async handleWS(req: Request, server: Server, path: string): Promise<Response | void> {
+    try {
+      let context = new WSContext(req, path)
+      if (this.wsOnConnects[path]) {
+        let onConnect = this.wsOnConnects[path]
+        await onConnect(context)
+        await this.wsOnConnects[path](context)
+      }
+      if (server.upgrade(req, context)) {
+        return;
+      }
+    } catch (e: any) {
+      return new Response('Failed to upgrade to websocket connection')
+    }
+  }
+
   async handleOpenWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
     let handler = this.wsOpenRoutes[data.path];
-    if (handler) handler(ws);
+    if (handler) await handler(ws);
   }
 
   async handleMessageWS(
@@ -653,7 +691,7 @@ export class Xerus {
   ) {
     let data = ws.data as any;
     let handler = this.wsMessageRoutes[data.path];
-    if (handler) handler(ws, message);
+    if (handler) await handler(ws, message);
   }
 
   async handleCloseWS(
@@ -663,13 +701,13 @@ export class Xerus {
   ) {
     let data = ws.data as any;
     let handler = this.wsCloseRoutes[data.path];
-    if (handler) handler(ws, code, message);
+    if (handler) await handler(ws, code, message);
   }
 
   async handleDrainWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
     let handler = this.wsDrainRoutes[data.path];
-    if (handler) handler(ws);
+    if (handler) await handler(ws);
   }
 
   async listen(port: number) {
