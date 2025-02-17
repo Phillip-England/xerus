@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import { BodyType, Context, logger, Middleware, Xerus } from "../xerus";
+import { BodyType, HTTPContext, logger, Middleware, Xerus } from "../xerus";
 
 import wsScript from "../static/ws.html" with { type: "text" };
 
@@ -16,15 +16,15 @@ app.DEBUG_MODE = true;
 // app.use(logger);
 
 let apiMiddleware = new Middleware(
-  async (c: Context, next): Promise<void | Response> => {
+  async (c: HTTPContext, next): Promise<void | Response> => {
     c.setStore("secretTreasure", "booty");
     next();
   },
 );
 
 app.group("/api", apiMiddleware)
-  .get("/user/:id", async (c: Context) => {
-    let userId = c.param("id");
+  .get("/user/:id", async (c: HTTPContext) => {
+    let userId = c.getParam("id");
     let storeValue = c.getStore("secretTreasure");
     return c.json({
       userId: userId,
@@ -34,7 +34,7 @@ app.group("/api", apiMiddleware)
 
 app.get(
   "/person/melody",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.html("<h1>Hello, Melody!</h1>");
   },
 );
@@ -69,28 +69,28 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
 
 app.get(
   "/",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "Hello, world!" });
   },
 );
 
 app.get(
   "/context/html",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.html("<h1>Hello, World!</h1>");
   },
 );
 
 app.get(
   "/context/json",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ "testing": "json" });
   },
 );
 
 app.post(
   "/context/parseJSON/invalidJSON",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   },
@@ -98,7 +98,7 @@ app.post(
 
 app.post(
   "/context/parseJSON/validJSON",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json(`<h1>${data}</h1>`);
   },
@@ -106,14 +106,14 @@ app.post(
 
 app.get(
   "/context/query",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ queryValue: c.query("key", "default") });
   },
 );
 
 app.get(
   "/context/set-cookie",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     c.setCookie("testCookie", "cookieValue", { path: "/", maxAge: 3600 });
     return c.json({ message: "Cookie set!" });
   },
@@ -121,14 +121,14 @@ app.get(
 
 app.get(
   "/context/get-cookie",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ cookieValue: c.getCookie("testCookie") });
   },
 );
 
 app.get(
   "/context/clear-cookie",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     c.clearCookie("testCookie");
     return c.json({ message: "Cookie cleared!" });
   },
@@ -136,7 +136,7 @@ app.get(
 
 app.post(
   "/context/parseText",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.TEXT);
     return c.json({ receivedText: data });
   },
@@ -144,7 +144,7 @@ app.post(
 
 app.post(
   "/context/parseForm",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.FORM);
     return c.json({ receivedFormData: data });
   },
@@ -152,7 +152,7 @@ app.post(
 
 app.post(
   "/context/parseMultipartForm",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.MULTIPART_FORM);
     const formDataObject: Record<string, any> = {};
     data!.forEach((value: any, key: any) => {
@@ -164,14 +164,14 @@ app.post(
 
 app.get(
   "/context/headers",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ userAgent: c.req.headers.get("User-Agent") });
   },
 );
 
 app.get(
   "/context/stream-file",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let file = Bun.file("./static/test.txt");
     if (!file.exists) {
       return c.setStatus(404).text("File not found");
@@ -182,7 +182,7 @@ app.get(
 
 app.get(
   "/static/*",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let file = Bun.file("." + c.path);
     if (!file.exists) {
       return c.setStatus(404).text("file not found");
@@ -193,45 +193,45 @@ app.get(
 
 app.put(
   "/context/method/put",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "PUT method received" });
   },
 );
 
 app.delete(
   "/context/method/delete",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "DELETE method received" });
   },
 );
 
 app.patch(
   "/context/method/patch",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "PATCH method received" });
   },
 );
 
 app.get(
   "/context/params/:id",
-  async (c: Context): Promise<Response> => {
-    return c.json({ paramValue: c.param("id") });
+  async (c: HTTPContext): Promise<Response> => {
+    return c.json({ paramValue: c.getParam("id") });
   },
 );
 
 app.get(
   "/context/params/:id/details/:detailId",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({
-      id: c.param("id"),
-      detailId: c.param("detailId"),
+      id: c.getParam("id"),
+      detailId: c.getParam("detailId"),
     });
   },
 );
 
 app.get(
   "/context/query/multiple",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({
       key1: c.query("key1", "default1"),
       key2: c.query("key2", "default2"),
@@ -241,28 +241,28 @@ app.get(
 
 app.get(
   "/context/status/200",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "OK" });
   },
 );
 
 app.get(
   "/context/status/400",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.setStatus(400).json({ error: "Bad Request" });
   },
 );
 
 app.get(
   "/context/status/500",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.setStatus(500).json({ error: "Internal Server Error" });
   },
 );
 
 app.get(
   "/context/headers/custom",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     c.setHeader("X-Custom-Header", "CustomValue");
     return c.json({ message: "Custom header set" });
   },
@@ -270,7 +270,7 @@ app.get(
 
 app.get(
   "/context/set-secure-cookie",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     c.setCookie("secureTest", "secureValue", { secure: true, httpOnly: true });
     return c.json({ message: "Secure cookie set!" });
   },
@@ -278,7 +278,7 @@ app.get(
 
 app.get(
   "/context/set-expiring-cookie",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     c.setCookie("expiringTest", "willExpire", {
       maxAge: 10,
     });
@@ -288,7 +288,7 @@ app.get(
 
 app.post(
   "/context/parseBody/empty",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   },
@@ -296,7 +296,7 @@ app.post(
 
 app.post(
   "/context/parseBody/largeJSON",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let data = await c.parseBody(BodyType.JSON);
     return c.json({ receivedBody: data });
   },
@@ -304,7 +304,7 @@ app.post(
 
 app.get(
   "/context/serve-image",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let file = Bun.file("./static/image.png");
     if (!file.exists) {
       return c.setStatus(404).text("File not found");
@@ -315,7 +315,7 @@ app.get(
 
 app.get(
   "/context/serve-text-file",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     let file = Bun.file("./static/sample.txt");
     if (!file.exists) {
       return c.setStatus(404).text("File not found");
@@ -326,7 +326,7 @@ app.get(
 
 app.get(
   "/middleware/early-response",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "This should not execute" });
   },
   mwEarlyResponse,
@@ -334,7 +334,7 @@ app.get(
 
 app.get(
   "/middleware/order-test",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: "Middleware order test" });
   },
   mwOrderTest1,
@@ -343,14 +343,14 @@ app.get(
 
 app.get(
   "/wildcard/*",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: `Matched wildcard route for ${c.path}` });
   },
 );
 
 app.get(
   "/wildcard/deep/*",
-  async (c: Context): Promise<Response> => {
+  async (c: HTTPContext): Promise<Response> => {
     return c.json({ message: `Matched deep wildcard route for ${c.path}` });
   },
 );
@@ -380,15 +380,15 @@ const mwModifyContext = new Middleware(async (c, next) => {
   await next();
 });
 
-app.get("/middleware/modify-context", async (c: Context): Promise<Response> => {
+app.get("/middleware/modify-context", async (c: HTTPContext): Promise<Response> => {
   return c.json({ message: c.getStore("modified") });
 }, mwModifyContext);
 
-app.onNotFound(async (c: Context): Promise<Response> => {
+app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
 });
 
-app.onErr(async (c: Context): Promise<Response> => {
+app.onErr(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(500).text("internal server error");
 });
 
@@ -404,32 +404,11 @@ app.ws("/chat", {
     for (let i = 0; i < 1000; i++) {
       ws.send(`Echo: ${message}`);
     }
-    ws.close()
+    ws.close();
   },
   close(ws, code, message) {
     console.log("WebSocket connection closed");
   },
 });
 
-const server = Bun.serve({
-  port: 8080,
-  fetch: async (req: Request, server: Server) => {
-    return await app.serve(req, server);
-  },
-  websocket: {
-    async open(ws) {
-      await app.open(ws);
-    },
-    async message(ws, message) {
-      await app.message(ws, message);
-    },
-    async close(ws, code, message) {
-      await app.close(ws, code, message);
-    },
-    async drain(ws) {
-      await app.drain(ws);
-    },
-  },
-});
-
-console.log(`Server running on ${server.port}`);
+await app.listen(8080);

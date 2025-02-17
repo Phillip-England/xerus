@@ -1,10 +1,6 @@
 import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 //==============================
-//
-//==============================
-
-//==============================
 // cookies
 //==============================
 
@@ -29,7 +25,7 @@ export enum BodyType {
   MULTIPART_FORM = "multipart_form",
 }
 
-export class Context {
+export class HTTPContext {
   req: Request;
   res: MutResponse;
   url: URL;
@@ -117,7 +113,7 @@ export class Context {
     }
   }
 
-  param(name: string, defaultValue?: string): string | undefined {
+  getParam(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
   }
 
@@ -231,17 +227,17 @@ export class Context {
 // handler
 //==============================
 
-type HandlerFunc = (c: Context) => Promise<Response>;
+type HandlerFunc = (c: HTTPContext) => Promise<Response>;
 
-export class Handler {
+export class HTTPHandler {
   private mainHandler: HandlerFunc;
   private middlewares: Middleware[];
-  private compiledChain: (c: Context) => Promise<Response>;
+  private compiledChain: (c: HTTPContext) => Promise<Response>;
 
   constructor(mainHandler: HandlerFunc) {
     this.mainHandler = mainHandler;
     this.middlewares = [];
-    this.compiledChain = async (c: Context) => await this.mainHandler(c); // Default
+    this.compiledChain = async (c: HTTPContext) => await this.mainHandler(c); // Default
   }
 
   setMiddlewares(middlewares: Middleware[]) {
@@ -250,7 +246,7 @@ export class Handler {
   }
 
   private precompileChain() {
-    let chain = async (context: Context): Promise<Response> => {
+    let chain = async (context: HTTPContext): Promise<Response> => {
       try {
         return await this.mainHandler(context);
       } catch (error) {
@@ -262,7 +258,7 @@ export class Handler {
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const middleware = this.middlewares[i];
       const nextChain = chain;
-      chain = async (context: Context): Promise<Response> => {
+      chain = async (context: HTTPContext): Promise<Response> => {
         try {
           let finalResponse: Response | undefined;
 
@@ -283,7 +279,7 @@ export class Handler {
     this.compiledChain = chain;
   }
 
-  async execute(c: Context): Promise<Response> {
+  async execute(c: HTTPContext): Promise<Response> {
     return this.compiledChain(c); // Use precompiled middleware chain
   }
 }
@@ -293,7 +289,7 @@ export class Handler {
 //==============================
 
 export type MiddlewareFn = (
-  c: Context,
+  c: HTTPContext,
   next: () => Promise<void | Response>,
 ) => Promise<void | Response>;
 
@@ -305,7 +301,7 @@ export class Middleware {
   }
 
   async execute(
-    c: Context,
+    c: HTTPContext,
     next: () => Promise<void | Response>,
   ): Promise<void | Response> {
     return this.callback(c, next);
@@ -313,7 +309,7 @@ export class Middleware {
 }
 
 // Example middleware using the new class
-export const logger = new Middleware(async (c: Context, next) => {
+export const logger = new Middleware(async (c: HTTPContext, next) => {
   const start = performance.now();
   await next();
   const duration = performance.now() - start;
@@ -365,7 +361,7 @@ export class MutResponse {
 //==============================
 
 class TrieNode {
-  handlers: Record<string, Handler> = {}; // Replacing Map with object
+  handlers: Record<string, HTTPHandler> = {}; // Replacing Map with object
   children: Record<string, TrieNode> = {}; // Replacing Map with object
   paramKey?: string;
   wildcard?: TrieNode;
@@ -426,13 +422,13 @@ export class RouteGroup {
 export class Xerus {
   DEBUG_MODE = false;
   private root: TrieNode = new TrieNode();
-  private routes: Record<string, Handler> = {}; // Replacing Map with object
+  private routes: Record<string, HTTPHandler> = {}; // Replacing Map with object
   private globalMiddlewares: Middleware[] = [];
-  private notFoundHandler?: Handler;
-  private errHandler?: Handler;
+  private notFoundHandler?: HTTPHandler;
+  private errHandler?: HTTPHandler;
   private resolvedRoutes = new Map<
     string,
-    { handler?: Handler; params: Record<string, string> }
+    { handler?: HTTPHandler; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 100;
   private wsOpenRoutes: Record<string, (ws: ServerWebSocket<unknown>) => void> =
@@ -484,13 +480,13 @@ export class Xerus {
   }
 
   onErr(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
-    let handler = new Handler(handlerFunc);
+    let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.errHandler = handler;
   }
 
   onNotFound(handlerFunc: HandlerFunc, ...middlewares: Middleware[]) {
-    let handler = new Handler(handlerFunc);
+    let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.notFoundHandler = handler;
   }
@@ -501,7 +497,7 @@ export class Xerus {
     handlerFunc: HandlerFunc,
     middlewares: Middleware[],
   ) {
-    let handler = new Handler(handlerFunc);
+    let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
     if (!path.includes(":") && !path.includes("*")) {
@@ -560,89 +556,98 @@ export class Xerus {
     return this;
   }
 
-  find(req: Request): { handler?: Handler; c: Context } {
-    const { method } = req;
-    const url = new URL(req.url);
-    const path = url.pathname;
+  find(
+    method: string,
+    path: string,
+  ): { handler?: HTTPHandler; params: Record<string, string> } {
     const cacheKey = `${method} ${path}`;
-
+  
+    // Check direct cache hit
     if (this.routes[cacheKey]) {
-      return { handler: this.routes[cacheKey], c: new Context(req) };
+      return { handler: this.routes[cacheKey], params: {} };
     }
-
-    // Check cache
+  
+    // Check resolved route cache
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
-      this.resolvedRoutes.set(cacheKey, cached); // Move to end (re-insert same object)
-      return { handler: cached.handler, c: new Context(req, cached.params) };
+      return cached;
     }
-
+  
     const parts = path.split("/").filter(Boolean);
-    let node: TrieNode | undefined = this.root;
+    let node: TrieNode = this.root; // Ensure node is always defined
     let params: Record<string, string> = {};
-
+  
     for (const part of parts) {
-      // Try literal first, then parameter:
-      let nextNode: TrieNode | undefined = node.children[part] ??
-        node.children[":param"];
-      if (nextNode) {
-        if (nextNode.paramKey) {
-          params[nextNode.paramKey] = part;
+      let exactMatch: TrieNode | undefined = node.children[part];
+      let paramMatch: TrieNode | undefined = node.children[":param"];
+      let wildcardMatch: TrieNode | undefined = node.wildcard;
+  
+      if (exactMatch) {
+        node = exactMatch;
+      } else if (paramMatch) {
+        node = paramMatch;
+        if (node.paramKey) {
+          params[node.paramKey] = part;
         }
-        node = nextNode;
-      } else if (node.wildcard) {
-        node = node.wildcard;
-        break;
+      } else if (wildcardMatch) {
+        node = wildcardMatch;
+        break; // Wildcard consumes all remaining segments
       } else {
-        return { handler: undefined, c: new Context(req) };
+        return { handler: undefined, params: {} };
       }
     }
-
-    const matchedHandler = node.handlers[method];
+  
+    const matchedHandler: HTTPHandler | undefined = node.handlers[method];
     if (!matchedHandler) {
-      return { handler: undefined, c: new Context(req) };
+      return { handler: undefined, params: {} };
     }
-
-    // Evict the oldest entry if the cache is full:
+  
+    // Maintain cache to optimize repeated lookups
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) {
         this.resolvedRoutes.delete(oldestKey);
       }
     }
-
-    this.resolvedRoutes.set(cacheKey, { handler: matchedHandler, params });
-    return { handler: matchedHandler, c: new Context(req, params) };
+  
+    const result = { handler: matchedHandler, params };
+    this.resolvedRoutes.set(cacheKey, result);
+    return result;
   }
+  
 
-  async serve(req: Request, server: Server): Promise<Response | void> {
+  async handleHTTP(req: Request, server: Server): Promise<Response | void> {
     const url = new URL(req.url);
     const path = url.pathname;
+    const method = req.method;
     try {
       if (server.upgrade(req, { data: { path } })) {
         return;
       }
-      const { handler, c } = this.find(req);
-      if (handler) return await handler.execute(c);
+      const { handler, params } = this.find(method, path);
+      if (handler) {
+        const context = new HTTPContext(req, params);
+        return await handler.execute(context);
+      }
       return this.notFoundHandler
-        ? this.notFoundHandler.execute(new Context(req))
+        ? this.notFoundHandler.execute(new HTTPContext(req))
         : new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
-      let c = new Context(req);
-      c.setErr(e.message);
+      let context = new HTTPContext(req);
+      context.setErr(e.message);
       return this.errHandler
-        ? this.errHandler.execute(c)
+        ? this.errHandler.execute(context)
         : new Response("Internal Server Error", { status: 500 });
     }
   }
 
-  async open(ws: ServerWebSocket<unknown>) {
+  async handleOpenWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
     let handler = this.wsOpenRoutes[data.path];
     if (handler) handler(ws);
   }
 
-  async message(
+  async handleMessageWS(
     ws: ServerWebSocket<unknown>,
     message: string | Buffer<ArrayBufferLike>,
   ) {
@@ -651,16 +656,44 @@ export class Xerus {
     if (handler) handler(ws, message);
   }
 
-  async close(ws: ServerWebSocket<unknown>, code: number, message: string) {
+  async handleCloseWS(
+    ws: ServerWebSocket<unknown>,
+    code: number,
+    message: string,
+  ) {
     let data = ws.data as any;
     let handler = this.wsCloseRoutes[data.path];
     if (handler) handler(ws, code, message);
   }
 
-  async drain(ws: ServerWebSocket<unknown>) {
+  async handleDrainWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
     let handler = this.wsDrainRoutes[data.path];
     if (handler) handler(ws);
   }
 
+  async listen(port: number) {
+    let app = this;
+    const server = Bun.serve({
+      port: port,
+      fetch: async (req: Request, server: Server) => {
+        return await app.handleHTTP(req, server);
+      },
+      websocket: {
+        async open(ws) {
+          await app.handleOpenWS(ws);
+        },
+        async message(ws, message) {
+          await app.handleMessageWS(ws, message);
+        },
+        async close(ws, code, message) {
+          await app.handleCloseWS(ws, code, message);
+        },
+        async drain(ws) {
+          await app.handleDrainWS(ws);
+        },
+      },
+    });
+    console.log(`🚀 Server running on ${server.port}`);
+  }
 }
