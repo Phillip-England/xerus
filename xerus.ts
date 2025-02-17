@@ -122,7 +122,7 @@ export class Context {
     return this.params[name] ?? defaultValue;
   }
 
-  status(code: number): this {
+  setStatus(code: number): this {
     this.res.status(code);
     return this;
   }

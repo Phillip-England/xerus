@@ -178,7 +178,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file("./static/test.txt");
     if (!file.exists) {
-      return c.status(404).text("File not found");
+      return c.setStatus(404).text("File not found");
     }
     return await c.file(file, true);
   },
@@ -189,7 +189,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file("." + c.path);
     if (!file.exists) {
-      return c.status(404).text("file not found");
+      return c.setStatus(404).text("file not found");
     }
     return await c.file(file);
   },
@@ -253,14 +253,14 @@ app.get(
 app.get(
   "/context/status/400",
   async (c: Context): Promise<Response> => {
-    return c.status(400).json({ error: "Bad Request" });
+    return c.setStatus(400).json({ error: "Bad Request" });
   },
 );
 
 app.get(
   "/context/status/500",
   async (c: Context): Promise<Response> => {
-    return c.status(500).json({ error: "Internal Server Error" });
+    return c.setStatus(500).json({ error: "Internal Server Error" });
   },
 );
 
@@ -311,7 +311,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file("./static/image.png");
     if (!file.exists) {
-      return c.status(404).text("File not found");
+      return c.setStatus(404).text("File not found");
     }
     return await c.file(file);
   },
@@ -322,7 +322,7 @@ app.get(
   async (c: Context): Promise<Response> => {
     let file = Bun.file("./static/sample.txt");
     if (!file.exists) {
-      return c.status(404).text("File not found");
+      return c.setStatus(404).text("File not found");
     }
     return await c.file(file);
   },
@@ -389,11 +389,11 @@ app.get("/middleware/modify-context", async (c: Context): Promise<Response> => {
 }, mwModifyContext);
 
 app.onNotFound(async (c: Context): Promise<Response> => {
-  return c.status(404).text("404 Not Found");
+  return c.setStatus(404).text("404 Not Found");
 });
 
 app.onErr(async (c: Context): Promise<Response> => {
-  return c.status(500).text("internal server error");
+  return c.setStatus(500).text("internal server error");
 });
 
 const server = Bun.serve({
