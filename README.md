@@ -1,6 +1,6 @@
 # Xerus
 
-Build web applications with Bun.
+Simple web apps for bun.
 
 ## Installation
 
