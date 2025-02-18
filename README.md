@@ -120,13 +120,10 @@ app.get('/', handler, mw, mw, mw)
 ```
 
 
-
-
 ## HTTPContext
 `HTTPContext` allows us to work with the incoming requests and prepare responses. Here are the features it provides.
 
 ### Redirect The Request
-Redirect to a new route on the server:
 ```ts
 app.get('/', async (c: HTTPContext) => {
   return c.html(`<h1>O'Doyle Rules</h1>`)
@@ -271,8 +268,6 @@ app.get('/clear', async (c: HTTPContext) => {
 
 ## Custom 404
 
-Customize the default 404 response:
-
 ```ts
 app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
@@ -281,12 +276,31 @@ app.onNotFound(async (c: HTTPContext): Promise<Response> => {
 
 ## Custom Error Handling
 
-Customize the default error response:
-
 ```ts
 app.onErr(async (c: HTTPContext): Promise<Response> => {
   let err = c.getErr();
   console.error(err);
   return c.setStatus(500).text("internal server error");
+});
+```
+
+## Web Sockets
+
+Setup a new websocket route, using `onConnect` for pre-connect authorization:
+```ts
+app.ws("/chat", {
+  async open(ws) {
+    let c = ws.data // get the context
+    
+  },
+  async message(ws, message) {
+
+  },
+  async close(ws, code, message) {
+
+  },
+  async onConnect(c: WSContext) {
+    c.set('secret', "O'Doyle") // set pre-connect data
+  }
 });
 ```
