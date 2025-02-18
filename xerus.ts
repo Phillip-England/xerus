@@ -1,6 +1,15 @@
 import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 //==============================
+// system errors
+//==============================
+
+export enum HTTPError {
+  FILE_NOT_FOUND = "FILE_NOT_FOUND",
+  HTTP_NOT_FOUND = "HTTP_NOT_FOUND"
+}
+
+//==============================
 // cookies
 //==============================
 
@@ -102,7 +111,6 @@ export class HTTPContext {
 
     try {
       let parsedData: any;
-
       if (contentType.includes("application/json")) {
         parsedData = await this.req.json();
         if (expectedType !== BodyType.JSON) {
@@ -148,7 +156,7 @@ export class HTTPContext {
     return this;
   }
 
-  getHeader(name: string): string | null {
+  getHeader(name: string): string {
     return this.res.getHeader(name);
   }
 
@@ -171,6 +179,7 @@ export class HTTPContext {
     return this.send(JSON.stringify(data));
   }
 
+
   async stream(stream: ReadableStream): Promise<Response> {
     this.setHeader("Content-Type", "application/octet-stream");
     return new Response(stream, {
@@ -180,6 +189,9 @@ export class HTTPContext {
   }
 
   async file(file: BunFile, stream = false): Promise<Response> {
+    if (!file.exists) {
+      throw new Error(`file does not exist`)
+    }
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     return stream
       ? new Response(file.stream(), {
@@ -326,9 +338,11 @@ export class HTTPHandler {
 // middleware
 //==============================
 
+export type MiddlewareNextFn = () => Promise<void | Response>
+
 export type MiddlewareFn = (
   c: HTTPContext,
-  next: () => Promise<void | Response>,
+  next: MiddlewareNextFn,
 ) => Promise<void | Response>;
 
 export class Middleware {
@@ -375,8 +389,8 @@ export class MutResponse {
     return this;
   }
 
-  getHeader(name: string): string | null {
-    return this.headers.get(name);
+  getHeader(name: string): string {
+    return this.headers.get(name) || '';
   }
 
   body(content: string | object): this {
@@ -657,9 +671,10 @@ export class Xerus {
     } catch (e: any) {
       let context = new HTTPContext(req);
       context.setErr(e.message);
-      return this.errHandler
-        ? this.errHandler.execute(context)
-        : new Response("Internal Server Error", { status: 500 });
+      if (this.errHandler) {
+        return this.errHandler.execute(context)
+      }
+      return new Response("Internal Server Error", { status: 500 });
     }
   }
 
@@ -685,7 +700,7 @@ export class Xerus {
     if (handler) await handler(ws);
   }
 
-  async handleMessageWS(
+  private async handleMessageWS(
     ws: ServerWebSocket<unknown>,
     message: string | Buffer<ArrayBufferLike>,
   ) {
@@ -694,7 +709,7 @@ export class Xerus {
     if (handler) await handler(ws, message);
   }
 
-  async handleCloseWS(
+  private async handleCloseWS(
     ws: ServerWebSocket<unknown>,
     code: number,
     message: string,
@@ -704,13 +719,13 @@ export class Xerus {
     if (handler) await handler(ws, code, message);
   }
 
-  async handleDrainWS(ws: ServerWebSocket<unknown>) {
+  private async handleDrainWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
     let handler = this.wsDrainRoutes[data.path];
     if (handler) await handler(ws);
   }
 
-  async listen(port: number) {
+  async listen(port: number = 8080) {
     let app = this;
     const server = Bun.serve({
       port: port,

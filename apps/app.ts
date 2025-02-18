@@ -407,7 +407,7 @@ app.ws("/chat", {
   },
   async message(ws, message) {
     for (let i = 0; i < 1000; i++) {
-      // ws.send(`Echo: ${message}`);
+      ws.send(`Echo: ${message}`);
     }
   },
   async close(ws, code, message) {
