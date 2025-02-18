@@ -4,8 +4,7 @@ let app = new Xerus()
 
 app.get('/', async (c: HTTPContext) => {
   c.setHeader('X-Who-Rules', `O'Doyle Rules`)
-  let value = c.getHeader('X-Who-Rules')
-  return c.html(`<h1>${value}!</h1>`)
+  return c.html(`<h1>O'Doyle Rules!</h1>`)
 })
 
 await app.listen()

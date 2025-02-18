@@ -198,8 +198,8 @@ export class HTTPContext {
     return this;
   }
 
-  getHeader(name: string): string {
-    return this.res.getHeader(name);
+  getHeader(name: string): string | null {
+    return this.req.headers.get(name);
   }
 
   private send(content: string): Response {

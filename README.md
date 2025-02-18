@@ -9,52 +9,20 @@ bun add github:phillip-england/xerus
 ```
 
 ## Hello, World
-
 Create an `index.ts` and paste in the following code:
 
 ```ts
-import { Context, logger, Xerus } from "xerus/xerus";
+import { HTTPContext, logger, Xerus } from "xerus/xerus";
 
-const app = new Xerus();
+let app = new Xerus()
 
-// setup logging
-app.use(logger);
+app.use(logger)
 
-// what to do if any errors are thrown
-app.onErr(async (c: Context): Promise<Response> => {
-  let err = c.getErr();
-  console.error(err);
-  return c.status(500).text("internal server error");
-});
+app.get('/', async (c: HTTPContext) => {
+  return c.html(`<h1>O'Doyle Rules!</h1>`)
+})
 
-// what to do if a 404 is thrown
-app.onNotFound(async (c: Context): Promise<Response> => {
-  return c.status(404).text("404 Not Found");
-});
-
-// basic endpoint
-app.get("/", async (c: Context) => {
-  return c.html("<h1>Hello, World!</h1>");
-});
-
-// serve static files from ./static
-app.get("/static/*", async (c: Context) => {
-  let file = Bun.file("." + c.path);
-  if (!file.exists) {
-    return c.status(404).text("file not found");
-  }
-  return await c.file(file);
-});
-
-// running the application
-const server = Bun.serve({
-  port: 8080,
-  fetch: async (req: Request) => {
-    return await app.run(req);
-  },
-});
-
-console.log(`Server running on ${server.port}`);
+await app.listen()
 ```
 
 Run the application using:
@@ -65,188 +33,240 @@ bun run --hot index.ts
 
 Visit `localhost:8080`
 
+## HTTPHandlerFunc
+
+An `HTTPHandlerFunc` takes in an `HTTPContext` and returns `Promise<Response>`:
+```ts
+let handler = async (c: HTTPContext) => {
+  return c.html(`<h1>O'Doyle Rules</h1>`)
+}
+
+app.get('/', handler)
+```
+
+
 ## Routing
 
-`Xerus` supports static, dynamic, and wildcard paths.
-
-Static path:
+`Xerus` supports static, dynamic, and wildcard paths:
 
 ```ts
-app.get("/", async (c: Context) => {
-  return c.html("<h1>Hello, World!</h1>");
-});
+app.get('/', handler)
+app.get('/user/:id', handler)
+app.get('/static/*', handler)
 ```
 
-Dynamic path:
+Group routing is also supported:
 
 ```ts
-r.post("/user/:id", async (c: Context) => {
-  return c.json({ id: c.param("id") });
-});
-```
-
-Wildcard path:
-
-```ts
-app.get("/static/*", async (c: Context) => {
-  let file = Bun.file("." + c.path);
-  if (!file.exists) {
-    return c.status(404).send("file not found");
-  }
-  return await c.file(file);
-});
-```
-
-## Context
-
-`Context` allows us to work with the incoming requests and prepare responses.
-
-Supported methods:
-
-1. `c.redirect` - redirect to a new endpoint
-
-```ts
-return c.redirect("/");
-```
-
-2. `c.parseBody` - parse the incoming request body while enforcing a specific
-   type
-
-```ts
-let data = await c.parseBody(BodyType.TEXT);
-let data = await c.parseBody(BodyType.JSON);
-let data = await c.parseBody(BodyType.MULTIPART_FORM);
-let data = await c.parseBody(BodyType.JSON);
-```
-
-3. `c.param` - access dynamic path params like ':id' in '/user/:id'
-
-```ts
-c.param("id");
-```
-
-4. `c.status` - update the current status code
-
-```ts
-c.status(404);
-```
-
-5. `c.setHeader` and `c.getHeader` - set/get a response header
-
-```ts
-c.setHeader("content-type", "text/html");
-console.log(c.getHeader("content-type")); // text/html
-```
-
-6. `c.html` - send an html response
-
-```ts
-return c.html("<h1>Hello, World!</h1>");
-```
-
-7. `c.text` - send a plain text response
-
-```ts
-return c.text("Hello, World!");
-```
-
-8. `c.json` - send a json response
-
-```ts
-return c.json({ message: "Hello, World!" });
-```
-
-9. `c.stream` - stream a `ReadableStream`
-
-```ts
-const stream = new ReadableStream({
-  async start(controller) {
-    controller.enqueue(
-      encoder.encode("Chunk 1: Hello, this is a streaming response!\n"),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    controller.enqueue(
-      encoder.encode("Chunk 2: Streaming world, one chunk at a time!\n"),
-    );
-    controller.close();
-  },
-});
-return await c.stream(stream);
-```
-
-10. `c.file` - send a file in a response
-
-```ts
-let file = Bun.file("./path/to/file");
-if (!file.exists) {
-  // handle missing file
-}
-return c.file(file);
-```
-
-11. `c.setStore` and `c.getStore` - set/get values on the request store
-
-```ts
-c.setStore("key", "value");
-console.log(c.getStore("key")); // value
-```
-
-12. `c.setCookie`, `c.getCookie`, and `c.clearCookie` - set/get/clear a cookie
-
-```ts
-c.setCookie("user", "john_doe", { path: "/", httpOnly: true });
-console.log(c.getCookie("user")); // john_doe
-c.clearCookie("user");
-console.log(c.getCookie("user")); // undefined
+app.group('/api')
+  .post('/user/:id', handler)
+  .post('/user/post/:postNumber', handler)
 ```
 
 ## Static Files
 
-Use a wildcard to setup static files:
+Use a wildcard to serve static files from `./static`:
 
 ```ts
 app.get("/static/*", async (c: Context) => {
-  let file = Bun.file("." + c.path);
-  if (!file.exists) {
-    return c.status(404).send("file not found");
-  }
-  return await c.file(file);
+  return await c.file("." + c.path);
 });
 ```
 
 ## Middleware
 
-Middleware is executed in the following order: global, group-level, route-level.
+Middleware executes in the following order:
+1. Global
+2. Group
+3. Route
 
-Create a custom middleware:
-
+Create a new `Middleware`:
 ```ts
-let newMiddleware = new Middleware(
-  async (c: Context, next): Promise<void | Response> => {
-    console.log("I occur before the request");
+let mw = new Middleware(
+  async (c: HTTPContext, next: MiddlewareNextFn): Promise<void | Response> => {
+    console.log('logic before handler');
     next();
-    console.log("I occur after the request");
+    console.log("logic after handler");
   },
 );
 ```
 
-Assign it to `Xerus` globally:
-
+Link it globally:
 ```ts
-app.use(newMiddleware);
+app.use(mw)
 ```
 
-Assign it to a `RouteGroup`:
-
+Or to a group:
 ```ts
-app.group("/api", newMiddleware) // <=== chain group-level middleware here
-  .post("/user/:id", someHandler);
+app.group('/api', mw) // <=====
+  .post('/user/:id', handler)
+  .post('/user/post/:postNumber', handler)
 ```
 
-Assign it directly to a `Handler`:
+Or to a route:
+```ts
+app.get('/', handler, mw) // <=====
+```
+
+Chain as many as you'd like to all three types:
+```ts
+app.use(mw, mw, mw)
+
+app.group('/api', mw, mw, mw)
+  .post('/user/:id', handler)
+  .post('/user/post/:postNumber', handler)
+
+app.get('/', handler, mw, mw, mw)
+```
+
+
+
+
+## HTTPContext
+`HTTPContext` allows us to work with the incoming requests and prepare responses. Here are the features it provides.
+
+### Redirect The Request
+Redirect to a new route on the server:
+```ts
+app.get('/', async (c: HTTPContext) => {
+  return c.html(`<h1>O'Doyle Rules</h1>`)
+})
+
+app.get('/redirect', async(c: HTTPContext) => {
+  return c.redirect('/')
+})
+```
+
+### Parse The Request Body
+Use the `BodyType` enum to enforce a specific type of data in the request body:
 
 ```ts
-app.get("/", someHandler, newMiddleware); // <=== chain handler-level middleware here
+app.post('/body/text', async (c: HTTPContext) => {
+  let data = await c.parseBody(BodyType.TEXT)
+  return c.json({data: data})
+})
+
+app.post('/body/json', async (c: HTTPContext) => {
+  let data = await c.parseBody(BodyType.JSON)
+  return c.json({data: data})
+})
+
+app.post('/body/multipart', async (c: HTTPContext) => {
+  let data = await c.parseBody(BodyType.MULTIPART_FORM)
+  return c.json({data: data})
+})
+
+app.post('/body/form', async (c: HTTPContext) => {
+  let data = await c.parseBody(BodyType.FORM)
+  return c.json({data: data})
+})
+```
+
+### Get Dynamic Path Param
+```ts
+app.get('/user/:id', async (c: HTTPContext) => {
+  let id = c.getParam('id')
+  return c.html(`<h1>O'Doyle Rules Times ${id}!</h1>`)
+})
+```
+
+### Set Status Code
+```ts
+app.get('/', async (c: HTTPContext) => {
+  return c.setStatus(404).html(`<h1>O'Doyle Not Found</h1>`)
+})
+```
+
+### Set Response Headers
+```ts
+app.get('/', async (c: HTTPContext) => {
+  c.setHeader('X-Who-Rules', `O'Doyle Rules`)
+  return c.html(`<h1>O'Doyle Rules!</h1>`)
+})
+```
+
+### Get Request Header
+```ts
+app.get('/', async (c: HTTPContext) => {
+  let headerVal = c.getHeader('X-Who-Rules')
+  if (headerVal) {
+    return c.html(`<h1>${headerVal}</h1>`)
+  }
+  return c.html(`<h1>Header missing</h1>`)
+})
+```
+
+### Respond with HTML, JSON, or TEXT
+```ts
+app.get('/html', async (c: HTTPContext) => {
+  return c.html(`<h1>O'Doyle Rules!</h1>`)
+})
+
+app.get('/json', async (c: HTTPContext) => {
+  return c.json({message: `O'Doyle Rules!`})
+})
+
+app.get('/text', async (c: HTTPContext) => {
+  return c.text(`O'Doyle Rules!`)
+})
+```
+
+### Stream A Response
+```ts
+app.get('/', async (c: HTTPContext) => {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      let count = 0;
+      const interval = setInterval(() => {
+        controller.enqueue(encoder.encode(`O'Doyle Rules! ${count}\n`));
+        count++;
+        if (count >= 3) {
+          clearInterval(interval);
+          controller.close();
+        }
+      }, 1000);
+    }
+  });
+  c.setHeader("Content-Type", "text/plain");
+  c.setHeader("Content-Disposition", 'attachment; filename="odoyle_rules.txt"');
+  return c.stream(stream);
+});
+```
+
+### Response With A File
+```ts
+app.get('/', async (c: HTTPContext) => {
+  return c.file("./path/to/file");
+});
+```
+
+### Stream A File
+```ts
+app.get('/', async (c: HTTPContext) => {
+  return c.file("./path/to/file", true);
+});
+```
+
+### Set, Get, And Clear Cookies
+```ts
+app.get('/set', async (c: HTTPContext) => {
+  c.setCookie('secret', "O'Doyle_Rules!")
+  return c.redirect('/get')
+});
+
+app.get('/get', async (c: HTTPContext) => {
+  let cookie = c.getCookie('secret')
+  if (cookie) {
+    return c.text(`visit /clear to clear the cookie with the value: ${cookie}`)
+  }
+  return c.text('visit /set to set the cookie')
+})
+
+app.get('/clear', async (c: HTTPContext) => {
+  c.clearCookie('secret')
+  return c.redirect('/get')
+})
 ```
 
 ## Custom 404
@@ -254,8 +274,8 @@ app.get("/", someHandler, newMiddleware); // <=== chain handler-level middleware
 Customize the default 404 response:
 
 ```ts
-app.onNotFound(async (c: Context): Promise<Response> => {
-  return c.status(404).text("404 Not Found");
+app.onNotFound(async (c: HTTPContext): Promise<Response> => {
+  return c.setStatus(404).text("404 Not Found");
 });
 ```
 
@@ -264,22 +284,9 @@ app.onNotFound(async (c: Context): Promise<Response> => {
 Customize the default error response:
 
 ```ts
-app.onErr(async (c: Context): Promise<Response> => {
+app.onErr(async (c: HTTPContext): Promise<Response> => {
   let err = c.getErr();
   console.error(err);
-  return c.status(500).text("internal server error");
-});
-```
-
-## Serving
-
-`Xerus` is served directly within `Bun.serve`:
-
-```ts
-const server = Bun.serve({
-  port: 8080,
-  fetch: async (req: Request) => {
-    return await app.run(req);
-  },
+  return c.setStatus(500).text("internal server error");
 });
 ```

@@ -382,7 +382,7 @@ app.get("/ws/test", async (c: HTTPContext) => {
 
 app.ws("/chat", {
   async open(ws) {
-    console.log(ws.data)
+    let c = ws.data
     console.log("WebSocket connection opened");
   },
   async message(ws, message) {
