@@ -4,19 +4,53 @@ import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
 // system errors
 //==============================
 
-export enum SystemErrCode {
+enum SystemErrCode {
   FILE_NOT_FOUND = "FILE_NOT_FOUND",
+  BODY_PARSING_FAILED = "BODY_PARSING_FAILED",
+  ROUTE_ALREADY_REGISTERED = "ROUTE_ALREADY_REGISTERED",
+  ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND",
+  INTERNAL_SERVER_ERR = "INTERNAL SERVER ERROR",
+  WEBSOCKET_UPGRADE_FAILURE = "WEBSOCKET UPGRADE FAILURE"
 }
 
 class SystemErr extends Error {
-  typeOf: SystemErrCode
-  message: string
+  typeOf: SystemErrCode;
   constructor(typeOf: SystemErrCode, message: string) {
-    super()
-    this.typeOf = typeOf
-    this.message = `🚨 ${this.typeOf}: ${message} 🚨`
+    super(`${typeOf}: ${message}`);
+    this.typeOf = typeOf;
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, SystemErr);
+    }
   }
 }
+
+const SystemErrRecord: Record<SystemErrCode, HTTPHandlerFunc> = {
+  [SystemErrCode.FILE_NOT_FOUND]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr;
+    return c.setStatus(404).text(err.message);
+  },
+  [SystemErrCode.BODY_PARSING_FAILED]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr;
+    return c.setStatus(400).text(err.message);
+  },
+  [SystemErrCode.ROUTE_ALREADY_REGISTERED]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr;
+    return c.setStatus(409).text(err.message); 
+  },
+  [SystemErrCode.ROUTE_NOT_FOUND]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr;
+    return c.setStatus(404).text(err.message); 
+  },
+  [SystemErrCode.INTERNAL_SERVER_ERR]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr
+    return c.setStatus(500).text("Xerus Internal Server Error\n\nTo Make You App Safe For Production\nSetup Your Own Error Handling:\n\napp.onErr(async (c: HTTPContext): Promise<Response> => {\n\tlet err = c.getErr()\n\tconsole.error(err)\n\treturn c.setStatus(500).text('Internal Server Error')\n})\n\nError Message:\n"+err.message)
+  },
+  [SystemErrCode.WEBSOCKET_UPGRADE_FAILURE]: async (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr
+    return c.setStatus(500).text(err.message)
+  }
+};
+
 
 //==============================
 // cookies
@@ -115,42 +149,41 @@ export class HTTPContext {
     if (this._body !== undefined) {
       return this._body as any;
     }
-
+  
     const contentType = this.req.headers.get("Content-Type") || "";
-
-    try {
-      let parsedData: any;
-      if (contentType.includes("application/json")) {
-        parsedData = await this.req.json();
-        if (expectedType !== BodyType.JSON) {
-          throw new Error("Unexpected JSON data");
-        }
-      } else if (contentType.includes("application/x-www-form-urlencoded")) {
-        parsedData = Object.fromEntries(
-          new URLSearchParams(await this.req.text()),
-        );
-        if (expectedType !== BodyType.FORM) {
-          throw new Error("Unexpected FORM data");
-        }
-      } else if (contentType.includes("multipart/form-data")) {
-        parsedData = await this.req.formData();
-        if (expectedType !== BodyType.MULTIPART_FORM) {
-          throw new Error("Unexpected MULTIPART_FORM data");
-        }
-      } else {
-        parsedData = await this.req.text();
-        if (expectedType !== BodyType.TEXT) {
-          throw new Error("Unexpected TEXT data");
-        }
+  
+    let parsedData: any;
+  
+    if (contentType.includes("application/json")) {
+      if (expectedType !== BodyType.JSON) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
       }
-
-      this._body = parsedData;
-      return parsedData;
-    } catch (err: any) {
-      throw new Error(`Body parsing failed: ${err.message}`);
+      try {
+        parsedData = await this.req.json();
+      } catch (err: any) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+      }
+    } else if (contentType.includes("application/x-www-form-urlencoded")) {
+      if (expectedType !== BodyType.FORM) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+      }
+      parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
+    } else if (contentType.includes("multipart/form-data")) {
+      if (expectedType !== BodyType.MULTIPART_FORM) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+      }
+      parsedData = await this.req.formData();
+    } else {
+      if (expectedType !== BodyType.TEXT) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
+      }
+      parsedData = await this.req.text();
     }
+  
+    this._body = parsedData;
+    return parsedData;
   }
-
+  
   getParam(name: string, defaultValue?: string): string | undefined {
     return this.params[name] ?? defaultValue;
   }
@@ -341,7 +374,7 @@ export class HTTPHandler {
   }
 
   async execute(c: HTTPContext): Promise<Response> {
-    return this.compiledChain(c); // Use precompiled middleware chain
+    return this.compiledChain(c);
   }
 }
 
@@ -371,13 +404,16 @@ export class Middleware {
   }
 }
 
-// Example middleware using the new class
 export const logger = new Middleware(async (c: HTTPContext, next) => {
   const start = performance.now();
   await next();
   const duration = performance.now() - start;
   console.log(`[${c.req.method}][${c.path}][${duration.toFixed(2)}ms]`);
 });
+
+//=================================
+// response
+//=================================
 
 export class MutResponse {
   statusCode: number;
@@ -424,8 +460,8 @@ export class MutResponse {
 //==============================
 
 class TrieNode {
-  handlers: Record<string, HTTPHandler> = {}; // Replacing Map with object
-  children: Record<string, TrieNode> = {}; // Replacing Map with object
+  handlers: Record<string, HTTPHandler> = {}; 
+  children: Record<string, TrieNode> = {}; 
   paramKey?: string;
   wildcard?: TrieNode;
 }
@@ -540,16 +576,23 @@ export class Xerus {
     this.notFoundHandler = handler;
   }
 
-  private register(
-    method: string,
-    path: string,
-    handlerFunc: HTTPHandlerFunc,
-    middlewares: Middleware[],
-  ) {
+private register(
+  method: string,
+  path: string,
+  handlerFunc: HTTPHandlerFunc,
+  middlewares: Middleware[],
+) {
+  try {
     let handler = new HTTPHandler(handlerFunc);
     handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
     if (!path.includes(":") && !path.includes("*")) {
+      if (this.routes[`${method} ${path}`]) {
+        throw new SystemErr(
+          SystemErrCode.ROUTE_ALREADY_REGISTERED,
+          `Route ${method} ${path} has already been registered`
+        );
+      }
       this.routes[`${method} ${path}`] = handler;
       return;
     }
@@ -562,8 +605,7 @@ export class Xerus {
       let isWildcard = part === "*";
 
       if (isParam) {
-        node = node.children[":param"] ??
-          (node.children[":param"] = new TrieNode());
+        node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
         node.paramKey ||= part.slice(1);
       } else if (isWildcard) {
         node.wildcard = node.wildcard ?? new TrieNode();
@@ -574,10 +616,16 @@ export class Xerus {
     }
 
     if (node.handlers[method]) {
-      throw new Error(`Route ${method} ${path} has already been registered`);
+      throw new SystemErr(
+        SystemErrCode.ROUTE_ALREADY_REGISTERED,
+        `Route ${method} ${path} has already been registered`
+      );
     }
     node.handlers[method] = handler;
+  } catch (err) {
+    throw err;
   }
+}
 
   get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("GET", path, handler, middlewares);
@@ -679,18 +727,26 @@ export class Xerus {
       if (this.notFoundHandler) {
         return this.notFoundHandler.execute(new HTTPContext(req))
       }
-      return new Response("404 Not Found", { status: 404 });
+      throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`)
     } catch (e: any) {
 
-      // are we dealing with a system level error?
-      console.log(e.message)
+      // setting up our context with an error
+      let c = new HTTPContext(req);
+      c.setErr(e)
+
+      // catching all system-level errors (errors that can occur within functions provided by Xerus)
+      if (e instanceof SystemErr) {
+        let errHandler = await SystemErrRecord[e.typeOf]
+        return await errHandler(c)
+      }
 
       // if the user has default error handling
-      let context = new HTTPContext(req);
       if (this.errHandler) {
-        return this.errHandler.execute(context)
+        return this.errHandler.execute(c)
       }
-      return new Response("🚨 Xerus Internal Server Error 🚨\n\nTo Make You App Safe For Production\nSetup Your Own Error Handling:\n\napp.onErr(async (c: HTTPContext): Promise<Response> => {\n\tlet err = c.getErr()\n\tconsole.error(err)\n\treturn c.setStatus(500).text('Internal Server Error')\n})\n\nError Message:\n"+e.message, { status: 500 });
+      
+      // if the user does not have an error handler setup, then send a default message
+      return await SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR](c)
     }
   }
 
@@ -706,7 +762,7 @@ export class Xerus {
         return;
       }
     } catch (e: any) {
-      return new Response('Failed to upgrade to websocket connection')
+      throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message)
     }
   }
 

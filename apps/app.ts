@@ -402,8 +402,8 @@ app.get('/file-missing', async (c: HTTPContext) => {
   return await c.file("./path/to/file");
 });
 
-// app.onErr(async (c: HTTPContext): Promise<Response> => {
-//   return c.setStatus(500).text("internal server error");
-// });
+app.onErr(async (c: HTTPContext): Promise<Response> => {
+  return c.setStatus(500).text("internal server error");
+});
 
 await app.listen(8080);
