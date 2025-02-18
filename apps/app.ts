@@ -172,22 +172,14 @@ app.get(
 app.get(
   "/context/stream-file",
   async (c: HTTPContext): Promise<Response> => {
-    let file = Bun.file("./static/test.txt");
-    if (!file.exists) {
-      return c.setStatus(404).text("File not found");
-    }
-    return await c.file(file, true);
+    return await c.file("./static/test.txt", true);
   },
 );
 
 app.get(
   "/static/*",
   async (c: HTTPContext): Promise<Response> => {
-    let file = Bun.file("." + c.path);
-    if (!file.exists) {
-      return c.setStatus(404).text("file not found");
-    }
-    return await c.file(file);
+    return await c.file("." + c.path);
   },
 );
 
@@ -305,22 +297,14 @@ app.post(
 app.get(
   "/context/serve-image",
   async (c: HTTPContext): Promise<Response> => {
-    let file = Bun.file("./static/image.png");
-    if (!file.exists) {
-      return c.setStatus(404).text("File not found");
-    }
-    return await c.file(file);
+    return await c.file("./static/image.png");
   },
 );
 
 app.get(
   "/context/serve-text-file",
   async (c: HTTPContext): Promise<Response> => {
-    let file = Bun.file("./static/sample.txt");
-    if (!file.exists) {
-      return c.setStatus(404).text("File not found");
-    }
-    return await c.file(file);
+    return await c.file("./static/sample.txt");
   },
 );
 
@@ -392,10 +376,6 @@ app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
 });
 
-app.onErr(async (c: HTTPContext): Promise<Response> => {
-  return c.setStatus(500).text("internal server error");
-});
-
 app.get("/ws/test", async (c: HTTPContext) => {
   return c.html(wsScript);
 });
@@ -417,5 +397,13 @@ app.ws("/chat", {
     c.set('secret', 'booty')
   }
 });
+
+app.get('/file-missing', async (c: HTTPContext) => {
+  return await c.file("./path/to/file");
+});
+
+// app.onErr(async (c: HTTPContext): Promise<Response> => {
+//   return c.setStatus(500).text("internal server error");
+// });
 
 await app.listen(8080);

@@ -4,9 +4,18 @@ import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
 // system errors
 //==============================
 
-export enum HTTPError {
+export enum SystemErrCode {
   FILE_NOT_FOUND = "FILE_NOT_FOUND",
-  HTTP_NOT_FOUND = "HTTP_NOT_FOUND"
+}
+
+class SystemErr extends Error {
+  typeOf: SystemErrCode
+  message: string
+  constructor(typeOf: SystemErrCode, message: string) {
+    super()
+    this.typeOf = typeOf
+    this.message = `🚨 ${this.typeOf}: ${message} 🚨`
+  }
 }
 
 //==============================
@@ -188,9 +197,11 @@ export class HTTPContext {
     });
   }
 
-  async file(file: BunFile, stream = false): Promise<Response> {
-    if (!file.exists) {
-      throw new Error(`file does not exist`)
+  async file(path: string, stream = false): Promise<Response> {
+    let file = Bun.file(path)
+    let exists = await file.exists()
+    if (!exists) {
+      throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`)
     }
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     return stream
@@ -665,16 +676,21 @@ export class Xerus {
         const context = new HTTPContext(req, params);
         return await handler.execute(context);
       }
-      return this.notFoundHandler
-        ? this.notFoundHandler.execute(new HTTPContext(req))
-        : new Response("404 Not Found", { status: 404 });
+      if (this.notFoundHandler) {
+        return this.notFoundHandler.execute(new HTTPContext(req))
+      }
+      return new Response("404 Not Found", { status: 404 });
     } catch (e: any) {
+
+      // are we dealing with a system level error?
+      console.log(e.message)
+
+      // if the user has default error handling
       let context = new HTTPContext(req);
-      context.setErr(e.message);
       if (this.errHandler) {
         return this.errHandler.execute(context)
       }
-      return new Response("Internal Server Error", { status: 500 });
+      return new Response("🚨 Xerus Internal Server Error 🚨\n\nTo Make You App Safe For Production\nSetup Your Own Error Handling:\n\napp.onErr(async (c: HTTPContext): Promise<Response> => {\n\tlet err = c.getErr()\n\tconsole.error(err)\n\treturn c.setStatus(500).text('Internal Server Error')\n})\n\nError Message:\n"+e.message, { status: 500 });
     }
   }
 
