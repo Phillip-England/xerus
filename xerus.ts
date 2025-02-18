@@ -1,4 +1,4 @@
-import type { BunFile, Server, ServerWebSocket, WebSocketHandler } from "bun";
+import type { Server, ServerWebSocket  } from "bun";
 
 //==============================
 // system errors

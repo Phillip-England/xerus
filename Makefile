@@ -14,13 +14,13 @@ kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
 run:
-	bun run --hot ./apps/app.ts
+	bun run --hot ./tests/basic_endpoints/app.ts
 
 combine:
 	cat ./*.ts > combined.ts
 
 test:
-	bun test ./apps/app.test.ts
+	bun test ./tests/basic_endpoints/app.test.ts
 
 bench:
-	bun test ./apps/bench.test.ts
+	bun test ./tests/bench.test.ts

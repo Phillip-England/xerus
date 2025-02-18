@@ -1,4 +1,4 @@
-import { BodyType, HTTPContext, Xerus } from "../xerus";
+import { HTTPContext, Xerus } from "../xerus";
 
 let app = new Xerus()
 
