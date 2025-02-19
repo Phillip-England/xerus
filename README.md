@@ -2,9 +2,10 @@
 
 Simple web apps for Bun.
 
+Check out the [docs](https://xerus.dev).
+
 ![logo](/static/logo-dark.png)
 
-Check out the [docs](https://xerus.dev).
 
 ## Quickstart
 ```ts
