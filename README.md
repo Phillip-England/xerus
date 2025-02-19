@@ -2,7 +2,7 @@
 
 Simple web apps for Bun.
 
-![logo](/static/logo-dark.svg)
+![logo](/static/logo-dark.png)
 
 Check out the [docs](https://xerus.dev).
 
