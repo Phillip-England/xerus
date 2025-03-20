@@ -1,11 +1,13 @@
 # Xerus
-
 Simple web apps for Bun.
 
-Check out the [docs](https://xerus.dev).
+## Installation
+```bash
+bun add github:phillip-england/xerus
+```
 
-![logo](/static/logo-dark.png)
-
+## Docs
+Read the [docs](https://xerus.dev).
 
 ## Quickstart
 ```ts
@@ -22,6 +24,23 @@ app.get("/static/*", async (c: Context) => {
 app.get('/', async (c: HTTPContext) => {
   return c.html(`<h1>O'Doyle Rules!</h1>`)
 })
+
+await app.listen()
+```
+
+## File Based Routing
+I have another package, `squid`, which abstracts over `xerus` and extends it for file-based routing. Checkout the [README](https://github.com/phillip-england/squid) here if you are interested.
+
+Here is the quickstart for `squid`:
+```ts
+import { Squid } from "squid"
+
+let result = await Squid.new("./app", process.cwd())
+if (result.isErr()) {
+  console.error(result.unwrapErr())
+}
+
+let app = result.unwrap() as Squid
 
 await app.listen()
 ```
