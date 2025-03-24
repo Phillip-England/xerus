@@ -1,13 +1,13 @@
 # Xerus
-Simple web apps for Bun.
+An Express-like HTTP Library for Bun
+
+## Docs
+Read the [docs](https://xerus.dev)
 
 ## Installation
 ```bash
 bun add github:phillip-england/xerus
 ```
-
-## Docs
-Read the [docs](https://xerus.dev).
 
 ## Quickstart
 ```ts
@@ -17,7 +17,7 @@ let app = new Xerus()
 
 app.use(logger)
 
-app.get("/static/*", async (c: Context) => {
+app.get("/static/*", async (c: HTTPContext) => {
   return await c.file("." + c.path);
 });
 
@@ -44,3 +44,4 @@ let app = result.unwrap() as Squid
 
 await app.listen()
 ```
+
