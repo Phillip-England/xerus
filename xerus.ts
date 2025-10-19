@@ -1,4 +1,6 @@
 import type { Server, ServerWebSocket  } from "bun";
+import type { JSX } from "react";
+import { renderToString } from "react-dom/server";
 
 //==============================
 // system errors
@@ -86,6 +88,13 @@ export class WSContext {
     this.data[key] = value
   }
 }
+
+
+//==============================
+// useful types
+//==============================
+
+export type HTTPHandleFunc = (c: HTTPContext) => Promise<Response>
 
 //==============================
 // http context
@@ -209,6 +218,11 @@ export class HTTPContext {
   html(content: string): Response {
     this.setHeader("Content-Type", "text/html");
     return this.send(content);
+  }
+
+  jsx(jsx: JSX.Element) {
+    this.setHeader("Content-Type", "text/plain")
+    return this.send(renderToString(jsx))
   }
 
   text(content: string): Response {
