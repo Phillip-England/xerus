@@ -221,7 +221,7 @@ export class HTTPContext {
   }
 
   jsx(jsx: JSX.Element) {
-    this.setHeader("Content-Type", "text/plain")
+    this.setHeader("Content-Type", "text/html")
     return this.send(renderToString(jsx))
   }
 
