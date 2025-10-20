@@ -10,7 +10,7 @@ import type { WSOnConnect } from "./WSOnConnect";
 import { RouteGroup } from "./RouteGroup";
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
-import { SystemErr } from "./systemErr";
+import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { WSContext } from "./WSContext";

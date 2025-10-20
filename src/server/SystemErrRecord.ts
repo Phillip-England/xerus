@@ -1,6 +1,6 @@
 import { SystemErrCode } from "./SystemErrCode";
 import { HTTPContext } from "./HTTPContext";
-import { SystemErr } from "./systemErr";
+import { SystemErr } from "./SystemErr";
 import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
 
 export const SystemErrRecord: Record<SystemErrCode, HTTPHandlerFunc> = {

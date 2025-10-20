@@ -1,6 +1,6 @@
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
-import { SystemErr } from "./systemErr";
+import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { JSX } from "react";
 import { renderToString } from "react-dom/server";
