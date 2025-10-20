@@ -1,6 +1,7 @@
 import type { Server, ServerWebSocket  } from "bun";
 import type { JSX } from "react";
 import { renderToString } from "react-dom/server";
+import path from 'path'
 
 //==============================
 // system errors
@@ -568,6 +569,13 @@ export class Xerus {
     if (handlers.close) this.wsCloseRoutes[path] = handlers.close;
     if (handlers.drain) this.wsDrainRoutes[path] = handlers.drain;
     if (handlers.onConnect) this.wsOnConnects[path] = handlers.onConnect
+  }
+
+  static(relPath: string) {
+    this.get('/static/*', async (c: HTTPContext) => {
+      let p = path.join(process.cwd(), relPath);
+      return await c.file(p);
+    })
   }
 
   use(...middlewares: Middleware[]) {
