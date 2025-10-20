@@ -572,7 +572,7 @@ export class Xerus {
   }
 
   static(relPath: string) {
-    this.get('/static/*', async (c: HTTPContext) => {
+    this.get('/'+relPath+'/*', async (c: HTTPContext) => {
       return await c.file(process.cwd()+c.path);
     })
   }
