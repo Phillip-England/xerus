@@ -10,5 +10,9 @@
     "@types/react-dom": "^19.2.2",
     "react-dom": "^19.2.0",
     "react": "^19.2.0"
+  },
+  "dependencies": {
+    "floss": "github:phillip-england/floss/#v0.0.2",
+    "hoist": "github:phillip-england/hoist/#v0.0.6"
   }
 }

@@ -92,8 +92,8 @@ export class HTTPContext {
     return parsedData;
   }
   
-  getParam(name: string, defaultValue?: string): string | undefined {
-    return this.params[name] ?? defaultValue;
+  getParam(name: string, defaultValue: string = ''): string {
+    return this.params[name] || defaultValue;
   }
 
   setStatus(code: number): this {

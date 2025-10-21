@@ -1,4 +1,4 @@
-import { HTTPContext, Xerus } from "../xerus";
+import { HTTPContext, Xerus } from "../server";
 
 let app = new Xerus()
 

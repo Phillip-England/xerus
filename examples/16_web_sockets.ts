@@ -1,4 +1,4 @@
-import { WSContext, Xerus } from "../xerus";
+import { WSContext, Xerus } from "../server";
 
 let app = new Xerus()
 

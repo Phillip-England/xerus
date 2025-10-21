@@ -14,6 +14,7 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { WSContext } from "./WSContext";
+import path from 'path'
 
 export class Xerus {
   DEBUG_MODE = false;
@@ -56,6 +57,12 @@ export class Xerus {
   static(relPath: string) {
     this.get('/'+relPath+'/*', async (c: HTTPContext) => {
       return await c.file(process.cwd()+c.path);
+    })
+  }
+
+  favicon(absolutePathToFavicon: string) {
+    this.get('/favicon.ico', async (c: HTTPContext) => {
+      return await c.file(absolutePathToFavicon)
     })
   }
 

@@ -1,5 +1,4 @@
-import type { Server } from "bun";
-import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "../../xerus";
+import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "../../server";
 
 import wsScript from "../../static/ws.html" with { type: "text" };
 
