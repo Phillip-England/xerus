@@ -1,5 +1,5 @@
 import { cascade, isolate, RouteModule } from "../../../../filerouter";
-import { HTTPContext, Middleware, type MiddlewareNextFn } from "../../../../server";
+import { HTTPContext, Middleware, type MiddlewareNextFn } from "../../../..";
 
 
 let module = new RouteModule();

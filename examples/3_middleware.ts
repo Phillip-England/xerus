@@ -1,4 +1,4 @@
-import { HTTPContext, Middleware, Xerus, type MiddlewareNextFn } from "../server";
+import { HTTPContext, Middleware, Xerus, type MiddlewareNextFn } from "..";
 
 let app = new Xerus()
 

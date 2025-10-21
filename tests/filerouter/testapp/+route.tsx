@@ -1,5 +1,5 @@
 import { RouteModule } from "../../../filerouter";
-import { HTTPContext } from "../../../server";
+import { HTTPContext } from "../../..";
 
 
 let module = new RouteModule();

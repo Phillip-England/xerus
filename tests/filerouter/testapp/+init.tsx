@@ -1,5 +1,5 @@
 import { InitModule } from "../../../filerouter";
-import { Xerus, logger } from "../../../server";
+import { Xerus, logger } from "../../..";
 
 let module = new InitModule();
 
