@@ -1,4 +1,4 @@
-import { RouteModule } from "../../../../../filerouter";
+import { RouteModule } from "../../../../../src/filerouter/RouteModule";
 import { HTTPContext } from "../../../../..";
 
 

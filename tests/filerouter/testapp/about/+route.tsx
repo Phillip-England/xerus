@@ -1,4 +1,5 @@
-import { cascade, isolate, RouteModule } from "../../../../filerouter";
+import { RouteModule } from "../../../../src/filerouter/RouteModule";
+import { cascade } from "../../../../src/filerouter/RouteModule";
 import { HTTPContext, Middleware, type MiddlewareNextFn } from "../../../..";
 
 

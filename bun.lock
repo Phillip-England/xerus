@@ -4,10 +4,6 @@
   "workspaces": {
     "": {
       "name": "xerus",
-      "dependencies": {
-        "floss": "github:phillip-england/floss/#v0.0.2",
-        "hoist": "github:phillip-england/hoist/#v0.0.6",
-      },
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -32,10 +28,6 @@
 
     "csstype": ["csstype@3.2.2", "", {}, "sha512-D80T+tiqkd/8B0xNlbstWDG4x6aqVfO52+OlSUNIdkTvmNw0uQpJLeos2J/2XvpyidAFuTPmpad+tUxLndwj6g=="],
 
-    "floss": ["floss@github:phillip-england/floss/#3d408b0", { "peerDependencies": { "typescript": "^5" } }, "Phillip-England-floss-3d408b0"],
-
-    "hoist": ["hoist@github:phillip-england/hoist/#4b11c79", { "dependencies": { "floss": "github.com:phillip-england/floss" }, "peerDependencies": { "typescript": "^5" } }, "Phillip-England-hoist-4b11c79"],
-
     "react": ["react@19.2.0", "", {}, "sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ=="],
 
     "react-dom": ["react-dom@19.2.0", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.0" } }, "sha512-UlbRu4cAiGaIewkPyiRGJk0imDN2T3JjieT6spoL2UeSf5od4n5LB/mQ4ejmxhCFT1tYe8IvaFulzynWovsEFQ=="],
@@ -45,7 +37,5 @@
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
-
-    "hoist/floss": ["floss@git+ssh://github.com:phillip-england/floss#4bb40bbe9ebda7827d27d207e1ba9dbc1b89b567", { "peerDependencies": { "typescript": "^5" } }, "4bb40bbe9ebda7827d27d207e1ba9dbc1b89b567"],
   }
 }

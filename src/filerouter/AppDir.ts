@@ -1,4 +1,4 @@
-import { VirtualAsset, VirtualFS } from "hoist";
+import { VirtualAsset, VirtualFS } from "../hoist";
 import { AppFile, AppFileType } from "./AppFile";
 import type { MiddlewareExport, RouteModule } from "./RouteModule";
 import { MiddlwareStradegy } from "./MiddlewareStradegy";

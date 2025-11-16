@@ -1,4 +1,4 @@
-import { FileRouter } from "../../filerouter"
+import { FileRouter } from "../../src/filerouter/FileRouter"
 import path from 'path';
 
 try {
