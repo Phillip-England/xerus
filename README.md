@@ -59,21 +59,114 @@ app.group('/api')
 ```
 
 ## File Based Routing
-I have another package, `squid`, which abstracts over `xerus` and extends it for file-based routing. Checkout the [README](https://github.com/phillip-england/squid) here if you are interested.
-
-Here is the quickstart for `squid`:
+Xerus offers a file-based routing system which can be used as follows:
 ```ts
-import { Squid } from "squid"
+import { FileRouter } from "xerus";
 
-let result = await Squid.new("./app", process.cwd())
-if (result.isErr()) {
-  console.error(result.unwrapErr())
-}
-
-let app = result.unwrap() as Squid
-
-await app.listen()
+let router = await FileRouter.new({
+  "src": path.join(process.cwd(), "app"),
+  "port": 8080,
+});
 ```
+
+### App Initalization (file based routing)
+Assuming `./app` is your project root, `./app/+init.tsx` is where you can run any init logic:
+
+Below, I set up logging and serving static files.
+
+`./app/+init.tsx`:
+```ts
+let module = new InitModule();
+
+module.init(async (app: Xerus) => {
+  app.use(logger);
+  app.static("static");
+});
+
+export default module;
+
+```
+
+### Routes  (file based routing)
+Assuming `./app` is your project root, `./app/+route.tsx` will provide the logic for all routes hitting `/`:
+
+`./app/+route.tsx`:
+```ts
+let module = new RouteModule();
+
+module.get(async (c: HTTPContext) => {
+  return c.jsx(
+    <GuestLayout title="Home Page">
+      <h1>Home Page!</h1>
+    </GuestLayout>,
+  );
+});
+
+export default module;
+```
+
+For `/about`, place the following in `./app/about/route.tsx`:
+```ts
+let module = new RouteModule();
+
+module.get(async (c: HTTPContext) => {
+  return c.jsx(
+    <GuestLayout title="About Page">
+      <h1>Home Page!</h1>
+    </GuestLayout>,
+  );
+});
+
+export default module;
+```
+
+For dynamic routing, try `./app/user/:id/+route.tsx`:
+```ts
+let module = new RouteModule();
+
+module.get(async (c: HTTPContext) => {
+  return c.jsx(
+    <GuestLayout title="User Page">
+      <h1>User {c.getParam('id')}</h1>
+    </GuestLayout>,
+  );
+});
+
+export default module;
+```
+
+### Middlware  (file based routing)
+Middlware is export out of `+route.tsx` file. All middlware can be of type `Cascade` or `Isolate`.
+
+In short, `Cascade` middleware will pour down onto any file beneath itself in the filesystem whereas `Isolate` middleware will only affect the route it is exported from.
+
+For example, here we apply the same middleware, once as `Isolate`, then again as `Cascade`:
+
+```ts
+const testmw = new Middleware(
+  async (c: HTTPContext, next: MiddlewareNextFn) => {
+    console.log("before");
+    await next();
+    console.log("after");
+  },
+);
+
+
+let module = new RouteModule();
+
+module.get(async (c: HTTPContext) => {
+  return c.jsx(
+    <GuestLayout title="Home Page">
+      <h1>User {c.getParam('id')}</h1>
+    </GuestLayout>,
+  );
+}, isolate(testmw), cascade(testmw));
+
+export default module;
+```
+
+Middleware is excuted from top to bottom in sync with the filesystem.
+
 
 ## Static Files
 
