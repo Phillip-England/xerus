@@ -62,6 +62,7 @@ app.group('/api')
 Xerus offers a file-based routing system which can be used as follows:
 ```ts
 import { FileRouter } from "xerus";
+import path from "path";
 
 let router = await FileRouter.new({
   "src": path.join(process.cwd(), "app"),
