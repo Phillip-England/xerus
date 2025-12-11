@@ -27,25 +27,8 @@ export class AppDir {
   static async load(pth: string): Promise<AppDir> {
     let vfs = await VirtualFS.load(pth);
     let appFiles = await AppDir.loadAppFiles(pth, vfs);
-    let unsortedMwExports = await AppDir.loadUnsortedMwExports(appFiles);
     let dir = new AppDir(pth, vfs, appFiles);
     return dir;
-  }
-  static async loadUnsortedMwExports(appFiles: AppFile[]) {
-    let mwRecord: Record<string, MiddlewareExport[]> = {
-      'GET': [],
-      'POST': [],
-      'PUT': [],
-      'DELETE': []
-    }
-    for (let i = 0; i < appFiles.length; i++) {
-      let appFile = appFiles[i] as AppFile
-      if (appFile.fileType != AppFileType.Route) {
-        continue
-      }
-      let module = appFile.module as RouteModule
-      mwRecord['GET']?.push()
-    }
   }
   static async loadAppFiles(pth: string, vfs: VirtualFS): Promise<AppFile[]> {
     let files: AppFile[] = [];

@@ -9,6 +9,12 @@ Read the [docs](https://xerus.dev)
 bun add github:phillip-england/xerus
 ```
 
+## Quick Scaffolding
+Xerus comes with a cli for quick scaffolding:
+```bash
+bun add -g github:phillip-england/xerus
+```
+
 ## Quickstart
 ```ts
 import { HTTPContext, logger, Xerus } from "xerus/xerus";
