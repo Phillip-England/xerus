@@ -29,4 +29,4 @@ test-filerouter:
 	bun test ./tests/filerouter/filerouter.test.ts
 
 build:
-	bun build ./cli.ts --compile --outfile cli
+	bun build ./xerus.ts --compile --outfile xerus
