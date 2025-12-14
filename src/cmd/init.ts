@@ -1,7 +1,7 @@
 import { Cmd, getArgByPos, hasFlag } from '../grub/entrypoint'
 import path from 'path'
 import { mkdir } from 'fs/promises'
-import { rmdir } from 'fs/promises'
+import { rm } from 'fs/promises'
 import { $ } from 'bun'
 
 export let init = new Cmd('init');
@@ -30,8 +30,9 @@ class XerusDir {
   static async new(absolutePath: string, hasReset: boolean): Promise<XerusDir> {
     let xerusDir = new XerusDir(absolutePath, hasReset)
     if (xerusDir.hasReset) {
-      await rmdir(absolutePath, {
+      await rm(absolutePath, {
         recursive: true,
+        force: true,
       })
     }
     let rootDir = await mkdir(absolutePath)

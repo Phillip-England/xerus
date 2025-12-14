@@ -1,5 +1,6 @@
 {
   "name": "xerus",
+  "version": "v0.0.36",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {

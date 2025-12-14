@@ -375,9 +375,9 @@ app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
 });
 
-app.get("/ws/test", async (c: HTTPContext) => {
-  return c.html(wsScript);
-});
+// app.get("/ws/test", async (c: HTTPContext) => {
+//   return c.html(wsScript);
+// });
 
 app.ws("/chat", {
   async open(ws) {
