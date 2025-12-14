@@ -44,7 +44,7 @@ class XerusDir {
     let componentsFile = await Bun.file(path.join(absolutePath, "src", "components.tsx")).write(componentsFileText)
     let staticDir = await mkdir(path.join(absolutePath, "static"))
     let inputCssFile = await Bun.file(path.join(absolutePath, "static", "input.css")).write(`@import 'tailwindcss';`)
-    let initScript = (await $`cd ${absolutePath}; bun init -y; bun add github.com:phillip-england/xerus; make tw;`.quiet()).stdout.toString()
+    let initScript = (await $`cd ${absolutePath}; bun init -y; bun add github.com:phillip-england/xerus; make tw; bun i --save-dev @types/react`.quiet()).stdout.toString()
     let indexTsFile = await Bun.file(path.join(absolutePath, "index.ts")).write(`import { FileRouter } from "xerus";
 import path from "path";
 

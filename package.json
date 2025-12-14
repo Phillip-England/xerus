@@ -15,5 +15,7 @@
   "bin": {
     "xerus": "./cli.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@types/react": "^19.2.7"
+  }
 }
