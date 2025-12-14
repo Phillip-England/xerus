@@ -13,7 +13,7 @@
     "react": "^19.2.0"
   },
   "bin": {
-    "xerus": "./cli.ts"
+    "xerus": "./xerus.ts"
   },
   "dependencies": {
     "@types/react": "^19.2.7"
