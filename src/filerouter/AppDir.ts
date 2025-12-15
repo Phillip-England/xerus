@@ -5,6 +5,7 @@ import { Middleware } from "../server/Middleware";
 import { readdir } from "fs/promises";
 import type { Dirent } from "fs";
 import path from 'path'
+import type { FileRouterOpts } from "./FileRouterOpts";
 
 function sortFilePaths(filepaths: string[]): string[] {
   return filepaths.sort((a, b) => {
@@ -24,24 +25,19 @@ export class AppDir {
     this.path = pth;
     this.appFiles = appFiles;
   }
-  static async load(pth: string): Promise<AppDir> {
-    let appFiles = await AppDir.loadAppFiles(pth);
-    let dir = new AppDir(pth, appFiles);
+  static async load(opts: FileRouterOpts): Promise<AppDir> {
+    let appFiles = await AppDir.loadAppFiles(opts);
+    let dir = new AppDir(opts.src, appFiles);
     return dir;
   }
-  static async loadAppFiles(pth: string): Promise<AppFile[]> {
+  static async loadAppFiles(opts: FileRouterOpts): Promise<AppFile[]> {
     let files: AppFile[] = [];
-    let entries = await readdir(pth, {
-      recursive: true,
-      withFileTypes: true,
-    })
-    for (let i = 0; i < entries.length; i++) {
-      let entry = entries[i] as Dirent<string>
-      if (entry.isDirectory()) {
-        continue
-      }
-      let assetPath = path.join(entry.parentPath, entry.name)
-      let appFile = await AppFile.load(pth, assetPath)
+    let embeddedEntries = Object.entries(opts.embeddedDir)
+    for (let i = 0; i < embeddedEntries.length; i++) {
+      let embeddedEntry = embeddedEntries[i] as [string, string]
+      let embeddedPath = embeddedEntry[0]
+      let embeddedContent = embeddedEntry[1]
+      let appFile = await AppFile.load(opts, embeddedPath, embeddedContent)
       files.push(appFile)
     }
     return files;

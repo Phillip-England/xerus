@@ -1,6 +1,8 @@
 import path from "path";
-import { MiddlewareExport, RouteModule } from "./RouteModule";
+import { RouteModule } from "./RouteModule";
 import { InitModule } from "./InitModule";
+import type { FileRouterOpts } from "./FileRouterOpts";
+import { rm } from "fs/promises";
 
 export type AppModule = RouteModule | InitModule;
 
@@ -28,38 +30,45 @@ export class AppFile {
     this.module = module;
     this.fileType = fileType;
   }
-  static async load(appDirPath: string, filePath: string): Promise<AppFile> {
-    let [appModule, fileType] = await this.loadFileType(appDirPath, filePath);
-    let parentDirPath = path.dirname(filePath);
+  static async load(opts: FileRouterOpts, embeddedFilePath: string, embeddedFileContent: string): Promise<AppFile> {
+    let [appModule, fileType] = await this.loadFileType(opts, embeddedFilePath, embeddedFileContent);
+    let parentDirPath = path.dirname(embeddedFilePath);
     let endpoint = await AppFile.loadEndpoint(
-      appDirPath,
+      opts.src,
       parentDirPath,
     );
     appModule.endpoint = endpoint
     let appFile = new AppFile(
-      appDirPath,
-      filePath,
+      opts.src,
+      embeddedFilePath,
       endpoint,
       appModule,
       fileType,
     );
+    await rm(opts.tmpDir, {
+      recursive: true,
+      force: true
+    })
     return appFile;
   }
   static async loadFileType(
-    appDirPath: string,
-    filePath: string,
+    opts: FileRouterOpts,
+    embeddedFilePath: string,
+    embeddedFileContet: string,
   ): Promise<[AppModule, AppFileType]> {
-    let fileName = path.basename(filePath);
+    let fileName = path.basename(embeddedFilePath);
     let ext = path.extname(fileName);
     if (ext != ".tsx") {
       throw new Error(
-        `INVALID APP FILE: only .tsx files allowed, located ${filePath}`,
+        `INVALID APP FILE: only .tsx files allowed, located ${embeddedFilePath}`,
       );
     }
-    let module = await import(filePath);
+    // let tmpFilePath = path.join(opts.tmpDir, fileName)
+    // let tmpModuleFile = await Bun.write(tmpFilePath, embeddedFileContet)
+    let module = await import(embeddedFilePath);
     if (!module.default) {
       throw new Error(
-        `INVALID APP FILE: missing default export at ${filePath}`,
+        `INVALID APP FILE: missing default export at ${embeddedFilePath}`,
       );
     }
     switch (fileName) {
@@ -70,7 +79,7 @@ export class AppFile {
         break;
       }
       case "+init.tsx": {
-        if (filePath != path.join(appDirPath, "+init.tsx")) {
+        if (embeddedFilePath != path.join(opts.src, "+init.tsx")) {
           break;
         }
         if (module.default instanceof InitModule) {
@@ -80,7 +89,7 @@ export class AppFile {
       }
     }
     throw new Error(
-      `INVALID APP FILE: the following file did not match the spec ${filePath}`,
+      `INVALID APP FILE: the following file did not match the spec ${embeddedFilePath}`,
     );
   }
   static async loadEndpoint(

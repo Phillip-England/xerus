@@ -2,6 +2,7 @@ import path from "path";
 import { AppDir } from "./AppDir";
 import { ServerManager } from "./ServerManager";
 import type { FileRouterOpts } from "./FileRouterOpts";
+import { embedMacro } from "./embedMacro" with { type: "macro"};
 
 
 export class FileRouter {
@@ -14,7 +15,7 @@ export class FileRouter {
     this.appDir = appDir;
   }
   static async new(opts: FileRouterOpts) {
-    let appDir = await AppDir.load(path.join(opts.src));
+    let appDir = await AppDir.load(opts);
     let serverManager = await ServerManager.new(appDir);
     let router = new FileRouter(opts, serverManager, appDir);
     return router;
