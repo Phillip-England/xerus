@@ -1,8 +1,10 @@
-import { VirtualAsset, VirtualFS } from "../hoist";
 import { AppFile, AppFileType } from "./AppFile";
 import type { MiddlewareExport, RouteModule } from "./RouteModule";
 import { MiddlwareStradegy } from "./MiddlewareStradegy";
 import { Middleware } from "../server/Middleware";
+import { readdir } from "fs/promises";
+import type { Dirent } from "fs";
+import path from 'path'
 
 function sortFilePaths(filepaths: string[]): string[] {
   return filepaths.sort((a, b) => {
@@ -17,28 +19,31 @@ function sortFilePaths(filepaths: string[]): string[] {
 
 export class AppDir {
   path: string;
-  vfs: VirtualFS;
   appFiles: AppFile[];
-  constructor(pth: string, vfs: VirtualFS, appFiles: AppFile[]) {
+  constructor(pth: string, appFiles: AppFile[]) {
     this.path = pth;
-    this.vfs = vfs;
     this.appFiles = appFiles;
   }
   static async load(pth: string): Promise<AppDir> {
-    let vfs = await VirtualFS.load(pth);
-    let appFiles = await AppDir.loadAppFiles(pth, vfs);
-    let dir = new AppDir(pth, vfs, appFiles);
+    let appFiles = await AppDir.loadAppFiles(pth);
+    let dir = new AppDir(pth, appFiles);
     return dir;
   }
-  static async loadAppFiles(pth: string, vfs: VirtualFS): Promise<AppFile[]> {
+  static async loadAppFiles(pth: string): Promise<AppFile[]> {
     let files: AppFile[] = [];
-    await vfs.iterAssets(async (asset: VirtualAsset, relPath: string) => {
-      if (asset.isDir()) {
-        return;
+    let entries = await readdir(pth, {
+      recursive: true,
+      withFileTypes: true,
+    })
+    for (let i = 0; i < entries.length; i++) {
+      let entry = entries[i] as Dirent<string>
+      if (entry.isDirectory()) {
+        continue
       }
-      let routeFile = await AppFile.load(pth, asset.path);
-      files.push(routeFile);
-    });
+      let assetPath = path.join(entry.parentPath, entry.name)
+      let appFile = await AppFile.load(pth, assetPath)
+      files.push(appFile)
+    }
     return files;
   }
   async iterAppFiles(
