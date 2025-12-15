@@ -22,10 +22,7 @@ import { HTTPContext, logger, Xerus } from "xerus/xerus";
 let app = new Xerus()
 
 app.use(logger)
-
-app.get("/static/*", async (c: HTTPContext) => {
-  return await c.file("." + c.path);
-});
+app.static('static')
 
 app.get('/', async (c: HTTPContext) => {
   return c.html(`<h1>O'Doyle Rules!</h1>`)
