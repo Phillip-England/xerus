@@ -7,12 +7,12 @@ Read the [docs](https://xerus.dev)
 ## Installation
 ```bash
 bun add github:phillip-england/xerus
-```
-
-## Quick Scaffolding
-Xerus comes with a cli for quick scaffolding:
-```bash
-bun add -g github:phillip-england/xerus
+cd xerus
+make install # to install xerus binary for quick scaffolding
+cd ..
+xerus init myapp # using xerus for quick scaffolding
+cd myapp
+make dev # start local server
 ```
 
 ## Quickstart
