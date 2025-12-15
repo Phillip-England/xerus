@@ -32,14 +32,31 @@ export class AppDir {
   }
   static async loadAppFiles(opts: FileRouterOpts): Promise<AppFile[]> {
     let files: AppFile[] = [];
-    let embeddedEntries = Object.entries(opts.embeddedDir)
-    for (let i = 0; i < embeddedEntries.length; i++) {
-      let embeddedEntry = embeddedEntries[i] as [string, string]
-      let embeddedPath = embeddedEntry[0]
-      let embeddedContent = embeddedEntry[1]
-      let appFile = await AppFile.load(opts, embeddedPath, embeddedContent)
+
+    let dynamicEntries = await readdir(opts.src, {
+      recursive: true,
+      withFileTypes: true,
+    })
+    for (let i = 0; i < dynamicEntries.length; i++) {
+      let entry = dynamicEntries[i]
+      if (entry.isDirectory()) {
+        continue
+      }
+      let targetPath = path.join(entry.parentPath, entry.name)
+      let appFile = await AppFile.load(opts, targetPath) 
       files.push(appFile)
     }
+
+    // let embeddedEntries = Object.entries(opts.embeddedDir)
+    // for (let i = 0; i < embeddedEntries.length; i++) {
+    //   let embeddedEntry = embeddedEntries[i] as [string, string]
+    //   let embeddedPath = embeddedEntry[0]
+    //   let embeddedContent = embeddedEntry[1]
+    //   let appFile = await AppFile.load(opts, embeddedPath, embeddedContent)
+    //   files.push(appFile)
+    // }
+
+
     return files;
   }
   async iterAppFiles(

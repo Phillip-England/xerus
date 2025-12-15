@@ -30,3 +30,6 @@ test-filerouter:
 
 build:
 	bun build ./xerus.ts --compile --outfile xerus
+
+install:
+	rm -r ~/.bun/bin/xerus; bun build ./xerus.ts --compile --outfile xerus; mv xerus ~/.bun/bin/xerus

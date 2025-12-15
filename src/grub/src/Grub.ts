@@ -2,63 +2,92 @@ import { Cmd } from "./Cmd";
 import { getArgByPos } from "./util";
 
 export class Grub {
-  defaultCmd: Cmd;
-  thirdArg: string;
+  // We now store paths initially, and Cmd objects later
+  cmdPaths: string[]; 
   cmds: Cmd[];
-  constructor(...cmds: Cmd[]) {
-    this.cmds = cmds;
-    this.defaultCmd = this.locateDefaultCmd()
-    this.thirdArg = this.loadThirdArg()
-    this.errOnDuplicateNames();
+  
+  defaultCmd: Cmd | null;
+  thirdArg: string;
+
+  constructor(...cmdPaths: string[]) {
+    this.cmdPaths = cmdPaths;
+    this.cmds = [];
+    this.defaultCmd = null;
+    this.thirdArg = this.loadThirdArg();
   }
-  locateDefaultCmd(): Cmd {
-    let defaultCmds: Cmd[] = [];
-    for (let i = 0; i < this.cmds.length; i++) {
-      let cmd = this.cmds[i] as Cmd;
-      if (cmd.isDefault) {
-        defaultCmds.push(cmd);
+
+  // --- INTERNAL LOADING LOGIC ---
+  private async bootstrap() {
+    // 1. Dynamically import all command paths
+    for (const pth of this.cmdPaths) {
+      try {
+        // Bun knows how to load the file from the embedded path
+        const module = await import(pth);
+        
+        // We assume the file has "export default new Cmd(...)"
+        const cmdInstance = module.default;
+
+        if (cmdInstance instanceof Cmd) {
+            this.cmds.push(cmdInstance);
+        } else {
+            console.warn(`Warning: File at ${pth} did not export a Cmd class as default.`);
+        }
+      } catch (e) {
+        throw new Error(`Failed to load command from ${pth}: ${e}`);
       }
     }
-    if (defaultCmds.length == 0) {
-      throw new Error(`GRUB ERR: no default cmd located`)
-    }
-    if (defaultCmds.length > 1) {
-      throw new Error(`GRUB ERR: multiple default cmds located`)
-    }
-    return defaultCmds[0] as Cmd;
+
+    // 2. Now that cmds are loaded, run the checks
+    this.errOnDuplicateNames();
+    this.defaultCmd = this.locateDefaultCmd();
   }
-  loadThirdArg(): string {
-    let thirdArg = getArgByPos(2);
-    if (thirdArg == '') {
-      return 'default';
-    }
-    return thirdArg;
-  }
+
+  // --- RUN LOGIC ---
   async run() {
-    let cmd = this.locateCmdToRun()
+    // Lazy load the commands when run() is called
+    await this.bootstrap(); 
+
+    const cmd = this.locateCmdToRun();
     await cmd.operation();
   }
+
+  // --- HELPER METHODS (Unchanged logic, just cleanup) ---
+  
+  locateDefaultCmd(): Cmd {
+    const defaultCmds = this.cmds.filter(c => c.isDefault);
+    
+    if (defaultCmds.length === 0) {
+      throw new Error(`GRUB ERR: no default cmd located`);
+    }
+    if (defaultCmds.length > 1) {
+      throw new Error(`GRUB ERR: multiple default cmds located`);
+    }
+    return defaultCmds[0];
+  }
+
+  loadThirdArg(): string {
+    const thirdArg = getArgByPos(2);
+    return thirdArg === '' ? 'default' : thirdArg;
+  }
+
   locateCmdToRun(): Cmd {
-    if (this.thirdArg == 'default') {
-      return this.defaultCmd;
+    if (this.thirdArg === 'default') {
+      // We know this isn't null because bootstrap calls locateDefaultCmd which throws if missing
+      return this.defaultCmd!; 
     } else {
-      for (let i = 0; i < this.cmds.length; i++) {
-        let cmd = this.cmds[i] as Cmd;
-        if (this.thirdArg == cmd.name) {
-          return cmd;
-        }
-      }
+      const found = this.cmds.find(c => c.name === this.thirdArg);
+      if (found) return found;
     }
     throw new Error(`no cmd named ${this.thirdArg} located`);
   }
+
   errOnDuplicateNames() {
-    let foundNames: string[] = [];
-    for (let i = 0; i < this.cmds.length; i++) {
-      let cmd = this.cmds[i] as Cmd;
-      if (foundNames.includes(cmd.name)) {
-        throw new Error(`you have two cmds named ${cmd.name}`)
+    const names = new Set<string>();
+    for (const cmd of this.cmds) {
+      if (names.has(cmd.name)) {
+        throw new Error(`you have two cmds named ${cmd.name}`);
       }
-      foundNames.push(cmd.name);
+      names.add(cmd.name);
     }
   }
 }

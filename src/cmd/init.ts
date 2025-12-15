@@ -4,9 +4,8 @@ import { mkdir } from 'fs/promises'
 import { rm } from 'fs/promises'
 import { $ } from 'bun'
 
-export let init = new Cmd('init');
 
-init.setOperation(async () => {
+export async function cmdInit(args: string[]) {
   let shBunVersion = await $`bun -v`.quiet()
   let bunVersion = shBunVersion.stdout.toString()
   if (!bunVersion.startsWith("1.")) {
@@ -18,7 +17,7 @@ init.setOperation(async () => {
   }
   let appAbsolutePath = path.join(process.cwd(), appName)
   let xerusDir = await XerusDir.new(appAbsolutePath, hasFlag('--reset'))
-})
+}
 
 class XerusDir {
   absolutePath: string
