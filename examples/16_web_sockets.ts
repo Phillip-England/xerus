@@ -5,7 +5,6 @@ let app = new Xerus()
 app.ws("/chat", {
   async open(ws) {
     let c = ws.data // get the context
-    
   },
   async message(ws, message) {
 

@@ -14,22 +14,10 @@ kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
 run-server:
-	bun run --hot ./tests/server/server.ts
+	bun run --hot ./tests/server.ts
 
 test-server:
-	bun test ./tests/server/server.test.ts
+	bun test ./tests/server.test.ts
 
 bench-server:
-	bun test ./tests/server/bench.test.ts
-
-run-filerouter:
-	bun run --hot ./tests/filerouter/filerouter.ts
-
-test-filerouter:
-	bun test ./tests/filerouter/filerouter.test.ts
-
-build:
-	bun build ./xerus.ts --compile --outfile xerus
-
-install:
-	rm -r ~/.bun/bin/xerus; bun build ./xerus.ts --compile --outfile xerus; mv xerus ~/.bun/bin/xerus
+	bun test ./tests/bench.test.ts

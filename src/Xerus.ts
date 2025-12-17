@@ -14,7 +14,6 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { WSContext } from "./WSContext";
-import path from 'path'
 
 export class Xerus {
   DEBUG_MODE = false;
@@ -218,7 +217,7 @@ private register(
     return result;
   }
 
-  async handleHTTP(req: Request, server: Server): Promise<Response | void> {
+  async handleHTTP(req: Request, server: Server<any>): Promise<Response | void> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
@@ -239,42 +238,33 @@ private register(
       }
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`)
     } catch (e: any) {
-
-      // setting up our context with an error
       let c = new HTTPContext(req);
       c.setErr(e)
-
-      // catching all system-level errors (errors that can occur within functions provided by Xerus)
       if (e instanceof SystemErr) {
         let errHandler = await SystemErrRecord[e.typeOf]
         return await errHandler(c)
       }
-
-      // if the user has default error handling
       if (this.errHandler) {
         return this.errHandler.execute(c)
       }
-      
-      // if the user does not have an error handler setup, then send a default message
       return await SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR](c)
     }
   }
 
-  async handleWS(req: Request, server: Server, path: string): Promise<Response | void> {
-    try {
-      let context = new WSContext(req, path)
-      if (this.wsOnConnects[path]) {
-        let onConnect = this.wsOnConnects[path]
-        await onConnect(context)
-        await this.wsOnConnects[path](context)
-      }
-      if (server.upgrade(req, context)) {
-        return;
-      }
-    } catch (e: any) {
-      throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message)
+async handleWS(req: Request, server: Server<WSContext>, path: string): Promise<Response | void> {
+  try {
+    let context = new WSContext(req, path)
+    if (this.wsOnConnects[path]) {
+      let onConnect = this.wsOnConnects[path]
+      await onConnect(context)
     }
+    if (server.upgrade(req, { data: context })) {
+      return;
+    }
+  } catch (e: any) {
+    throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message)
   }
+}
 
   async handleOpenWS(ws: ServerWebSocket<unknown>) {
     let data = ws.data as any;
@@ -311,7 +301,7 @@ private register(
     let app = this;
     const server = Bun.serve({
       port: port,
-      fetch: async (req: Request, server: Server) => {
+      fetch: async (req: Request, server: Server<any>) => {
         return await app.handleHTTP(req, server);
       },
       websocket: {

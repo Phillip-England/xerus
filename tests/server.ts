@@ -1,4 +1,4 @@
-import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "../index";
+import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "..";
 
 import wsScript from "../static/ws.html" with { type: "text" };
 
