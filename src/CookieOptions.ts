@@ -1,4 +1,3 @@
-
 export interface CookieOptions {
   path?: string;
   domain?: string;

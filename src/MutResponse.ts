@@ -1,5 +1,3 @@
-
-
 export class MutResponse {
   statusCode: number;
   headers: Headers;
@@ -22,7 +20,7 @@ export class MutResponse {
   }
 
   getHeader(name: string): string {
-    return this.headers.get(name) || '';
+    return this.headers.get(name) || "";
   }
 
   body(content: string | object): this {

@@ -375,9 +375,9 @@ app.onNotFound(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(404).text("404 Not Found");
 });
 
-// app.get("/ws/test", async (c: HTTPContext) => {
-//   return c.html(wsScript);
-// });
+app.get("/ws/test", async (c: HTTPContext) => {
+  return c.html(wsScript.toString()); 
+});
 
 app.ws("/chat", {
   async open(ws) {
@@ -388,14 +388,15 @@ app.ws("/chat", {
     for (let i = 0; i < 1000; i++) {
       ws.send(`Echo: ${message}`);
     }
+    ws.close()
   },
   async close(ws, code, message) {
     console.log("WebSocket connection closed");
   },
   async onConnect(c: WSContext) {
-    c.set('secret', 'booty')
-  }
-});
+    console.log('connecting!')
+  },
+}, mwOrderTest1);
 
 app.get('/file-missing', async (c: HTTPContext) => {
   return await c.file("./path/to/file");

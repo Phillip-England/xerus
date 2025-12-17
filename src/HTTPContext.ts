@@ -57,42 +57,59 @@ export class HTTPContext {
     if (this._body !== undefined) {
       return this._body as any;
     }
-  
+
     const contentType = this.req.headers.get("Content-Type") || "";
-  
+
     let parsedData: any;
-  
+
     if (contentType.includes("application/json")) {
       if (expectedType !== BodyType.JSON) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Unexpected JSON data",
+        );
       }
       try {
         parsedData = await this.req.json();
       } catch (err: any) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          `JSON parsing failed: ${err.message}`,
+        );
       }
     } else if (contentType.includes("application/x-www-form-urlencoded")) {
       if (expectedType !== BodyType.FORM) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Unexpected FORM data",
+        );
       }
-      parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
+      parsedData = Object.fromEntries(
+        new URLSearchParams(await this.req.text()),
+      );
     } else if (contentType.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Unexpected MULTIPART_FORM data",
+        );
       }
       parsedData = await this.req.formData();
     } else {
       if (expectedType !== BodyType.TEXT) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Unexpected TEXT data",
+        );
       }
       parsedData = await this.req.text();
     }
-  
+
     this._body = parsedData;
     return parsedData;
   }
-  
-  getParam(name: string, defaultValue: string = ''): string {
+
+  getParam(name: string, defaultValue: string = ""): string {
     return this.params[name] || defaultValue;
   }
 
@@ -120,8 +137,8 @@ export class HTTPContext {
   }
 
   jsx(jsx: JSX.Element) {
-    this.setHeader("Content-Type", "text/html")
-    return this.send(renderToString(jsx))
+    this.setHeader("Content-Type", "text/html");
+    return this.send(renderToString(jsx));
   }
 
   text(content: string): Response {
@@ -134,7 +151,6 @@ export class HTTPContext {
     return this.send(JSON.stringify(data));
   }
 
-
   async stream(stream: ReadableStream): Promise<Response> {
     this.setHeader("Content-Type", "application/octet-stream");
     return new Response(stream, {
@@ -144,10 +160,13 @@ export class HTTPContext {
   }
 
   async file(path: string, stream = false): Promise<Response> {
-    let file = Bun.file(path)
-    let exists = await file.exists()
+    let file = Bun.file(path);
+    let exists = await file.exists();
     if (!exists) {
-      throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`)
+      throw new SystemErr(
+        SystemErrCode.FILE_NOT_FOUND,
+        `file does not exist at ${path}`,
+      );
     }
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     return stream
