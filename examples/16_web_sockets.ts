@@ -1,20 +1,34 @@
-import { WSContext, Xerus } from "..";
+import { HTTPContext, logger, Xerus } from "../";
+import type { ServerWebSocket } from "bun";
 
-let app = new Xerus()
+const app = new Xerus();
 
 app.ws("/chat", {
-  async open(ws) {
-    let c = ws.data // get the context
-  },
-  async message(ws, message) {
 
+  // middleware on these two
+  open: {
+    handler: async (ws: ServerWebSocket<HTTPContext>) => {
+      console.log("Client connected to chat");
+    },
+    middlewares: [logger] 
   },
-  async close(ws, code, message) {
+  
+  message: {
+    handler: async (ws: ServerWebSocket<HTTPContext>, message: string | Buffer) => {
+      ws.send(`You said: ${message}`);
+    },
+    middlewares: [logger]
+  },
 
+  // no middleware on these two
+  close: async (ws: ServerWebSocket<HTTPContext>, code: number, reason: string) => {
+    console.log(`Connection closed: ${code} ${reason}`);
   },
-  async onConnect(c: WSContext) {
-    c.set('secret', "O'Doyle") // set pre-connect data
+
+  drain: async (ws: ServerWebSocket<HTTPContext>) => {
+    console.log("Buffer drained");
   }
-});
 
-await app.listen()
+}, logger); // <== shared middleware
+
+await app.listen(8080);

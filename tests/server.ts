@@ -1,5 +1,5 @@
 import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "..";
-
+import { embedDir } from "../src/macros" with { type: "macro" };
 import wsScript from "../static/ws.html" with { type: "text" };
 
 // define router

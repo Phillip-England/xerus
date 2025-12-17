@@ -132,7 +132,9 @@ export class HTTPContext {
   }
 
   text(content: string): Response {
-    this.setHeader("Content-Type", "text/plain");
+    if (!this.res.getHeader("Content-Type")) {
+      this.setHeader("Content-Type", "text/plain");
+    }
     return this.send(content);
   }
 

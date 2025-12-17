@@ -27,12 +27,74 @@ export class Xerus {
     string,
     { handler?: HTTPHandler; params: Record<string, string> }
   >();
-  private wsRoutes: Record<string, WSHandler> = {};
+  public wsRoutes: Record<string, WSHandler> = {};
   private readonly MAX_CACHE_SIZE = 500;
 
   private getOrCreateWSHandler(path: string): WSHandler {
     if (!this.wsRoutes[path]) this.wsRoutes[path] = new WSHandler();
     return this.wsRoutes[path];
+  }
+
+  /**
+   * Defines a full WebSocket route with individual lifecycle handlers and shared middlewares.
+   */
+  ws(
+    path: string,
+    handlers: {
+      open?: WSOpenFunc | { handler: WSOpenFunc; middlewares: Middleware<HTTPContext>[] };
+      message?: WSMessageFunc | { handler: WSMessageFunc; middlewares: Middleware<HTTPContext>[] };
+      close?: WSCloseFunc | { handler: WSCloseFunc; middlewares: Middleware<HTTPContext>[] };
+      drain?: WSDrainFunc | { handler: WSDrainFunc; middlewares: Middleware<HTTPContext>[] };
+    },
+    ...middlewares: Middleware<HTTPContext>[]
+  ) {
+    const wsHandler = this.getOrCreateWSHandler(path);
+    const sharedMiddlewares = this.globalMiddlewares.concat(middlewares);
+
+    const setupLifecycle = (key: 'open' | 'message' | 'close' | 'drain') => {
+      const config = handlers[key];
+      if (!config) return;
+
+      let handlerFunc: any;
+      let specificMiddlewares: Middleware<HTTPContext>[] = [];
+
+      if (typeof config === "function") {
+        handlerFunc = config;
+      } else {
+        handlerFunc = config.handler;
+        specificMiddlewares = config.middlewares;
+      }
+
+      // Chain logic: Global -> Group/Shared -> Lifecycle-Specific
+      const fullChain = sharedMiddlewares.concat(specificMiddlewares);
+
+      if (key === 'open') wsHandler.setOpen(handlerFunc, fullChain);
+      if (key === 'message') wsHandler.setMessage(handlerFunc, fullChain);
+      if (key === 'close') wsHandler.setClose(handlerFunc, fullChain);
+      if (key === 'drain') wsHandler.setDrain(handlerFunc, fullChain);
+    };
+
+    setupLifecycle('open');
+    setupLifecycle('message');
+    setupLifecycle('close');
+    setupLifecycle('drain');
+
+    return this;
+  }
+
+  static(pathPrefix: string, embeddedFiles: Record<string, { content: string; type: string }>) {
+    const prefix = pathPrefix === "/" ? "" : pathPrefix;
+    this.get(prefix + "/*", async (c: HTTPContext) => {
+      const lookupPath = c.path.substring(prefix.length);
+      const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
+      if (!file) {
+        throw new SystemErr(
+          SystemErrCode.FILE_NOT_FOUND, 
+          `Asset ${lookupPath} not found in embedded directory`
+        );
+      }
+      return c.setHeader("Content-Type", file.type).text(file.content);
+    });
   }
 
   open(path: string, handler: WSOpenFunc, ...middlewares: Middleware<HTTPContext>[]) {
@@ -231,7 +293,6 @@ export class Xerus {
     path: string,
   ): Promise<Response | void> {
     try {
-      // Initialize HTTPContext here so it is shared with the WebSocket callbacks
       let context = new HTTPContext(req);
       if (server.upgrade(req, { data: context })) {
         return;

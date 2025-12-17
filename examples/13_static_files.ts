@@ -1,9 +1,9 @@
 import { HTTPContext, Xerus } from "..";
+import { embedDir } from "../src/macros" with { type: 'macro' };
 
 let app = new Xerus()
 
-app.get("/static/*", async (c: HTTPContext) => {
-  return await c.file("." + c.path);
-});
+let embeddedDir = embedDir('/some/absolute/path')
+app.static("/static", embeddedDir)
 
 await app.listen()
