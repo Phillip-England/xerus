@@ -5,27 +5,27 @@ import type {
   WSOpenFunc,
 } from "./WSHandlerFuncs";
 import { Middleware } from "./Middleware";
-import { WSContext } from "./WSContext";
+import { HTTPContext } from "./HTTPContext";
 import type { ServerWebSocket } from "bun";
 
 export class WSHandler {
-  public compiledOpen?: (ws: ServerWebSocket<WSContext>) => Promise<void>;
+  public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
   public compiledMessage?: (
-    ws: ServerWebSocket<WSContext>,
+    ws: ServerWebSocket<HTTPContext>,
     message: string | Buffer,
   ) => Promise<void>;
-  public compiledDrain?: (ws: ServerWebSocket<WSContext>) => Promise<void>;
+  public compiledDrain?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
   public compiledClose?: (
-    ws: ServerWebSocket<WSContext>,
+    ws: ServerWebSocket<HTTPContext>,
     code: number,
     reason: string,
   ) => Promise<void>;
 
   public createChain(
     handler: Function,
-    middlewares: Middleware<any>[], // Use any to allow cross-compat
+    middlewares: Middleware<HTTPContext>[], 
   ): any {
-    let base = async (ws: ServerWebSocket<WSContext>, ...args: any[]) => {
+    let base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       await handler(ws, ...args);
     };
 
@@ -33,9 +33,8 @@ export class WSHandler {
       const middleware = middlewares[i];
       const nextChain = base;
 
-      base = async (ws: ServerWebSocket<WSContext>, ...args: any[]) => {
-        const context = ws.data;
-        // The generic Middleware.execute now accepts WSContext
+      base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
+        const context = ws.data; 
         await middleware.execute(context, async () => {
           await nextChain(ws, ...args);
           return new Response(); 
@@ -45,19 +44,19 @@ export class WSHandler {
     return base;
   }
 
-  setOpen(handler: WSOpenFunc, middlewares: Middleware<any>[]) {
+  setOpen(handler: WSOpenFunc, middlewares: Middleware<HTTPContext>[]) {
     this.compiledOpen = this.createChain(handler, middlewares);
   }
 
-  setMessage(handler: WSMessageFunc, middlewares: Middleware<any>[]) {
+  setMessage(handler: WSMessageFunc, middlewares: Middleware<HTTPContext>[]) {
     this.compiledMessage = this.createChain(handler, middlewares);
   }
 
-  setDrain(handler: WSDrainFunc, middlewares: Middleware<any>[]) {
+  setDrain(handler: WSDrainFunc, middlewares: Middleware<HTTPContext>[]) {
     this.compiledDrain = this.createChain(handler, middlewares);
   }
 
-  setClose(handler: WSCloseFunc, middlewares: Middleware<any>[]) {
+  setClose(handler: WSCloseFunc, middlewares: Middleware<HTTPContext>[]) {
     this.compiledClose = this.createChain(handler, middlewares);
   }
 }

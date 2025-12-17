@@ -16,7 +16,7 @@ export class HTTPContext {
   segments: string[];
   params: Record<string, string>;
   private _body?: string | Record<string, any> | FormData;
-  storeData: Record<string, string>;
+  data: Record<string, any>; 
   private err: Error | undefined | string;
 
   constructor(req: Request, params: Record<string, string> = {}) {
@@ -28,7 +28,7 @@ export class HTTPContext {
     this.route = `${this.method} ${this.path}`;
     this.segments = this.path.split("/").filter(Boolean);
     this.params = params;
-    this.storeData = {};
+    this.data = {};
   }
 
   setErr(err: Error | undefined | string) {
@@ -54,53 +54,32 @@ export class HTTPContext {
       : T extends BodyType.MULTIPART_FORM ? FormData
       : never
   > {
-    if (this._body !== undefined) {
-      return this._body as any;
-    }
-
+    if (this._body !== undefined) return this._body as any;
     const contentType = this.req.headers.get("Content-Type") || "";
-
     let parsedData: any;
 
     if (contentType.includes("application/json")) {
       if (expectedType !== BodyType.JSON) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Unexpected JSON data",
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
       }
       try {
         parsedData = await this.req.json();
       } catch (err: any) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          `JSON parsing failed: ${err.message}`,
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
       }
     } else if (contentType.includes("application/x-www-form-urlencoded")) {
       if (expectedType !== BodyType.FORM) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Unexpected FORM data",
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
       }
-      parsedData = Object.fromEntries(
-        new URLSearchParams(await this.req.text()),
-      );
+      parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
     } else if (contentType.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Unexpected MULTIPART_FORM data",
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
       }
       parsedData = await this.req.formData();
     } else {
       if (expectedType !== BodyType.TEXT) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Unexpected TEXT data",
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
       }
       parsedData = await this.req.text();
     }
@@ -163,29 +142,20 @@ export class HTTPContext {
     let file = Bun.file(path);
     let exists = await file.exists();
     if (!exists) {
-      throw new SystemErr(
-        SystemErrCode.FILE_NOT_FOUND,
-        `file does not exist at ${path}`,
-      );
+      throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
     }
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     return stream
-      ? new Response(file.stream(), {
-        status: this.res.statusCode,
-        headers: this.res.headers,
-      })
-      : new Response(file, {
-        status: this.res.statusCode,
-        headers: this.res.headers,
-      });
+      ? new Response(file.stream(), { status: this.res.statusCode, headers: this.res.headers })
+      : new Response(file, { status: this.res.statusCode, headers: this.res.headers });
   }
 
   setStore(key: string, value: any): void {
-    this.storeData[key] = value;
+    this.data[key] = value;
   }
 
   getStore(key: string): any {
-    return this.storeData[key] || undefined;
+    return this.data[key] || undefined;
   }
 
   query(name: string, defaultValue: string = ""): string {
@@ -196,7 +166,7 @@ export class HTTPContext {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
     return cookies.split("; ")
-      .map((c) => c.split(/=(.*)/s, 2)) // Preserve `=` inside values
+      .map((c) => c.split(/=(.*)/s, 2))
       .reduce<Record<string, string>>((acc, [key, val]) => {
         acc[key] = val;
         return acc;
@@ -210,12 +180,8 @@ export class HTTPContext {
     options.secure ??= true;
     options.sameSite ??= "Lax";
     if (options.domain) cookieString += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) {
-      cookieString += `; Max-Age=${options.maxAge}`;
-    }
-    if (options.expires) {
-      cookieString += `; Expires=${options.expires.toUTCString()}`;
-    }
+    if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
+    if (options.expires) cookieString += `; Expires=${options.expires.toUTCString()}`;
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
@@ -223,11 +189,6 @@ export class HTTPContext {
   }
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
-    this.setCookie(name, "", {
-      path,
-      domain,
-      maxAge: 0,
-      expires: new Date(0), // Ensure proper removal
-    });
+    this.setCookie(name, "", { path, domain, maxAge: 0, expires: new Date(0) });
   }
 }

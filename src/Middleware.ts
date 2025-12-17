@@ -1,7 +1,7 @@
 import type { MiddlewareFn } from "./MiddlewareFn";
 import { HTTPContext } from "./HTTPContext";
 
-export class Middleware<C = any> {
+export class Middleware<C = HTTPContext> {
   private callback: MiddlewareFn<C>;
 
   constructor(callback: MiddlewareFn<C>) {
