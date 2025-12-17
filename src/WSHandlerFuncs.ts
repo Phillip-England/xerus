@@ -1,19 +1,17 @@
 import { WSContext } from "./WSContext";
-import type { ServerWebSocket  } from "bun";
+import type { ServerWebSocket } from "bun";
 
 export type WSCloseFunc = (
-  ws: ServerWebSocket<unknown>,
+  ws: ServerWebSocket<WSContext>,
   code: number,
   message: string,
 ) => Promise<void>;
 
 export type WSMessageFunc = (
-  ws: ServerWebSocket<unknown>,
-  message: string | Buffer<ArrayBufferLike>,
+  ws: ServerWebSocket<WSContext>,
+  message: string | Buffer,
 ) => Promise<void>;
 
-export type WSOpenFunc = (ws: ServerWebSocket<unknown>) => Promise<void>;
+export type WSOpenFunc = (ws: ServerWebSocket<WSContext>) => Promise<void>;
 
-export type WSDrainFunc = (ws: ServerWebSocket<unknown>) => Promise<void>;
-
-export type WSOnConnect = (c: WSContext) => Promise<void>;
+export type WSDrainFunc = (ws: ServerWebSocket<WSContext>) => Promise<void>;

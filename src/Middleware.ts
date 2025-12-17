@@ -1,15 +1,15 @@
 import type { MiddlewareFn } from "./MiddlewareFn";
 import { HTTPContext } from "./HTTPContext";
 
-export class Middleware {
-  private callback: MiddlewareFn;
+export class Middleware<C = any> {
+  private callback: MiddlewareFn<C>;
 
-  constructor(callback: MiddlewareFn) {
+  constructor(callback: MiddlewareFn<C>) {
     this.callback = callback;
   }
 
   async execute(
-    c: HTTPContext,
+    c: C,
     next: () => Promise<void | Response>,
   ): Promise<void | Response> {
     return this.callback(c, next);

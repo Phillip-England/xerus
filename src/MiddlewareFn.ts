@@ -1,9 +1,6 @@
-import { HTTPContext } from "./HTTPContext";
 import type { MiddlewareNextFn } from "./MiddlewareNextFn";
 
-export type MiddlewareFn = (
-  c: HTTPContext,
+export type MiddlewareFn<C> = (
+  c: C,
   next: MiddlewareNextFn,
 ) => Promise<void | Response>;
-
-//===

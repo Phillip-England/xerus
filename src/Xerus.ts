@@ -14,7 +14,6 @@ import type {
   WSCloseFunc,
   WSDrainFunc,
   WSMessageFunc,
-  WSOnConnect,
   WSOpenFunc,
 } from "./WSHandlerFuncs";
 import { WSHandler } from "./WSHandler";
@@ -31,9 +30,52 @@ export class Xerus {
     { handler?: HTTPHandler; params: Record<string, string> }
   >();
   private wsRoutes: Record<string, WSHandler> = {};
-  private wsOnConnects: Record<string, WSOnConnect> = {};
   private readonly MAX_CACHE_SIZE = 500;
 
+  private getOrCreateWSHandler(path: string): WSHandler {
+    if (!this.wsRoutes[path]) {
+      this.wsRoutes[path] = new WSHandler();
+    }
+    return this.wsRoutes[path];
+  }
+
+  // --- Modular WS Registration ---
+
+  open(path: string, handler: WSOpenFunc, ...middlewares: Middleware[]) {
+    this.getOrCreateWSHandler(path).setOpen(
+      handler,
+      this.globalMiddlewares.concat(middlewares),
+    );
+    return this;
+  }
+
+  message(path: string, handler: WSMessageFunc, ...middlewares: Middleware[]) {
+    this.getOrCreateWSHandler(path).setMessage(
+      handler,
+      this.globalMiddlewares.concat(middlewares),
+    );
+    return this;
+  }
+
+  close(path: string, handler: WSCloseFunc, ...middlewares: Middleware[]) {
+    this.getOrCreateWSHandler(path).setClose(
+      handler,
+      this.globalMiddlewares.concat(middlewares),
+    );
+    return this;
+  }
+
+  drain(path: string, handler: WSDrainFunc, ...middlewares: Middleware[]) {
+    this.getOrCreateWSHandler(path).setDrain(
+      handler,
+      this.globalMiddlewares.concat(middlewares),
+    );
+    return this;
+  }
+
+  /**
+   * Bulk registration for convenience (removed onConnect)
+   */
   ws(
     path: string,
     handlers: {
@@ -41,17 +83,19 @@ export class Xerus {
       message?: WSMessageFunc;
       close?: WSCloseFunc;
       drain?: WSDrainFunc;
-      onConnect?: WSOnConnect;
     },
     ...middlewares: Middleware[]
   ) {
-    const handler = new WSHandler(handlers);
-    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
-
-    this.wsRoutes[path] = handler;
-    if (handlers.onConnect) this.wsOnConnects[path] = handlers.onConnect;
+    const wsHandler = this.getOrCreateWSHandler(path);
+    const chain = this.globalMiddlewares.concat(middlewares);
+    if (handlers.open) wsHandler.setOpen(handlers.open, chain);
+    if (handlers.message) wsHandler.setMessage(handlers.message, chain);
+    if (handlers.close) wsHandler.setClose(handlers.close, chain);
+    if (handlers.drain) wsHandler.setDrain(handlers.drain, chain);
     return this;
   }
+
+  // --- Rest of the class ---
 
   static(relPath: string) {
     this.get("/" + relPath + "/*", async (c: HTTPContext) => {
@@ -91,50 +135,46 @@ export class Xerus {
     handlerFunc: HTTPHandlerFunc,
     middlewares: Middleware[],
   ) {
-    try {
-      let handler = new HTTPHandler(handlerFunc);
-      handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
+    let handler = new HTTPHandler(handlerFunc);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
-      if (!path.includes(":") && !path.includes("*")) {
-        if (this.routes[`${method} ${path}`]) {
-          throw new SystemErr(
-            SystemErrCode.ROUTE_ALREADY_REGISTERED,
-            `Route ${method} ${path} has already been registered`,
-          );
-        }
-        this.routes[`${method} ${path}`] = handler;
-        return;
-      }
-
-      const parts = path.split("/").filter(Boolean);
-      let node = this.root;
-
-      for (const part of parts) {
-        let isParam = part.startsWith(":");
-        let isWildcard = part === "*";
-
-        if (isParam) {
-          node = node.children[":param"] ??
-            (node.children[":param"] = new TrieNode());
-          node.paramKey ||= part.slice(1);
-        } else if (isWildcard) {
-          node.wildcard = node.wildcard ?? new TrieNode();
-          node = node.wildcard;
-        } else {
-          node = node.children[part] ?? (node.children[part] = new TrieNode());
-        }
-      }
-
-      if (node.handlers[method]) {
+    if (!path.includes(":") && !path.includes("*")) {
+      if (this.routes[`${method} ${path}`]) {
         throw new SystemErr(
           SystemErrCode.ROUTE_ALREADY_REGISTERED,
           `Route ${method} ${path} has already been registered`,
         );
       }
-      node.handlers[method] = handler;
-    } catch (err) {
-      throw err;
+      this.routes[`${method} ${path}`] = handler;
+      return;
     }
+
+    const parts = path.split("/").filter(Boolean);
+    let node = this.root;
+
+    for (const part of parts) {
+      let isParam = part.startsWith(":");
+      let isWildcard = part === "*";
+
+      if (isParam) {
+        node = node.children[":param"] ??
+          (node.children[":param"] = new TrieNode());
+        node.paramKey ||= part.slice(1);
+      } else if (isWildcard) {
+        node.wildcard = node.wildcard ?? new TrieNode();
+        node = node.wildcard;
+      } else {
+        node = node.children[part] ?? (node.children[part] = new TrieNode());
+      }
+    }
+
+    if (node.handlers[method]) {
+      throw new SystemErr(
+        SystemErrCode.ROUTE_ALREADY_REGISTERED,
+        `Route ${method} ${path} has already been registered`,
+      );
+    }
+    node.handlers[method] = handler;
   }
 
   get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
@@ -173,9 +213,7 @@ export class Xerus {
     }
 
     const cached = this.resolvedRoutes.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
     const parts = path.split("/").filter(Boolean);
     let node: TrieNode = this.root;
@@ -190,9 +228,7 @@ export class Xerus {
         node = exactMatch;
       } else if (paramMatch) {
         node = paramMatch;
-        if (node.paramKey) {
-          params[node.paramKey] = part;
-        }
+        if (node.paramKey) params[node.paramKey] = part;
       } else if (wildcardMatch) {
         node = wildcardMatch;
         break;
@@ -202,15 +238,11 @@ export class Xerus {
     }
 
     const matchedHandler: HTTPHandler | undefined = node.handlers[method];
-    if (!matchedHandler) {
-      return { handler: undefined, params: {} };
-    }
+    if (!matchedHandler) return { handler: undefined, params: {} };
 
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.resolvedRoutes.delete(oldestKey);
-      }
+      if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
 
     const result = { handler: matchedHandler, params };
@@ -262,9 +294,6 @@ export class Xerus {
   ): Promise<Response | void> {
     try {
       let context = new WSContext(req, path);
-      if (this.wsOnConnects[path]) {
-        await this.wsOnConnects[path](context);
-      }
       if (server.upgrade(req, { data: context })) {
         return;
       }
@@ -282,20 +311,24 @@ export class Xerus {
       },
       websocket: {
         async open(ws: ServerWebSocket<WSContext>) {
-          const handler = app.wsRoutes[ws.data.data.path]; // Accessing path from WSContext
-          if (handler) await handler.compiledOpen(ws);
+          const handler = app.wsRoutes[ws.data.path];
+          if (handler && handler.compiledOpen) await handler.compiledOpen(ws);
         },
         async message(ws: ServerWebSocket<WSContext>, message) {
-          const handler = app.wsRoutes[ws.data.data.path];
-          if (handler) await handler.compiledMessage(ws, message);
+          const handler = app.wsRoutes[ws.data.path];
+          if (handler && handler.compiledMessage) {
+            await handler.compiledMessage(ws, message);
+          }
         },
         async close(ws: ServerWebSocket<WSContext>, code, message) {
-          const handler = app.wsRoutes[ws.data.data.path];
-          if (handler) await handler.compiledClose(ws, code, message);
+          const handler = app.wsRoutes[ws.data.path];
+          if (handler && handler.compiledClose) {
+            await handler.compiledClose(ws, code, message);
+          }
         },
         async drain(ws: ServerWebSocket<WSContext>) {
-          const handler = app.wsRoutes[ws.data.data.path];
-          if (handler) await handler.compiledDrain(ws);
+          const handler = app.wsRoutes[ws.data.path];
+          if (handler && handler.compiledDrain) await handler.compiledDrain(ws);
         },
       },
     });

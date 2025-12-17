@@ -379,24 +379,21 @@ app.get("/ws/test", async (c: HTTPContext) => {
   return c.html(wsScript.toString()); 
 });
 
-app.ws("/chat", {
-  async open(ws) {
-    let c = ws.data
-    console.log("WebSocket connection opened");
-  },
-  async message(ws, message) {
-    for (let i = 0; i < 1000; i++) {
-      ws.send(`Echo: ${message}`);
-    }
-    ws.close()
-  },
-  async close(ws, code, message) {
-    console.log("WebSocket connection closed");
-  },
-  async onConnect(c: WSContext) {
-    console.log('connecting!')
-  },
-}, mwOrderTest1);
+app.open('/chat', async (ws) => {
+  let c = ws.data
+  console.log("WebSocket connection opened");
+})
+
+app.message('/chat', async (ws, message) => {
+  for (let i = 0; i < 1000; i++) {
+    ws.send(`Echo: ${message}`);
+  }
+  ws.close()
+})
+
+app.close('/chat', async (ws, code, message) => {
+  console.log("WebSocket connection closed");
+})
 
 app.get('/file-missing', async (c: HTTPContext) => {
   return await c.file("./path/to/file");
