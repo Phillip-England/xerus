@@ -10,7 +10,7 @@ export class HTTPHandler {
   constructor(mainHandler: HTTPHandlerFunc) {
     this.mainHandler = mainHandler;
     this.middlewares = [];
-    this.compiledChain = async (c: HTTPContext) => await this.mainHandler(c); // Default
+    this.compiledChain = async (c: HTTPContext) => await this.mainHandler(c); 
   }
 
   setMiddlewares(middlewares: Middleware[]) {
@@ -23,26 +23,34 @@ export class HTTPHandler {
       try {
         return await this.mainHandler(context);
       } catch (error) {
-        throw error; // Ensure error propagates
+        throw error; 
       }
     };
-
-    // Apply middlewares in reverse order
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const middleware = this.middlewares[i];
       const nextChain = chain;
-      chain = async (context: HTTPContext): Promise<Response> => {
-        try {
-          let finalResponse: Response | undefined;
 
-          const result = await middleware.execute(context, async () => {
-            const response = await nextChain(context);
-            finalResponse = response;
-            return response;
+      chain = async (context: HTTPContext): Promise<Response> => {
+        let chainResponse: Response | undefined;
+        let nextCalled = false;
+
+        try {
+          const next = async (): Promise<Response> => {
+            nextCalled = true;
+            chainResponse = await nextChain(context);
+            return chainResponse;
+          };
+          const middlewareResult = await middleware.execute(context, next);
+          if (middlewareResult instanceof Response) {
+            return middlewareResult;
+          }
+          if (nextCalled && chainResponse) {
+            return chainResponse;
+          }
+          return new Response("Middleware failed to provide a response or call next()", { 
+            status: 500 
           });
 
-          return result instanceof Response ? result : finalResponse ||
-            new Response("no response generated", { status: 500 });
         } catch (error) {
           throw error;
         }

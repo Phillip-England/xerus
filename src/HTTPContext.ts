@@ -16,8 +16,9 @@ export class HTTPContext {
   segments: string[];
   params: Record<string, string>;
   private _body?: string | Record<string, any> | FormData;
-  data: Record<string, any>; 
+  data: Record<string, any>;
   private err: Error | undefined | string;
+  private _isDone: boolean = false;
 
   constructor(req: Request, params: Record<string, string> = {}) {
     this.req = req;
@@ -31,6 +32,14 @@ export class HTTPContext {
     this.data = {};
   }
 
+  /**
+   * Returns true if a terminal response has already been generated
+   * for this request context.
+   */
+  get isDone(): boolean {
+    return this._isDone;
+  }
+
   setErr(err: Error | undefined | string) {
     this.err = err;
   }
@@ -40,6 +49,7 @@ export class HTTPContext {
   }
 
   redirect(location: string, status: number = 302): Response {
+    this._isDone = true;
     this.res.setStatus(status);
     this.res.setHeader("Location", location);
     return this.res.send();
@@ -107,6 +117,7 @@ export class HTTPContext {
   }
 
   private send(content: string): Response {
+    this._isDone = true;
     return this.res.body(content).send();
   }
 
@@ -131,6 +142,7 @@ export class HTTPContext {
   }
 
   async stream(stream: ReadableStream): Promise<Response> {
+    this._isDone = true;
     this.setHeader("Content-Type", "application/octet-stream");
     return new Response(stream, {
       status: this.res.statusCode,
@@ -139,6 +151,7 @@ export class HTTPContext {
   }
 
   async file(path: string, stream = false): Promise<Response> {
+    this._isDone = true;
     let file = Bun.file(path);
     let exists = await file.exists();
     if (!exists) {
