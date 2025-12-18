@@ -32,8 +32,10 @@ export interface CORSOptions {
 export const cors = (options: CORSOptions = {}) => {
   return new Middleware(async (c: HTTPContext, next) => {
     const origin = options.origin || "*";
-    const methods = options.methods?.join(", ") || "GET, POST, PUT, DELETE, PATCH, OPTIONS";
-    const headers = options.headers?.join(", ") || "Content-Type, Authorization";
+    const methods = options.methods?.join(", ") ||
+      "GET, POST, PUT, DELETE, PATCH, OPTIONS";
+    const headers = options.headers?.join(", ") ||
+      "Content-Type, Authorization";
     c.setHeader("Access-Control-Allow-Origin", origin);
     c.setHeader("Access-Control-Allow-Methods", methods);
     c.setHeader("Access-Control-Allow-Headers", headers);

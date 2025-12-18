@@ -23,7 +23,7 @@ export class WSHandler {
 
   public createChain(
     handler: Function,
-    middlewares: Middleware<HTTPContext>[], 
+    middlewares: Middleware<HTTPContext>[],
   ): any {
     let base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       await handler(ws, ...args);
@@ -34,10 +34,10 @@ export class WSHandler {
       const nextChain = base;
 
       base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
-        const context = ws.data; 
+        const context = ws.data;
         await middleware.execute(context, async () => {
           await nextChain(ws, ...args);
-          return new Response(); 
+          return new Response();
         });
       };
     }

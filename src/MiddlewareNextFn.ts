@@ -1,1 +1,1 @@
-export type MiddlewareNextFn = () => Promise<void | Response>;
+export type MiddlewareNextFn = () => Promise<void>;

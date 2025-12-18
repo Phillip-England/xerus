@@ -1,11 +1,11 @@
 import { Xerus } from "./Xerus";
 import { Middleware } from "./Middleware";
 import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
-import type { 
-  WSCloseFunc, 
-  WSDrainFunc, 
-  WSMessageFunc, 
-  WSOpenFunc 
+import type {
+  WSCloseFunc,
+  WSDrainFunc,
+  WSMessageFunc,
+  WSOpenFunc,
 } from "./WSHandlerFuncs";
 
 export class RouteGroup {
@@ -75,7 +75,10 @@ export class RouteGroup {
     path: string,
     handlers: {
       open?: WSOpenFunc | { handler: WSOpenFunc; middlewares: Middleware[] };
-      message?: WSMessageFunc | { handler: WSMessageFunc; middlewares: Middleware[] };
+      message?: WSMessageFunc | {
+        handler: WSMessageFunc;
+        middlewares: Middleware[];
+      };
       close?: WSCloseFunc | { handler: WSCloseFunc; middlewares: Middleware[] };
       drain?: WSDrainFunc | { handler: WSDrainFunc; middlewares: Middleware[] };
     },
@@ -84,7 +87,7 @@ export class RouteGroup {
     this.app.ws(
       this.prefixPath + path,
       handlers,
-      ...this.middlewares.concat(middlewares)
+      ...this.middlewares.concat(middlewares),
     );
     return this;
   }
@@ -93,16 +96,20 @@ export class RouteGroup {
     this.app.open(
       this.prefixPath + path,
       handler,
-      ...this.middlewares.concat(middlewares)
+      ...this.middlewares.concat(middlewares),
     );
     return this;
   }
 
-  wsMessage(path: string, handler: WSMessageFunc, ...middlewares: Middleware[]) {
+  wsMessage(
+    path: string,
+    handler: WSMessageFunc,
+    ...middlewares: Middleware[]
+  ) {
     this.app.message(
       this.prefixPath + path,
       handler,
-      ...this.middlewares.concat(middlewares)
+      ...this.middlewares.concat(middlewares),
     );
     return this;
   }
@@ -111,7 +118,7 @@ export class RouteGroup {
     this.app.close(
       this.prefixPath + path,
       handler,
-      ...this.middlewares.concat(middlewares)
+      ...this.middlewares.concat(middlewares),
     );
     return this;
   }
@@ -120,7 +127,7 @@ export class RouteGroup {
     this.app.drain(
       this.prefixPath + path,
       handler,
-      ...this.middlewares.concat(middlewares)
+      ...this.middlewares.concat(middlewares),
     );
     return this;
   }

@@ -1,9 +1,9 @@
 import { HTTPContext, Xerus } from "..";
 
-let app = new Xerus()
+let app = new Xerus();
 
-app.get('/', async (c: HTTPContext) => {
+app.get("/", async (c: HTTPContext) => {
   return c.file("./path/to/file");
 });
 
-await app.listen()
+await app.listen();

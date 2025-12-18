@@ -1,7 +1,7 @@
 export class MutResponse {
   statusCode: number;
   headers: Headers;
-  bodyContent: string;
+  bodyContent: BodyInit | null;
 
   constructor() {
     this.statusCode = 200;
@@ -23,10 +23,8 @@ export class MutResponse {
     return this.headers.get(name) || "";
   }
 
-  body(content: string | object): this {
-    this.bodyContent = typeof content === "object"
-      ? JSON.stringify(content)
-      : content;
+  body(content: any): this {
+    this.bodyContent = content;
     return this;
   }
 

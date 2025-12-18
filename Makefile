@@ -13,11 +13,8 @@ tw:
 kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
-run-server:
-	bun run --hot ./tests/server.ts
+dev:
+	bun run --hot ./servers/http/server.ts
 
-test-server:
-	bun test ./tests/server.test.ts
-
-bench-server:
-	bun test ./tests/bench.test.ts
+test:
+	bun test ./servers/http
