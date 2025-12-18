@@ -81,6 +81,11 @@ export class HTTPContext {
     return this.params[name] || defaultValue;
   }
 
+  // PATCH: Added query helper
+  query(key: string, defaultValue: string = ""): string {
+    return this.url.searchParams.get(key) || defaultValue;
+  }
+
   setStatus(code: number): this {
     this.res.setStatus(code);
     return this;

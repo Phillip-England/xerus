@@ -15,6 +15,7 @@ import type {
   WSOpenFunc,
 } from "./WSHandlerFuncs";
 import { WSHandler } from "./WSHandler";
+import { resolve, join } from "path"; // Node compat for secure path resolution
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
@@ -287,16 +288,54 @@ export class Xerus {
     return this.ws(path, { drain: h }, ...m);
   }
 
-  static(pathPrefix: string, embeddedFiles: Record<string, { content: string; type: string }>) {
-    const prefix = pathPrefix === "/" ? "" : pathPrefix;
-    this.get(prefix + "/*", async (c: HTTPContext) => {
-      const lookupPath = c.path.substring(prefix.length);
-      const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
-      if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
-      return c.setHeader("Content-Type", file.type).text(file.content);
-    });
+  /**
+   * Serve files from memory (using embedDir macro output)
+   */
+  embed(pathPrefix: string, embeddedFiles: Record<string, { content: string | Buffer | Uint8Array; type: string }>) {
+      const prefix = pathPrefix === "/" ? "" : pathPrefix;
+      this.get(prefix + "/*", async (c: HTTPContext) => {
+        const lookupPath = c.path.substring(prefix.length);
+        const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
+        
+        if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
+        
+        c.setHeader("Content-Type", file.type);
+        c.res.body(file.content);
+        
+        (c as any)._isDone = true; 
+      });
   }
 
+  /**
+   * Serve files from disk (Traditional static hosting)
+   */
+  static(pathPrefix: string, rootDir: string) {
+    const prefix = pathPrefix === "/" ? "" : pathPrefix.replace(/\/+$/, "");
+    
+    // Resolve absolute path of root directory immediately to lock it in
+    const absRoot = resolve(rootDir);
+
+    this.get(prefix + "/*", async (c: HTTPContext) => {
+      // Get the part of the URL after the prefix
+      const urlPath = c.path.substring(prefix.length);
+      
+      // Remove leading slashes to make it relative for joining
+      const relativePath = urlPath.replace(/^\/+/, "");
+
+      // Securely resolve the full path
+      const finalPath = resolve(join(absRoot, relativePath));
+
+      // Security Check: Directory Traversal Prevention
+      // Ensure the resolved final path still starts with the root directory
+      if (!finalPath.startsWith(absRoot)) {
+        throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
+      }
+
+      // c.file() handles the existence check and 404 throwing
+      await c.file(finalPath);
+    });
+  }
+  
   use(...m: Middleware<HTTPContext>[]) { this.globalMiddlewares.push(...m); }
   group(prefix: string, ...m: Middleware<HTTPContext>[]) { return new RouteGroup(this, prefix, ...m); }
   onErr(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
