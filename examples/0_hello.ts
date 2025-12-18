@@ -1,9 +1,11 @@
-import { HTTPContext, Xerus } from "..";
+import { Xerus } from "../src/Xerus";
+import { HTTPContext } from "../src/HTTPContext";
 
-let app = new Xerus();
+const app = new Xerus();
 
-app.get("/", async (c: HTTPContext) => {
-  return c.html(`<h1>O'Doyle Rules!</h1>`);
+app.get("/", (c: HTTPContext) => {
+  return c.html("<h1>Hello from Xerus! 🐿️</h1>");
 });
 
-await app.listen();
+console.log("Listening on http://localhost:8080");
+await app.listen(8080);
