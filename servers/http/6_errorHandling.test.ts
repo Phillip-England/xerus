@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BaseURL } from "./baseURL";
+import { BaseURL } from "./BaseURL";
 
 test("Errors: GET /err/standard should be caught by app.onErr", async () => {
   const res = await fetch(`${BaseURL}/err/standard`);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BaseURL } from "./baseURL";
+import { BaseURL } from "./BaseURL";
 
 test("Group Prefix: GET /api/v1 should return version", async () => {
   const res = await fetch(`${BaseURL}/api/v1`);

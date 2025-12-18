@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BaseURL } from "./baseURL";
+import { BaseURL } from "./BaseURL";
 
 test("Routing: Should prioritize exact match over parameter", async () => {
   const res = await fetch(`${BaseURL}/users/me`);

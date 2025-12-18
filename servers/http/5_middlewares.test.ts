@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BaseURL } from "./baseURL";
+import { BaseURL } from "./BaseURL";
 import { treasureValue } from "../middleware/mwTreasure";
 
 

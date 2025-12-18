@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BaseURL } from "./baseURL";
+import { BaseURL } from "./BaseURL";
 
 test("Cookies: GET /cookies/set should return Set-Cookie header", async () => {
   const res = await fetch(`${BaseURL}/cookies/set`);

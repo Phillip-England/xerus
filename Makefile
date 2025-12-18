@@ -13,8 +13,14 @@ tw:
 kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
-dev:
+run-http:
 	bun run --hot ./servers/http/server.ts
 
-test:
+test-http:
 	bun test ./servers/http
+
+run-ws:
+	bun run --hot ./servers/websocket/server.ts
+
+test-ws:
+	bun test ./servers/websocket
