@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
 
-export function parseBodyMethods(app: Xerus) {
+export function parseBody(app: Xerus) {
   // JSON Parsing
   app.post("/parse/json", async (c: HTTPContext) => {
     const body = await c.parseBody(BodyType.JSON);

@@ -3,7 +3,7 @@ import { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
 import { mwGroupHeader } from "../middleware/mwGroupHeader";
 
-export function groupMethods(app: Xerus) {
+export function routeGrouping(app: Xerus) {
   const api = app.group("/api");
 
   api.get("/v1", async (c: HTTPContext) => {

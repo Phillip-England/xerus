@@ -18,48 +18,67 @@ import { WSHandler } from "./WSHandler";
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
-  private routes: Record<string, HTTPHandler> = {};
+  private routes: Record<string, HTTPHandler> = {}; // Cache for exact HTTP routes
   private globalMiddlewares: Middleware<HTTPContext>[] = [];
   private notFoundHandler?: HTTPHandler;
   private errHandler?: HTTPHandler;
   private resolvedRoutes = new Map<
     string,
-    { handler?: HTTPHandler; params: Record<string, string> }
+    { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> }
   >();
-  public wsRoutes: Record<string, WSHandler> = {};
   private readonly MAX_CACHE_SIZE = 500;
 
-  private getOrCreateWSHandler(path: string): WSHandler {
-    if (!this.wsRoutes[path]) this.wsRoutes[path] = new WSHandler();
-    return this.wsRoutes[path];
+  /**
+   * Internal registration logic for both HTTP and WebSockets
+   */
+  private register(
+    method: string,
+    path: string,
+    handlerObj: HTTPHandler | WSHandler,
+  ) {
+    const parts = path.split("/").filter(Boolean);
+    let node = this.root;
+
+    for (const part of parts) {
+      if (part.startsWith(":")) {
+        node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
+        node.paramKey ||= part.slice(1);
+      } else if (part === "*") {
+        node.wildcard = node.wildcard ?? new TrieNode();
+        node = node.wildcard;
+      } else {
+        node = node.children[part] ?? (node.children[part] = new TrieNode());
+      }
+    }
+
+    if (handlerObj instanceof WSHandler) {
+      node.wsHandler = handlerObj;
+    } else {
+      if (node.handlers[method]) {
+        throw new SystemErr(
+          SystemErrCode.ROUTE_ALREADY_REGISTERED,
+          `Route ${method} ${path} has already been registered`,
+        );
+      }
+      node.handlers[method] = handlerObj;
+      // Add to fast-lookup cache if literal
+      if (!path.includes(":") && !path.includes("*")) {
+        this.routes[`${method} ${path}`] = handlerObj;
+      }
+    }
   }
 
-  /**
-   * Defines a full WebSocket route with individual lifecycle handlers and shared middlewares.
-   */
   ws(
     path: string,
     handlers: {
-      open?: WSOpenFunc | {
-        handler: WSOpenFunc;
-        middlewares: Middleware<HTTPContext>[];
-      };
-      message?: WSMessageFunc | {
-        handler: WSMessageFunc;
-        middlewares: Middleware<HTTPContext>[];
-      };
-      close?: WSCloseFunc | {
-        handler: WSCloseFunc;
-        middlewares: Middleware<HTTPContext>[];
-      };
-      drain?: WSDrainFunc | {
-        handler: WSDrainFunc;
-        middlewares: Middleware<HTTPContext>[];
-      };
+      open?: WSOpenFunc | { handler: WSOpenFunc; middlewares: Middleware<HTTPContext>[] };
+      message?: WSMessageFunc | { handler: WSMessageFunc; middlewares: Middleware<HTTPContext>[] };
+      close?: WSCloseFunc | { handler: WSCloseFunc; middlewares: Middleware<HTTPContext>[] };
+      drain?: WSDrainFunc | { handler: WSDrainFunc; middlewares: Middleware<HTTPContext>[] };
     },
     ...middlewares: Middleware<HTTPContext>[]
   ) {
-    const wsHandler = this.getOrCreateWSHandler(path);
+    const wsHandler = new WSHandler();
     const sharedMiddlewares = this.globalMiddlewares.concat(middlewares);
 
     const setupLifecycle = (key: "open" | "message" | "close" | "drain") => {
@@ -76,7 +95,6 @@ export class Xerus {
         specificMiddlewares = config.middlewares;
       }
 
-      // Chain logic: Global -> Group/Shared -> Lifecycle-Specific
       const fullChain = sharedMiddlewares.concat(specificMiddlewares);
 
       if (key === "open") wsHandler.setOpen(handlerFunc, fullChain);
@@ -90,207 +108,22 @@ export class Xerus {
     setupLifecycle("close");
     setupLifecycle("drain");
 
+    this.register("WS", path, wsHandler);
     return this;
   }
 
-  static(
-    pathPrefix: string,
-    embeddedFiles: Record<string, { content: string; type: string }>,
-  ) {
-    const prefix = pathPrefix === "/" ? "" : pathPrefix;
-    this.get(prefix + "/*", async (c: HTTPContext) => {
-      const lookupPath = c.path.substring(prefix.length);
-      const file = embeddedFiles[lookupPath] ||
-        embeddedFiles[lookupPath + "/index.html"];
-      if (!file) {
-        throw new SystemErr(
-          SystemErrCode.FILE_NOT_FOUND,
-          `Asset ${lookupPath} not found in embedded directory`,
-        );
-      }
-      return c.setHeader("Content-Type", file.type).text(file.content);
-    });
-  }
-
-  open(
-    path: string,
-    handler: WSOpenFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.getOrCreateWSHandler(path).setOpen(
-      handler,
-      this.globalMiddlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  message(
-    path: string,
-    handler: WSMessageFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.getOrCreateWSHandler(path).setMessage(
-      handler,
-      this.globalMiddlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  close(
-    path: string,
-    handler: WSCloseFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.getOrCreateWSHandler(path).setClose(
-      handler,
-      this.globalMiddlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  drain(
-    path: string,
-    handler: WSDrainFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.getOrCreateWSHandler(path).setDrain(
-      handler,
-      this.globalMiddlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  use(...middlewares: Middleware<HTTPContext>[]) {
-    this.globalMiddlewares.push(...middlewares);
-  }
-
-  group(prefixPath: string, ...middlewares: Middleware<HTTPContext>[]) {
-    return new RouteGroup(this, prefixPath, ...middlewares);
-  }
-
-  onErr(
-    handlerFunc: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    let handler = new HTTPHandler(handlerFunc);
-    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
-    this.errHandler = handler;
-  }
-
-  onNotFound(
-    handlerFunc: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    let handler = new HTTPHandler(handlerFunc);
-    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
-    this.notFoundHandler = handler;
-  }
-
-  private register(
+  find(
     method: string,
     path: string,
-    handlerFunc: HTTPHandlerFunc,
-    middlewares: Middleware<HTTPContext>[],
-  ) {
-    let handler = new HTTPHandler(handlerFunc);
-    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
-
-    if (!path.includes(":") && !path.includes("*")) {
-      if (this.routes[`${method} ${path}`]) {
-        throw new SystemErr(
-          SystemErrCode.ROUTE_ALREADY_REGISTERED,
-          `Route ${method} ${path} has already been registered`,
-        );
-      }
-      this.routes[`${method} ${path}`] = handler;
-      return;
-    }
-
-    const parts = path.split("/").filter(Boolean);
-    let node = this.root;
-
-    for (const part of parts) {
-      let isParam = part.startsWith(":");
-      let isWildcard = part === "*";
-
-      if (isParam) {
-        node = node.children[":param"] ??
-          (node.children[":param"] = new TrieNode());
-        node.paramKey ||= part.slice(1);
-      } else if (isWildcard) {
-        node.wildcard = node.wildcard ?? new TrieNode();
-        node = node.wildcard;
-      } else {
-        node = node.children[part] ?? (node.children[part] = new TrieNode());
-      }
-    }
-
-    if (node.handlers[method]) {
-      throw new SystemErr(
-        SystemErrCode.ROUTE_ALREADY_REGISTERED,
-        `Route ${method} ${path} has already been registered`,
-      );
-    }
-    node.handlers[method] = handler;
-  }
-
-  get(
-    path: string,
-    handler: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.register("GET", path, handler, middlewares);
-    return this;
-  }
-
-  post(
-    path: string,
-    handler: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.register("POST", path, handler, middlewares);
-    return this;
-  }
-
-  put(
-    path: string,
-    handler: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.register("PUT", path, handler, middlewares);
-    return this;
-  }
-
-  delete(
-    path: string,
-    handler: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.register("DELETE", path, handler, middlewares);
-    return this;
-  }
-
-  patch(
-    path: string,
-    handler: HTTPHandlerFunc,
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    this.register("PATCH", path, handler, middlewares);
-    return this;
-  }
-
-find(
-    method: string,
-    path: string,
-  ): { handler?: HTTPHandler; params: Record<string, string> } {
-    // 1. NORMALIZE the path immediately for cache consistency
+  ): { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> } {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
+    // Fast check literal cache for HTTP
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], params: {} };
     }
-    
+
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) return cached;
 
@@ -310,122 +143,170 @@ find(
         if (node.paramKey) params[node.paramKey] = part;
       } else if (wildcardMatch) {
         node = wildcardMatch;
-        break; 
+        break;
       } else {
         return { handler: undefined, params: {} };
       }
     }
 
-    // 2. WILDCARD FALLBACK: If the current node has no handler, 
-    // but has a wildcard child, use the wildcard handler.
-    // This allows "/static-site/" to match "/static-site/*"
-    let matchedHandler: HTTPHandler | undefined = node.handlers[method];
-    
+    let matchedHandler = node.handlers[method];
     if (!matchedHandler && node.wildcard) {
       matchedHandler = node.wildcard.handlers[method];
     }
 
-    if (!matchedHandler) return { handler: undefined, params: {} };
+    const result = { 
+        handler: matchedHandler, 
+        wsHandler: node.wsHandler, 
+        params 
+    };
 
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
 
-    const result = { handler: matchedHandler, params };
     this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
 
- async handleHTTP(req: Request, server: Server<any>): Promise<Response | void> {
+  async handleHTTP(req: Request, server: Server<HTTPContext>): Promise<Response | void> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
 
-    if (method === "GET" && this.wsRoutes[path] && req.headers.get("Upgrade") === "websocket") {
-      return await this.handleWS(req, server, path);
+    // 1. Unified Lookup
+    const { handler, wsHandler, params } = this.find(method, path);
+
+    // 2. Handle Upgrade (Supports dynamic WS routes)
+    if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
+      const context = new HTTPContext(req, params);
+      // We store the resolved wsHandler on the context for Bun's lifecycle hooks
+      (context as any)._wsHandler = wsHandler; 
+      if (server.upgrade(req, { data: context })) return;
     }
 
     let context: HTTPContext | undefined;
     try {
-      const { handler, params } = this.find(method, path);
       context = new HTTPContext(req, params);
-
-      if (handler) {
-        return await handler.execute(context);
-      }
-
-      if (this.notFoundHandler) {
-        return await this.notFoundHandler.execute(context);
-      }
+      if (handler) return await handler.execute(context);
+      if (this.notFoundHandler) return await this.notFoundHandler.execute(context);
 
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
-
     } catch (e: any) {
       const c = context || new HTTPContext(req);
       c.setErr(e);
-
       if (e instanceof SystemErr) {
         const errHandler = SystemErrRecord[e.typeOf];
         await errHandler(c);
         return c.res.send();
       }
-
-      if (this.errHandler) {
-        return await this.errHandler.execute(c);
-      }
-
+      if (this.errHandler) return await this.errHandler.execute(c);
       const defaultInternalHandler = SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR];
       await defaultInternalHandler(c);
       return c.res.send();
     }
   }
 
-  async handleWS(
-    req: Request,
-    server: Server<HTTPContext>,
-    path: string,
-  ): Promise<Response | void> {
-    try {
-      let context = new HTTPContext(req);
-      if (server.upgrade(req, { data: context })) {
-        return;
-      }
-    } catch (e: any) {
-      throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message);
-    }
-  }
-
   async listen(port: number = 8080) {
-    let app = this;
-    const server = Bun.serve({
+    const app = this;
+    const server: Server<HTTPContext> = Bun.serve({
       port: port,
-      fetch: async (req: Request, server: Server<any>) => {
-        return await app.handleHTTP(req, server);
-      },
+      fetch: (req, server) => app.handleHTTP(req, server),
       websocket: {
-        async open(ws: ServerWebSocket<HTTPContext>) {
-          const handler = app.wsRoutes[ws.data.path];
-          if (handler && handler.compiledOpen) await handler.compiledOpen(ws);
+        async open(ws: ServerWebSocket<any>) {
+          const handler = ws.data._wsHandler as WSHandler;
+          if (handler?.compiledOpen) await handler.compiledOpen(ws);
         },
-        async message(ws: ServerWebSocket<HTTPContext>, message) {
-          const handler = app.wsRoutes[ws.data.path];
-          if (handler && handler.compiledMessage) {
-            await handler.compiledMessage(ws, message);
-          }
+        async message(ws: ServerWebSocket<any>, message) {
+          const handler = ws.data._wsHandler as WSHandler;
+          if (handler?.compiledMessage) await handler.compiledMessage(ws, message);
         },
-        async close(ws: ServerWebSocket<HTTPContext>, code, message) {
-          const handler = app.wsRoutes[ws.data.path];
-          if (handler && handler.compiledClose) {
-            await handler.compiledClose(ws, code, message);
-          }
+        async close(ws: ServerWebSocket<any>, code, message) {
+          const handler = ws.data._wsHandler as WSHandler;
+          if (handler?.compiledClose) await handler.compiledClose(ws, code, message);
         },
-        async drain(ws: ServerWebSocket<HTTPContext>) {
-          const handler = app.wsRoutes[ws.data.path];
-          if (handler && handler.compiledDrain) await handler.compiledDrain(ws);
+        async drain(ws: ServerWebSocket<any>) {
+          const handler = ws.data._wsHandler as WSHandler;
+          if (handler?.compiledDrain) await handler.compiledDrain(ws);
         },
       },
     });
     console.log(`🚀 Server running on ${server.port}`);
+  }
+
+  // --- Registration Helpers ---
+
+  get(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.register("GET", path, handler);
+    return this;
+  }
+
+  post(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.register("POST", path, handler);
+    return this;
+  }
+
+  put(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.register("PUT", path, handler);
+    return this;
+  }
+
+  delete(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.register("DELETE", path, handler);
+    return this;
+  }
+
+  patch(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.register("PATCH", path, handler);
+    return this;
+  }
+
+  open(path: string, h: WSOpenFunc, ...m: Middleware<HTTPContext>[]) {
+    return this.ws(path, { open: h }, ...m);
+  }
+
+  message(path: string, h: WSMessageFunc, ...m: Middleware<HTTPContext>[]) {
+    return this.ws(path, { message: h }, ...m);
+  }
+
+  close(path: string, h: WSCloseFunc, ...m: Middleware<HTTPContext>[]) {
+    return this.ws(path, { close: h }, ...m);
+  }
+
+  drain(path: string, h: WSDrainFunc, ...m: Middleware<HTTPContext>[]) {
+    return this.ws(path, { drain: h }, ...m);
+  }
+
+  static(pathPrefix: string, embeddedFiles: Record<string, { content: string; type: string }>) {
+    const prefix = pathPrefix === "/" ? "" : pathPrefix;
+    this.get(prefix + "/*", async (c: HTTPContext) => {
+      const lookupPath = c.path.substring(prefix.length);
+      const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
+      if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
+      return c.setHeader("Content-Type", file.type).text(file.content);
+    });
+  }
+
+  use(...m: Middleware<HTTPContext>[]) { this.globalMiddlewares.push(...m); }
+  group(prefix: string, ...m: Middleware<HTTPContext>[]) { return new RouteGroup(this, prefix, ...m); }
+  onErr(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.errHandler = handler;
+  }
+  onNotFound(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    const handler = new HTTPHandler(h);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.notFoundHandler = handler;
   }
 }

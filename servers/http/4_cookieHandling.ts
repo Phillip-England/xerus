@@ -1,7 +1,7 @@
 import { Xerus } from "../../src/Xerus";
 import { HTTPContext } from "../../src/HTTPContext";
 
-export function cookieMethods(app: Xerus) {
+export function cookieHandling(app: Xerus) {
   app.get("/cookies/set", async (c: HTTPContext) => {
     c.setCookie("theme", "dark", { path: "/", httpOnly: true });
     c.json({ message: "Cookie set" });

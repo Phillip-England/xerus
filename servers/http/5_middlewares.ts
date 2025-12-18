@@ -4,7 +4,7 @@ import { mwOrderLogger } from "../middleware/mwOrderLogger";
 import { mwShortCircuit } from "../middleware/mwShortCircuit";
 import { mwTreasure, treasureKey } from "../middleware/mwTreasure";
 
-export function middlewareMethods(app: Xerus) {
+export function middlewares(app: Xerus) {
   // Test Order of Execution
   app.get(
     "/mw/order",

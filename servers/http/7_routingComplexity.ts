@@ -1,7 +1,7 @@
 import { Xerus } from "../../src/Xerus";
 import { HTTPContext } from "../../src/HTTPContext";
 
-export function routingMethods(app: Xerus) {
+export function routingComplexity(app: Xerus) {
   app.get("/users/me", async (c: HTTPContext) => {
     c.json({ type: "exact", identity: "myself" });
   });

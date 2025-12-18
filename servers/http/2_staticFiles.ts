@@ -16,7 +16,7 @@ const mockEmbeddedFiles = {
   },
 };
 
-export function staticFileMethods(app: Xerus) {
+export function staticFiles(app: Xerus) {
   // CHANGED: Moved from "/" to "/static-site" to avoid collision with basicMethods
   app.static("/static-site", mockEmbeddedFiles);
 

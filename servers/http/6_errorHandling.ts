@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { HTTPContext } from "../../src/HTTPContext";
 import { mwErrorTrigger } from "../middleware/mwErrorTrigger";
 
-export function errorHandlingMethods(app: Xerus) {
+export function errorHandling(app: Xerus) {
   app.onErr(async (c: HTTPContext) => {
     const err = c.getErr();
     const message = err instanceof Error ? err.message : "Unknown Error";

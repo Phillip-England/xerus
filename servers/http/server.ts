@@ -1,23 +1,22 @@
 import { Xerus } from "../../src/Xerus";
 import { basicMethods } from "./0_basicMethods";
-import { groupMethods } from "./1_routeGrouping";
-import { staticFileMethods } from "./2_staticFiles";
-import { parseBodyMethods } from "./3_parseBody";
-import { cookieMethods } from "./4_cookieHandling";
-import { middlewareMethods } from "./5_middlewares";
-import { errorHandlingMethods } from "./6_errorHandling";
-import { routingMethods } from "./7_routingComplexity"; // Final Addition
-
+import { routeGrouping } from "./1_routeGrouping";
+import { staticFiles } from "./2_staticFiles";
+import { parseBody } from "./3_parseBody";
+import { cookieHandling } from "./4_cookieHandling";
+import { middlewares } from "./5_middlewares";
+import { errorHandling } from "./6_errorHandling";
+import { routingComplexity } from "./7_routingComplexity"; // Final Addition
 
 const app = new Xerus();
 
 basicMethods(app);
-groupMethods(app);
-staticFileMethods(app);
-parseBodyMethods(app);
-cookieMethods(app);
-middlewareMethods(app);
-errorHandlingMethods(app);
-routingMethods(app);
+routeGrouping(app);
+staticFiles(app);
+parseBody(app);
+cookieHandling(app);
+middlewares(app);
+errorHandling(app);
+routingComplexity(app);
 
 app.listen(8080);
