@@ -2,12 +2,7 @@ import { expect, test } from "bun:test";
 
 const BASE_URL = "http://localhost:8080";
 
-test("GET / should return Hello, world!", async () => {
-  const res = await fetch(`${BASE_URL}/`);
-  const data = await res.json();
-  expect(res.status).toBe(200);
-  expect(data.message).toBe("Hello, world!");
-});
+
 
 test("GET /context/html should return HTML response", async () => {
   const res = await fetch(`${BASE_URL}/context/html`);

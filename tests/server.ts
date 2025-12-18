@@ -2,17 +2,9 @@ import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from ".."
 import { embedDir } from "../src/macros" with { type: "macro" };
 import wsScript from "../static/ws.html" with { type: "text" };
 
-// define router
 const app = new Xerus();
 
 // setInterval(() => {
-//   const usage = process.memoryUsage();
-//   console.log(`Memory Usage: RSS: ${(usage.rss / 1024 / 1024).toFixed(2)} MB, Heap Used: ${(usage.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-// }, 100);
-
-app.DEBUG_MODE = true;
-
-// app.use(logger);
 
 let apiMiddleware = new Middleware(
   async (c: HTTPContext, next): Promise<void | Response> => {
@@ -66,12 +58,6 @@ let mwEarlyResponse = new Middleware(async (c, next) => {
   return response;
 });
 
-app.get(
-  "/",
-  async (c: HTTPContext): Promise<Response> => {
-    return c.json({ message: "Hello, world!" });
-  },
-);
 
 app.get(
   "/context/html",

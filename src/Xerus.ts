@@ -17,7 +17,6 @@ import type {
 import { WSHandler } from "./WSHandler";
 
 export class Xerus {
-  DEBUG_MODE = false;
   private root: TrieNode = new TrieNode();
   private routes: Record<string, HTTPHandler> = {};
   private globalMiddlewares: Middleware<HTTPContext>[] = [];
