@@ -2,8 +2,6 @@ import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
-import type { JSX } from "react";
-import { renderToString } from "react-dom/server";
 import type { CookieOptions } from "./CookieOptions";
 
 export class HTTPContext {
@@ -103,12 +101,6 @@ export class HTTPContext {
   html(content: string): void {
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
-    this._isDone = true;
-  }
-
-  jsx(jsx: JSX.Element): void {
-    this.setHeader("Content-Type", "text/html");
-    this.res.body(renderToString(jsx));
     this._isDone = true;
   }
 
