@@ -30,6 +30,12 @@ export class HTTPContext {
     this.data = {};
   }
 
+  // --- NEW: Helper to get validated class instances ---
+  getValid<T>(): T {
+    return this.data["validated_data"] as T;
+  }
+  // ----------------------------------------------------
+
   get isDone(): boolean {
     return this._isDone;
   }
@@ -79,7 +85,6 @@ export class HTTPContext {
     return this.params[name] || defaultValue;
   }
 
-  // PATCH: Added query helper
   query(key: string, defaultValue: string = ""): string {
     return this.url.searchParams.get(key) || defaultValue;
   }
