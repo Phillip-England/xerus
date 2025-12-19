@@ -1,23 +1,30 @@
 import { z } from "zod";
 import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
+import type { Constructable } from "./HTTPContext";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { TypeValidator } from "./TypeValidator";
 
-// Helper type to define a Class Constructor
-type Constructable<T> = new (data: any) => T;
-
-export const Validator = <T extends TypeValidator>(TargetClass: Constructable<T>) => {
+/**
+ * Validator Middleware
+ * @param TargetClass The class definition to instantiate and validate.
+ * @note This no longer requires a storage string key. The Class itself is the key.
+ */
+export const Validator = <T extends TypeValidator>(
+  TargetClass: Constructable<T>
+) => {
   return new Middleware(async (c: HTTPContext, next) => {
     let rawBody: any;
 
     // 1. Parse Raw JSON
+    // Note: If you are validating Query params instead of Body, 
+    // you might want to adjust how rawBody is sourced here based on another flag or check.
     try {
       rawBody = await c.parseBody(BodyType.JSON);
     } catch (e: any) {
-      throw e; // Let Xerus handle parsing errors (invalid JSON syntax)
+      throw e; 
     }
 
     // 2. Instantiate the Class
@@ -45,8 +52,8 @@ export const Validator = <T extends TypeValidator>(TargetClass: Constructable<T>
       );
     }
 
-    // 4. Store the validated class instance
-    c.setStore("validated_data", instance);
+    // 4. Store the validated class instance using the Class as the key
+    c.setValid(TargetClass, instance);
 
     await next();
   });

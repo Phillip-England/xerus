@@ -22,7 +22,7 @@ class UserSignupRequest implements TypeValidator {
     // Define Zod schema
     const schema = z.object({
       username: z.string().min(3, "Username must be at least 3 chars"),
-      email: z.string().email("Invalid email format"),
+      email: z.email("Invalid email format"),
       age: z.number().min(18, "Must be 18 or older"),
     });
 
@@ -37,8 +37,9 @@ export function validation(app: Xerus) {
   app.post(
     "/validation/signup", 
     async (c: HTTPContext) => {
-      // Retrieve the strongly typed, validated instance
-      const validRequest = c.getValid<UserSignupRequest>();
+      // Retrieve the strongly typed, validated instance.
+      // Notice: No string key! We request by Class, we get the Class instance back.
+      const validRequest = c.getValid(UserSignupRequest);
 
       c.json({
         status: "success",

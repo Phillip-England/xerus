@@ -121,7 +121,11 @@ export class Xerus {
     }
 
     const cached = this.resolvedRoutes.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      this.resolvedRoutes.delete(cacheKey);
+      this.resolvedRoutes.set(cacheKey, cached);
+      return cached;
+    }
 
     const parts = normalizedPath.split("/").filter(Boolean);
     let node: TrieNode = this.root;

@@ -1,3 +1,3 @@
 import { HTTPContext } from "./HTTPContext";
 
-export type HTTPHandlerFunc = (c: HTTPContext) => void | Promise<void> | Response | Promise<Response>;
+export type HTTPHandlerFunc = (c: HTTPContext) => Promise<void>;

@@ -11,6 +11,22 @@ app.post("/api/json", async (c: HTTPContext) => {
   return c.json({ received: data });
 });
 
+// NEW: Demonstrating caching fix
+// We can now log the raw body as text, and THEN parse it as JSON
+app.post("/api/log-then-parse", async (c: HTTPContext) => {
+  // 1. Read as text (for logging/hashing)
+  const rawString = await c.parseBody(BodyType.TEXT);
+  console.log("Raw Body:", rawString);
+
+  // 2. Read as JSON (reuses the cache and parses it)
+  const jsonData = await c.parseBody(BodyType.JSON);
+  
+  return c.json({ 
+    was_logged: true,
+    data: jsonData 
+  });
+});
+
 // Parse Form Data (x-www-form-urlencoded)
 app.post("/api/form", async (c: HTTPContext) => {
   const data = await c.parseBody(BodyType.FORM);

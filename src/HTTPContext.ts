@@ -5,26 +5,44 @@ import { SystemErrCode } from "./SystemErrCode";
 import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
 
+// Helper type for Class Constructors
+export type Constructable<T> = new (...args: any[]) => T;
+
 export class HTTPContext {
   req: Request;
   res: MutResponse;
-  url: URL;
+  private _url: URL | null = null;
   path: string;
   method: string;
   route: string;
   segments: string[];
   params: Record<string, string>;
   private _body?: string | Record<string, any> | FormData;
+  
+  // Generic data store (for strings/legacy middleware)
   data: Record<string, any>;
+  
+  // New Type-Safe Validator Store
+  // Keys are Class Constructors, Values are Instances
+  private _validatorStore = new Map<Function, any>();
+
   private err: Error | undefined | string;
-   
+    
   private _state: ContextState = ContextState.OPEN;
 
   constructor(req: Request, params: Record<string, string> = {}) {
     this.req = req;
     this.res = new MutResponse();
-    this.url = new URL(this.req.url);
-    this.path = this.url.pathname.replace(/\/+$/, "") || "/";
+
+    // Optimization: Parse path manually to avoid new URL() overhead on every request
+    const urlIndex = req.url.indexOf("/", 8); // Skip "http://" or "https://"
+    const queryIndex = req.url.indexOf("?", urlIndex);
+    
+    const pathStr = queryIndex === -1 
+        ? req.url.substring(urlIndex) 
+        : req.url.substring(urlIndex, queryIndex);
+        
+    this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
     this.segments = this.path.split("/").filter(Boolean);
@@ -32,14 +50,35 @@ export class HTTPContext {
     this.data = {};
   }
 
+  // Lazy Getter for URL
+  get url(): URL {
+    if (!this._url) {
+      this._url = new URL(this.req.url);
+    }
+    return this._url;
+  }
+
   // --- Helper to get validated class instances ---
-  getValid<T>(): T {
-    const validData = this.data["validated_data"];
+  
+  /**
+   * Internal method used by Validator Middleware to store instances safely.
+   */
+  setValid<T>(type: Constructable<T>, instance: T): void {
+    this._validatorStore.set(type, instance);
+  }
+
+  /**
+   * Type-safe retrieval of validated data.
+   * Usage: const body = c.getValid(UserSignupRequest);
+   * Returns: UserSignupRequest (Automatically inferred)
+   */
+  getValid<T>(type: Constructable<T>): T {
+    const validData = this._validatorStore.get(type);
 
     if (!validData) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR, 
-        "getValid<T>() called but no validation data found. Did you forget to add the Validator middleware?"
+        `getValid(${type.name}) called but no validation data found for that Class. Did you forget to add the Validator middleware?`
       );
     }
 
@@ -48,12 +87,9 @@ export class HTTPContext {
   // ----------------------------------------------------
 
   get isDone(): boolean {
-    // Stops the downstream chain if body is set or streaming
     return this._state !== ContextState.OPEN;
   }
 
-  // Guard clause: Only throws if we are STREAMING or SENT.
-  // WRITTEN state now allows header modifications.
   private ensureConfigurable() {
     if (this._state === ContextState.STREAMING || this._state === ContextState.SENT) {
       throw new SystemErr(
@@ -89,24 +125,48 @@ export class HTTPContext {
   }
 
   async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    if (this._body !== undefined) return this._body;
+    // 1. Cache Hit Logic
+    if (this._body !== undefined) {
+      // FIX: If we cached as TEXT previously, but now request JSON, attempt to parse the string.
+      if (expectedType === BodyType.JSON && typeof this._body === "string") {
+        try {
+          const parsed = JSON.parse(this._body);
+          this._body = parsed; // Upgrade cache to object
+          return parsed;
+        } catch (err: any) {
+          throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+        }
+      }
+      return this._body;
+    }
+
+    // 2. Initial Parse Logic
     const contentType = this.req.headers.get("Content-Type") || "";
     let parsedData: any;
 
-    if (contentType.includes("application/json")) {
+    // Force TEXT read if requested, regardless of Content-Type (allows logging raw JSON before parsing)
+    if (expectedType === BodyType.TEXT) {
+      parsedData = await this.req.text();
+    } 
+    else if (contentType.includes("application/json")) {
       if (expectedType !== BodyType.JSON) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
       try { parsedData = await this.req.json(); } 
       catch (err: any) { throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`); }
-    } else if (contentType.includes("application/x-www-form-urlencoded")) {
+    } 
+    else if (contentType.includes("application/x-www-form-urlencoded")) {
       if (expectedType !== BodyType.FORM) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
       parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
-    } else if (contentType.includes("multipart/form-data")) {
+    } 
+    else if (contentType.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
       parsedData = await this.req.formData();
-    } else {
+    } 
+    else {
+      // Fallback
       if (expectedType !== BodyType.TEXT) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
       parsedData = await this.req.text();
     }
+
     this._body = parsedData;
     return parsedData;
   }
@@ -160,7 +220,6 @@ export class HTTPContext {
     this.ensureConfigurable();
     this.setHeader("Content-Type", "application/octet-stream");
     this.res.body(stream);
-    // Streaming locks the headers immediately
     this._state = ContextState.STREAMING;
   }
 
