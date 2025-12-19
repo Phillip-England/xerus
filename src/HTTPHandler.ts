@@ -19,18 +19,24 @@ export class HTTPHandler {
   }
 
   private precompileChain() {
+    // The innermost link: the actual route handler
     let chain = async (context: HTTPContext): Promise<void> => {
       await this.mainHandler(context);
     };
 
+    // Wrap middlewares in reverse order (Onion architecture)
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const middleware = this.middlewares[i];
       const nextChain = chain;
 
       chain = async (context: HTTPContext): Promise<void> => {
-        if (context.isDone) return;
+        // Refactored: Removed "if (context.isDone) return" check.
+        // We trust the middleware to call next() if it wants to proceed.
+        // This ensures that if next() IS called, we await it properly,
+        // allowing errors to bubble up to the 'try/catch' in upstream middleware.
+        
         await middleware.execute(context, async () => {
-          await nextChain(context);
+           await nextChain(context);
         });
       };
     }
@@ -38,6 +44,7 @@ export class HTTPHandler {
   }
 
   async execute(c: HTTPContext): Promise<Response> {
+    // Errors thrown here will bubble up to Xerus.handleHTTP
     await this.compiledChain(c);
     return c.res.send();
   }

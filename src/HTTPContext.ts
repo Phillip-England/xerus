@@ -17,7 +17,7 @@ export class HTTPContext {
   private _body?: string | Record<string, any> | FormData;
   data: Record<string, any>;
   private err: Error | undefined | string;
-  
+   
   private _state: ContextState = ContextState.OPEN;
 
   constructor(req: Request, params: Record<string, string> = {}) {
@@ -34,7 +34,16 @@ export class HTTPContext {
 
   // --- Helper to get validated class instances ---
   getValid<T>(): T {
-    return this.data["validated_data"] as T;
+    const validData = this.data["validated_data"];
+
+    if (!validData) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR, 
+        "getValid<T>() called but no validation data found. Did you forget to add the Validator middleware?"
+      );
+    }
+
+    return validData as T;
   }
   // ----------------------------------------------------
 

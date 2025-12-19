@@ -1,0 +1,67 @@
+Xerus Framework Patch Checklist
+1. Critical Stability & Logic Patches
+[ ] Middleware Exception Handling (The "Onion" Break)
+
+Location: src/HTTPHandler.ts
+
+Issue: If a route handler throws an error, the execution stack unwinds immediately. Any code placed after await next() in a middleware (like logging response time) will currently be skipped.
+
+Fix: Wrap the next() call in a try/finally block within the compiled chain logic to ensure post-processing always occurs.
+
+[ ] Trie Router Parameter Collision
+
+Location: src/Xerus.ts & src/TrieNode.ts
+
+Issue: The router blindly assigns node.paramKey if a :param node exists. This causes a collision if two routes share a prefix but use different parameter names (e.g., /api/:version/users vs /api/:tenantId/settings). The second route effectively overwrites the parameter name of the first.
+
+Fix: Update logic to ensure paramKey is consistent or throw a SystemErr on startup if ambiguous routes are registered.
+
+[ ] Body Parsing State Conflict
+
+Location: src/HTTPContext.ts -> parseBody
+
+Issue: _body is cached immediately. If a middleware reads the body as TEXT (for logging), and the main handler requests JSON, the handler will receive the cached string string and crash.
+
+Fix: Store the parsed type alongside the body data (_bodyType) and check against expectedType. If they mismatch, attempt to re-parse (e.g., JSON.parse the cached text).
+
+2. Security & Safety Patches
+[ ] Static File Symlink Traversal
+
+Location: src/Xerus.ts -> static
+
+Issue: resolve() follows symlinks. If the root directory contains a symlink pointing outside the root (e.g., to /etc), the startsWith check will pass (because resolve normalizes it), potentially exposing sensitive system files.
+
+Fix: Use fs.realpathSync to resolve the actual physical path of the target file before performing the prefix check.
+
+[ ] Macro Memory Safety
+
+Location: src/macros.ts
+
+Issue: embedDir loads all files into RAM at runtime startup. A large directory will crash the application with Out Of Memory (OOM) errors.
+
+Fix: Add a console warning if the total size exceeds a threshold (e.g., 50MB) to warn the developer.
+
+3. Architecture & Cleanup
+[ ] Validator Flexibility
+
+Location: src/Validator.ts
+
+Issue: The validator is hardcoded to await c.parseBody(BodyType.JSON). It cannot be used to validate Query Params, Route Params, or Forms.
+
+Fix: Modify Validator to accept a source configuration (e.g., source: 'body' | 'query' | 'param').
+
+[ ] Remove Dead Code (WSContext)
+
+Location: src/WSContext.ts
+
+Issue: The file defines a WSContext class, but Xerus.ts actually attaches the HTTPContext to the WebSocket data property. This file is unused and confusing.
+
+Fix: Delete src/WSContext.ts.
+
+[ ] Fix getValid Type Safety
+
+Location: src/HTTPContext.ts
+
+Issue: getValid<T>() blindly casts this.data["validated_data"]. If the user forgot to add the @Validator middleware, this returns undefined as T, causing runtime crashes later.
+
+Fix: Add a check to ensure validated_data exists; throw a SystemErr if it is missing.

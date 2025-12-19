@@ -25,19 +25,21 @@ export class WSHandler {
     handler: Function,
     middlewares: Middleware<HTTPContext>[],
   ): any {
+    // Base handler execution
     let base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       await handler(ws, ...args);
     };
 
+    // Wrap middlewares
     for (let i = middlewares.length - 1; i >= 0; i--) {
       const middleware = middlewares[i];
       const nextChain = base;
 
       base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
         const context = ws.data;
+        // Refactored: Updated to match strict Promise<void> signature of Middleware
         await middleware.execute(context, async () => {
           await nextChain(ws, ...args);
-          return new Response();
         });
       };
     }

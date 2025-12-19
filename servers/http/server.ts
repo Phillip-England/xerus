@@ -7,7 +7,8 @@ import { cookieHandling } from "./4_cookieHandling";
 import { middlewares } from "./5_middlewares";
 import { errorHandling } from "./6_errorHandling";
 import { routingComplexity } from "./7_routingComplexity";
-import { validation } from "./8_validation"; // Import new module
+import { validation } from "./8_validation";
+import { middlewareErrors } from "./9_middlewareErrors"; // Import new module
 
 const app = new Xerus();
 
@@ -20,5 +21,6 @@ middlewares(app);
 errorHandling(app);
 routingComplexity(app);
 validation(app);
+middlewareErrors(app);
 
 app.listen(8080);

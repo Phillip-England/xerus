@@ -15,11 +15,11 @@ import type {
   WSOpenFunc,
 } from "./WSHandlerFuncs";
 import { WSHandler } from "./WSHandler";
-import { resolve, join } from "path"; // Node compat for secure path resolution
+import { resolve, join } from "path"; 
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
-  private routes: Record<string, HTTPHandler> = {}; // Cache for exact HTTP routes
+  private routes: Record<string, HTTPHandler> = {}; 
   private globalMiddlewares: Middleware<HTTPContext>[] = [];
   private notFoundHandler?: HTTPHandler;
   private errHandler?: HTTPHandler;
@@ -29,9 +29,6 @@ export class Xerus {
   >();
   private readonly MAX_CACHE_SIZE = 500;
 
-  /**
-   * Internal registration logic for both HTTP and WebSockets
-   */
   private register(
     method: string,
     path: string,
@@ -62,7 +59,6 @@ export class Xerus {
         );
       }
       node.handlers[method] = handlerObj;
-      // Add to fast-lookup cache if literal
       if (!path.includes(":") && !path.includes("*")) {
         this.routes[`${method} ${path}`] = handlerObj;
       }
@@ -120,7 +116,6 @@ export class Xerus {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
-    // Fast check literal cache for HTTP
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], params: {} };
     }
@@ -175,33 +170,45 @@ export class Xerus {
     const path = url.pathname;
     const method = req.method;
 
-    // 1. Unified Lookup
     const { handler, wsHandler, params } = this.find(method, path);
 
-    // 2. Handle Upgrade (Supports dynamic WS routes)
     if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
       const context = new HTTPContext(req, params);
-      // We store the resolved wsHandler on the context for Bun's lifecycle hooks
       (context as any)._wsHandler = wsHandler; 
       if (server.upgrade(req, { data: context })) return;
     }
 
     let context: HTTPContext | undefined;
+    
     try {
+      // 1. Setup Context
       context = new HTTPContext(req, params);
+      
+      // 2. Execute Handler Chain
+      // If a middleware or the main handler throws, it bubbles to the catch block below.
       if (handler) return await handler.execute(context);
+      
+      // 3. Handle 404 (if no handler found)
       if (this.notFoundHandler) return await this.notFoundHandler.execute(context);
 
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
+      
     } catch (e: any) {
+      // 4. Global Error Catching
       const c = context || new HTTPContext(req);
       c.setErr(e);
+      
+      // Handle known System Errors
       if (e instanceof SystemErr) {
         const errHandler = SystemErrRecord[e.typeOf];
         await errHandler(c);
         return c.res.send();
       }
+      
+      // Handle User-defined Error Handler
       if (this.errHandler) return await this.errHandler.execute(c);
+      
+      // Fallback 500
       const defaultInternalHandler = SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR];
       await defaultInternalHandler(c);
       return c.res.send();
@@ -234,8 +241,6 @@ export class Xerus {
     });
     console.log(`🚀 Server running on ${server.port}`);
   }
-
-  // --- Registration Helpers ---
 
   get(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
     const handler = new HTTPHandler(h);
@@ -288,9 +293,6 @@ export class Xerus {
     return this.ws(path, { drain: h }, ...m);
   }
 
-  /**
-   * Serve files from memory (using embedDir macro output)
-   */
   embed(pathPrefix: string, embeddedFiles: Record<string, { content: string | Buffer | Uint8Array; type: string }>) {
       const prefix = pathPrefix === "/" ? "" : pathPrefix;
       this.get(prefix + "/*", async (c: HTTPContext) => {
@@ -302,36 +304,23 @@ export class Xerus {
         c.setHeader("Content-Type", file.type);
         c.res.body(file.content);
         
-        c.finalize(); // Updated to use the public API
+        c.finalize(); 
       });
   }
 
-  /**
-   * Serve files from disk (Traditional static hosting)
-   */
   static(pathPrefix: string, rootDir: string) {
     const prefix = pathPrefix === "/" ? "" : pathPrefix.replace(/\/+$/, "");
-    
-    // Resolve absolute path of root directory immediately to lock it in
     const absRoot = resolve(rootDir);
 
     this.get(prefix + "/*", async (c: HTTPContext) => {
-      // Get the part of the URL after the prefix
       const urlPath = c.path.substring(prefix.length);
-      
-      // Remove leading slashes to make it relative for joining
       const relativePath = urlPath.replace(/^\/+/, "");
-
-      // Securely resolve the full path
       const finalPath = resolve(join(absRoot, relativePath));
 
-      // Security Check: Directory Traversal Prevention
-      // Ensure the resolved final path still starts with the root directory
       if (!finalPath.startsWith(absRoot)) {
         throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
       }
 
-      // c.file() handles the existence check and 404 throwing
       await c.file(finalPath);
     });
   }
