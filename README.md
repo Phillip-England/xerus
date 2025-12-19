@@ -14,7 +14,7 @@ strict middleware correctness.
 - ♻️ **Object Pooling:** Reuses `HTTPContext` instances to reduce GC
   pressure.
 - 🛡️ **Class-Based Validation:** Zod-backed request validation using
-  constructors.
+  constructors and DI.
 - ⚡ **Trie Router:** Deterministic precedence (Exact \> Param \>
   Wildcard).
 - 📦 **Embedded Assets:** Compile static files into a single binary via
@@ -45,6 +45,7 @@ app.get("/", async (c: HTTPContext) => {
   return c.html("<h1>Hello from Xerus! 🐿️</h1>");
 });
 
+console.log("Listening on http://localhost:8080");
 await app.listen(8080);
 ```
 
@@ -55,10 +56,15 @@ await app.listen(8080);
 Text, JSON, HTML, and redirects. (Source: `examples/1_methods.ts`)
 
 ``` ts
-app.get("/text", (c) => c.text("Just some plain text."));
-app.get("/json", (c) => c.json({ framework: "Xerus" }));
-app.get("/html", (c) => c.html("<h1>HTML</h1>"));
-app.get("/go-home", (c) => c.redirect("/html"));
+app.get("/text", async (c) => c.text("Just some plain text."));
+app.get("/json", async (c) => c.json({ framework: "Xerus", speed: "Fast" }));
+app.get("/html", async (c) => c.html(`
+  <div style="font-family: sans-serif;">
+    <h1>Rich HTML</h1>
+    <button>Click Me</button>
+  </div>
+`));
+app.get("/go-home", async (c) => c.redirect("/html"));
 ```
 
 ------------------------------------------------------------------------
@@ -69,14 +75,23 @@ Named parameters and query helpers. (Source:
 `examples/2_params_and_query.ts`)
 
 ``` ts
-app.get("/user/:id", (c) => {
-  return c.json({ id: c.getParam("id") });
+// Dynamic Parameters
+app.get("/user/:id", async (c) => {
+  const userId = c.getParam("id");
+  return c.json({ userId });
 });
 
-app.get("/search", (c) => {
-  return c.json({
-    q: c.query("q"),
-    limit: c.query("limit", "10"),
+// Multiple Parameters
+app.get("/post/:year/:month", async (c) => {
+  const { year, month } = c.params;
+  return c.json({ year, month });
+});
+
+// Query Strings
+app.get("/search", async (c) => {
+  return c.json({ 
+    search_term: c.query("q"), 
+    results_limit: c.query("limit", "10") 
   });
 });
 ```
@@ -85,12 +100,21 @@ app.get("/search", (c) => {
 
 ## 4. Body Parsing & Caching
 
-Xerus caches request bodies so they can be safely read multiple times.
-(Source: `examples/3_body_parsing.ts`)
+Xerus caches request bodies. You can read the body as text (for logging)
+and then again as JSON without error. (Source:
+`examples/3_body_parsing.ts`)
 
 ``` ts
-const raw = await c.parseBody(BodyType.TEXT);
-const json = await c.parseBody(BodyType.JSON);
+app.post("/api/log-then-parse", async (c) => {
+  // 1. Read as text (reuses cache if read previously)
+  const rawString = await c.parseBody(BodyType.TEXT);
+  console.log("Raw Body:", rawString);
+
+  // 2. Read as JSON (reuses the cache and parses it)
+  const jsonData = await c.parseBody(BodyType.JSON);
+  
+  return c.json({ was_logged: true, data: jsonData });
+});
 ```
 
 ------------------------------------------------------------------------
@@ -101,12 +125,17 @@ Onion-style middleware with explicit execution guarantees. (Source:
 `examples/4_middleware.ts`)
 
 ``` ts
-const auth = new Middleware(async (c, next) => {
-  if (c.getHeader("Authorization") !== "secret") {
+const requireAuth = new Middleware(async (c, next) => {
+  if (c.getHeader("Authorization") !== "secret-token") {
     return c.setStatus(401).json({ error: "Unauthorized" });
   }
+  console.log("Auth passed!");
   await next();
 });
+
+// Use globally or per-route
+app.use(logger);
+app.get("/admin", async (c) => c.text("Welcome, Admin."), requireAuth);
 ```
 
 ### Middleware Safeguards
@@ -115,7 +144,7 @@ Xerus detects floating promises. Calling `next()` without awaiting it
 triggers a runtime error. (Source: `examples/11_middlware_safeguard.ts`)
 
 ``` ts
-// ❌ Incorrect
+// ❌ Incorrect (Triggers 500 Logic Error)
 next();
 
 // ✅ Correct
@@ -130,7 +159,11 @@ Shared prefixes and middleware. (Source: `examples/5_groups.ts`)
 
 ``` ts
 const api = app.group("/api/v1", apiKeyMiddleware);
-api.get("/users", (c) => c.json([]));
+
+// Path: /api/v1/users
+api.get("/users", async (c) => {
+  return c.json([{ id: 1, name: "Alice" }]);
+});
 ```
 
 ------------------------------------------------------------------------
@@ -140,7 +173,12 @@ api.get("/users", (c) => c.json([]));
 Secure cookie helpers. (Source: `examples/6_cookies.ts`)
 
 ``` ts
-c.setCookie("session_id", "xyz", { httpOnly: true });
+c.setCookie("session_id", "xyz-123", {
+  httpOnly: true,
+  maxAge: 3600,
+  sameSite: "Lax"
+});
+
 const session = c.getCookie("session_id");
 c.clearCookie("session_id");
 ```
@@ -153,9 +191,14 @@ Serve from disk or embed at compile time. (Source:
 `examples/7_static_files.ts`)
 
 ``` ts
-app.static("/files", resolve("."));
-const embedded = embedDir(resolve("../src"));
-app.embed("/source", embedded);
+import { embedDir } from "../src/macros" with { type: "macro" };
+
+// 1. Disk Serving
+app.static("/files", resolve(".")); 
+
+// 2. Embedded Serving (Single Binary)
+const srcFiles = embedDir(resolve("../src"));
+app.embed("/source-code", srcFiles);
 ```
 
 ------------------------------------------------------------------------
@@ -167,8 +210,15 @@ Lifecycle hooks with middleware support. (Source:
 
 ``` ts
 app.ws("/chat", {
-  open: async (ws) => ws.send("Welcome"),
-  message: async (ws, msg) => ws.send(msg),
+  open: {
+    handler: async (ws) => {
+      ws.send("Welcome to Xerus Chat!");
+    },
+    middlewares: [logger] // Middleware specifically for the Open event
+  },
+  message: async (ws, message) => {
+    ws.send(`You said: ${message}`);
+  }
 });
 ```
 
@@ -180,20 +230,42 @@ Custom 404 and global error hooks. (Source:
 `examples/9_error_handling.ts`)
 
 ``` ts
-app.onNotFound((c) => c.setStatus(404).json({ error: "Not Found" }));
-app.onErr((c) => c.setStatus(500).json({ error: "Internal Error" }));
+app.onNotFound(async (c) => c.setStatus(404).json({ error: "Resource Not Found" }));
+
+app.onErr(async (c) => {
+  const err = c.getErr();
+  console.error("Critical Failure:", err);
+  return c.setStatus(500).json({ error: "Internal Server Error" });
+});
 ```
 
 ------------------------------------------------------------------------
 
-## 11. Validation (Multiple Classes)
+## 11. Class-Based Validation
 
-Multiple validators may run on the same request. Data is retrieved by
-constructor, not string keys. (Source: `examples/10_validation.ts`)
+Zod-backed validation classes. Data is injected directly into the
+context type-safely. (Source: `examples/10_validation.ts`)
 
 ``` ts
-const user = c.getValid(CreateUserRequest);
-const meta = c.getValid(MetadataRequest);
+class CreateUserRequest {
+  static schema = z.object({
+    username: z.string().min(3),
+    email: z.string().email()
+  });
+  
+  constructor(data: any) {
+    this.username = data.username;
+    this.email = data.email;
+  }
+
+  validate() { CreateUserRequest.schema.parse(this); }
+}
+
+app.post("/users", async (c) => {
+  // Retrieve validated instance
+  const user = c.getValid(CreateUserRequest);
+  return c.json({ name: user.username });
+}, Validator(CreateUserRequest));
 ```
 
 ------------------------------------------------------------------------
@@ -203,6 +275,17 @@ const meta = c.getValid(MetadataRequest);
 Deterministic routing: Exact \> Param \> Wildcard. (Source:
 `examples/12_conflict_routes.ts`)
 
+``` ts
+// 1. Exact
+app.get("/files/static", ...); 
+
+// 2. Param (matches /files/123)
+app.get("/files/:id", ...);
+
+// 3. Wildcard (matches /files/a/b)
+app.get("/files/*", ...);
+```
+
 ------------------------------------------------------------------------
 
 ## 13. CORS
@@ -210,8 +293,14 @@ Deterministic routing: Exact \> Param \> Wildcard. (Source:
 Built-in CORS middleware. (Source: `examples/13_cors.ts`)
 
 ``` ts
+// Global
 app.use(cors());
-app.get("/restricted", handler, cors({ origin: "https://example.com" }));
+
+// Per-Route
+app.get("/restricted", handler, cors({ 
+  origin: "https://example.com",
+  credentials: true 
+}));
 ```
 
 ------------------------------------------------------------------------
@@ -220,52 +309,86 @@ app.get("/restricted", handler, cors({ origin: "https://example.com" }));
 
 Native `ReadableStream` support. (Source: `examples/14_streaming.ts`)
 
+``` ts
+app.get("/stream", async (c) => {
+  const stream = new ReadableStream({ ... });
+  c.stream(stream);
+});
+```
+
 ------------------------------------------------------------------------
 
 ## 15. File Downloads
 
-Send files with proper headers. (Source: `examples/15_file_download.ts`)
+Send files with automatic MIME detection. (Source:
+`examples/15_file_download.ts`)
+
+``` ts
+app.get("/download", async (c) => {
+  await c.file("./README.md");
+});
+```
 
 ------------------------------------------------------------------------
 
 ## 16. Request-Scoped Data
 
-Per-request storage via `HTTPContext`. (Source:
+Demonstrates passing data through the request lifecycle. (Source:
 `examples/16_request_scoped_data.ts`)
 
 ------------------------------------------------------------------------
 
 ## 17. HTTPContext Pooling
 
-Configure pool size for high-load services. (Source:
-`examples/17_http_context_pool.ts`)
+Configure pool size for high-load services to reduce garbage collection.
+(Source: `examples/17_http_context_pool.ts`)
+
+``` ts
+app.setHTTPContextPool(500);
+```
 
 ------------------------------------------------------------------------
 
 ## 18. Async Error Propagation
 
-Errors bubble correctly through middleware. (Source:
+Errors bubble correctly through async middleware chains. (Source:
 `examples/18_async_error_propagation.ts`)
 
 ------------------------------------------------------------------------
 
 ## 19. Multiple Validators
 
-Multiple validation classes from one body. (Source:
+Apply multiple validation classes to a single route. (Source:
 `examples/19_multi_validator.ts`)
+
+``` ts
+app.post("/create", async (c) => {
+    const user = c.getValid(User);
+    const meta = c.getValid(Meta);
+    c.json({ user, meta });
+  },
+  Validator(User),
+  Validator(Meta)
+);
+```
 
 ------------------------------------------------------------------------
 
 ## 20. Grouped WebSockets
 
-WebSockets inside route groups. (Source:
+Defining WebSocket routes inside prefix groups. (Source:
 `examples/20_ws_grouped_chat.ts`)
+
+``` ts
+const ws = app.group("/ws", logger);
+ws.ws("/chat", { ... });
+```
 
 ------------------------------------------------------------------------
 
 ## 21. Route Introspection
 
-Demonstrates exact vs param vs wildcard resolution. (Source:
+Demonstrates how the router resolves conflicting paths. (Source:
 `examples/21_route_introspection.ts`)
 
 ------------------------------------------------------------------------
