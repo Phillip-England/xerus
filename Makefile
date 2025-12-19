@@ -1,15 +1,3 @@
-# vars
-TAILWIND_INPUT = ./static/css/input.css
-TAILWIND_OUTPUT = ./static/css/output.css
-
-# running "make" will run this command
-all: build
-
-# The build target runs the TailwindCSS command
-tw:
-	tailwindcss -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --watch
-
-# kills all activity on port 8080
 kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
@@ -41,3 +29,6 @@ bench-http-json:
 	@echo 'wrk.method = "POST"; wrk.body = "{\"name\": \"Benchmark Item\"}"; wrk.headers["Content-Type"] = "application/json"' > temp_post.lua
 	wrk -t12 -c400 -d30s -s temp_post.lua http://localhost:8080/items
 	@rm temp_post.lua
+
+readme:
+	pandoc README.html -f html -t gfm -o README.md

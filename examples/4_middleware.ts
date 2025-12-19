@@ -22,7 +22,7 @@ const requireAuth = new Middleware(async (c: HTTPContext, next) => {
 app.use(logger);
 
 // 2. Public Route (Only logger runs)
-app.get("/", (c) => c.text("Public Area"));
+app.get("/", async (c) => c.text("Public Area"));
 
 // 3. Protected Route (Logger + requireAuth run)
 app.get("/admin", async (c) => {

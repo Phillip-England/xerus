@@ -3,7 +3,7 @@ import { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
-app.get("/", (c: HTTPContext) => {
+app.get("/", async (c: HTTPContext) => {
   return c.html("<h1>Hello from Xerus! 🐿️</h1>");
 });
 

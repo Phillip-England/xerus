@@ -3,7 +3,7 @@ import { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
-app.get("/login", (c: HTTPContext) => {
+app.get("/login", async (c: HTTPContext) => {
   // Set Cookie
   c.setCookie("session_id", "xyz-123", {
     httpOnly: true,
@@ -13,7 +13,7 @@ app.get("/login", (c: HTTPContext) => {
   return c.text("Cookie Set!");
 });
 
-app.get("/dashboard", (c: HTTPContext) => {
+app.get("/dashboard", async (c: HTTPContext) => {
   // Read Cookie
   const session = c.getCookie("session_id");
   if (!session) return c.setStatus(403).text("No cookie found");
@@ -21,7 +21,7 @@ app.get("/dashboard", (c: HTTPContext) => {
   return c.text(`Logged in with session: ${session}`);
 });
 
-app.get("/logout", (c: HTTPContext) => {
+app.get("/logout", async (c: HTTPContext) => {
   // Clear Cookie
   c.clearCookie("session_id");
   return c.text("Logged out.");

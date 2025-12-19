@@ -1,27 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Xerus Framework Documentation</title>
+  <meta charset="UTF-8">
+  <title>Xerus Framework</title>
 </head>
 <body>
 
 <h1>Xerus 🐿️</h1>
+
 <p>
-    <strong>Xerus</strong> is a high-performance, native web framework for <strong>Bun</strong>. 
-    It features a Trie-based router, object pooling for zero-allocation hotspots, 
-    and a type-safe, class-based validation system.
+  <strong>Xerus</strong> is a high-performance, native web framework for <strong>Bun</strong>.
+  It is designed around deterministic routing, zero-allocation hot paths, and strict
+  middleware correctness.
 </p>
+
+<hr />
 
 <h2>Features</h2>
 <ul>
-    <li>🚀 <strong>Bun Native:</strong> Optimized for Bun's <code>serve</code> and <code>file</code> APIs.</li>
-    <li>🧅 <strong>Onion Middleware:</strong> Koa-style <code>await next()</code> middleware execution with safeguard checks.</li>
-    <li>♻️ <strong>Object Pooling:</strong> Reuses <code>HTTPContext</code> instances to minimize GC overhead.</li>
-    <li>🛡️ <strong>Type-Safe Validation:</strong> Class-based request validation using Zod integration.</li>
-    <li>⚡ <strong>Trie Router:</strong> Fast lookups with strict precedence (Exact &gt; Param &gt; Wildcard).</li>
-    <li>📦 <strong>Asset Embedding:</strong> Macros to compile static files directly into your binary.</li>
-    <li>🔌 <strong>WebSockets:</strong> First-class support with lifecycle hooks and middleware.</li>
+  <li>🚀 <strong>Bun Native:</strong> Built directly on Bun’s <code>serve</code> and <code>file</code> APIs.</li>
+  <li>🧅 <strong>Onion Middleware:</strong> Koa-style <code>await next()</code> with runtime safeguard enforcement.</li>
+  <li>♻️ <strong>Object Pooling:</strong> Reuses <code>HTTPContext</code> instances to reduce GC pressure.</li>
+  <li>🛡️ <strong>Class-Based Validation:</strong> Zod-backed request validation using constructors.</li>
+  <li>⚡ <strong>Trie Router:</strong> Deterministic precedence (Exact &gt; Param &gt; Wildcard).</li>
+  <li>📦 <strong>Embedded Assets:</strong> Compile static files into a single binary via Bun macros.</li>
+  <li>🔌 <strong>WebSockets:</strong> Middleware-aware lifecycle hooks.</li>
 </ul>
 
 <hr />
@@ -31,413 +34,209 @@
 
 <hr />
 
-<h2>1. Quick Start</h2>
-<p>Create a simple HTTP server using <code>Xerus</code>. (Source: <code>examples/0_hello.ts</code>)</p>
+<h2>1. Hello World</h2>
+<p>Minimal Xerus server. (Source: <code>examples/0_hello.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
+<pre><code class="language-ts">import { Xerus } from "../src/Xerus";
+import { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
-app.get("/", (c: HTTPContext) => {
+app.get("/", async (c: HTTPContext) => {
   return c.html("&lt;h1&gt;Hello from Xerus! 🐿️&lt;/h1&gt;");
 });
 
-console.log("Listening on http://localhost:8080");
 await app.listen(8080);</code></pre>
 
 <hr />
 
-<h2>2. Context &amp; Response Methods</h2>
-<p>The <code>HTTPContext</code> provides helper methods for sending text, JSON, HTML, or performing redirects. (Source: <code>examples/1_methods.ts</code>)</p>
+<h2>2. Response Helpers</h2>
+<p>Text, JSON, HTML, and redirects. (Source: <code>examples/1_methods.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
-
-const app = new Xerus();
-
-// Text Response
-app.get("/text", (c: HTTPContext) => {
-  return c.text("Just some plain text.");
-});
-
-// JSON Response
-app.get("/json", (c: HTTPContext) => {
-  return c.json({ framework: "Xerus", speed: "Fast" });
-});
-
-// HTML Response
-app.get("/html", (c: HTTPContext) => {
-  return c.html(`
-    &lt;div style="font-family: sans-serif;"&gt;
-      &lt;h1&gt;Rich HTML&lt;/h1&gt;
-      &lt;button&gt;Click Me&lt;/button&gt;
-    &lt;/div&gt;
-  `);
-});
-
-// Redirect
-app.get("/go-home", (c: HTTPContext) => {
-  return c.redirect("/html");
-});
-
-await app.listen(8080);</code></pre>
+<pre><code class="language-ts">app.get("/text", (c) => c.text("Just some plain text."));
+app.get("/json", (c) => c.json({ framework: "Xerus" }));
+app.get("/html", (c) => c.html("&lt;h1&gt;HTML&lt;/h1&gt;"));
+app.get("/go-home", (c) => c.redirect("/html"));</code></pre>
 
 <hr />
 
-<h2>3. Routing Parameters &amp; Queries</h2>
-<p>Xerus supports named parameters and query string parsing. (Source: <code>examples/2_params_and_query.ts</code>)</p>
+<h2>3. Route Params &amp; Queries</h2>
+<p>Named parameters and query helpers. (Source: <code>examples/2_params_and_query.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
-
-const app = new Xerus();
-
-// Dynamic Parameters: /user/123
-app.get("/user/:id", (c: HTTPContext) => {
-  const userId = c.getParam("id");
-  return c.json({ userId });
+<pre><code class="language-ts">app.get("/user/:id", (c) => {
+  return c.json({ id: c.getParam("id") });
 });
 
-// Multiple Parameters: /post/2023/12
-app.get("/post/:year/:month", (c: HTTPContext) => {
-  const { year, month } = c.params;
-  return c.json({ year, month });
-});
-
-// Query Strings: /search?q=bun&limit=10
-app.get("/search", (c: HTTPContext) => {
-  const query = c.query("q");
-  const limit = c.query("limit", "10"); // Default to 10
-  
-  return c.json({ 
-    search_term: query, 
-    results_limit: limit 
+app.get("/search", (c) => {
+  return c.json({
+    q: c.query("q"),
+    limit: c.query("limit", "10"),
   });
-});
-
-await app.listen(8080);</code></pre>
-
-<hr />
-
-<h2>4. Routing Precedence</h2>
-<p>Xerus uses a deterministic routing priority: <strong>Exact Match</strong> &gt; <strong>Param Match</strong> &gt; <strong>Wildcard</strong>. (Source: <code>examples/12_conflict_routes.ts</code>)</p>
-
-<pre><code class="language-ts">import { Xerus } from "xerus";
-
-const app = new Xerus();
-
-// 1. PARAM MATCH
-app.get("/files/:id", async (c) => {
-  return c.json({ match: "Param ID", id: c.getParam("id") });
-});
-
-// 2. EXACT MATCH
-// Even though :id could match "static", this should take precedence
-app.get("/files/static", async (c) => {
-  return c.json({ match: "Exact Static" });
-});
-
-// 3. WILDCARD MATCH
-// This catches /files/static/old, /files/123/edit, etc.
-app.get("/files/*", async (c) => {
-  return c.json({ match: "Wildcard Catch-All", path: c.path });
-});
-
-await app.listen(8080);</code></pre>
-
-<hr />
-
-<h2>5. Body Parsing</h2>
-<p>Xerus handles JSON, Text, Forms, and Multipart data uniformly using the <code>BodyType</code> enum. It also caches the raw body to allow multiple reads (e.g., logging raw text then parsing JSON). (Source: <code>examples/3_body_parsing.ts</code>)</p>
-
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
-import { BodyType } from "xerus/BodyType";
-
-const app = new Xerus();
-
-// Parse JSON Body
-app.post("/api/json", async (c: HTTPContext) => {
-  const data = await c.parseBody(BodyType.JSON);
-  return c.json({ received: data });
-});
-
-// Demonstrating caching: Log raw text, then parse JSON
-app.post("/api/log-then-parse", async (c: HTTPContext) => {
-  const rawString = await c.parseBody(BodyType.TEXT);
-  console.log("Raw Body:", rawString);
-
-  const jsonData = await c.parseBody(BodyType.JSON);
-  
-  return c.json({ 
-    was_logged: true, 
-    data: jsonData 
-  });
-});
-
-// Parse Form Data
-app.post("/api/form", async (c: HTTPContext) => {
-  const data = await c.parseBody(BodyType.FORM);
-  return c.json({ received: data });
-});
-
-// Parse Multipart (File Uploads)
-app.post("/api/upload", async (c: HTTPContext) => {
-  const data = await c.parseBody(BodyType.MULTIPART_FORM) as FormData;
-  const file = data.get("file"); 
-  
-  return c.json({ 
-    fileName: file instanceof File ? file.name : "unknown",
-    size: file instanceof File ? file.size : 0
-  });
-});
-
-await app.listen(8080);</code></pre>
-
-<hr />
-
-<h2>6. Middleware</h2>
-<p>Xerus uses the "Onion" architecture. You can register global middleware via <code>app.use()</code> or route-specific middleware. (Source: <code>examples/4_middleware.ts</code>)</p>
-
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
-import { Middleware } from "xerus/Middleware";
-import { logger } from "xerus/Middleware"; // Built-in logger
-
-const app = new Xerus();
-
-// Custom Middleware: Auth Check
-const requireAuth = new Middleware(async (c: HTTPContext, next) => {
-  const token = c.getHeader("Authorization");
-  
-  if (token !== "secret-token") {
-    // Short-circuit request
-    return c.setStatus(401).json({ error: "Unauthorized" });
-  }
-  
-  console.log("Auth passed!");
-  await next();
-});
-
-// 1. Global Middleware (Runs on every request)
-app.use(logger);
-
-// 2. Public Route (Only logger runs)
-app.get("/", (c) => c.text("Public Area"));
-
-// 3. Protected Route (Logger + requireAuth run)
-app.get("/admin", async (c) => {
-  return c.text("Welcome, Admin.");
-}, requireAuth);
-
-await app.listen(8080);</code></pre>
-
-<h3>Middleware Safeguards</h3>
-<p>Xerus detects "floating promises". If a middleware calls <code>next()</code> without awaiting it, the request chain breaks. Xerus throws a System Error if this happens. (Source: <code>examples/11_middlware_safeguard.ts</code>)</p>
-
-<pre><code class="language-ts">const mwBroken = new Middleware(async (c: HTTPContext, next) => {
-  // ❌ BAD: This fires off the rest of the chain asynchronously 
-  // and immediately returns from this function.
-  next(); 
-});
-
-const mwCorrect = new Middleware(async (c: HTTPContext, next) => {
-  // ✅ GOOD: We pause here until the downstream handlers finish.
-  await next();
 });</code></pre>
 
 <hr />
 
-<h2>7. Route Grouping</h2>
-<p>Organize routes with common prefixes and middleware using <code>app.group()</code>. (Source: <code>examples/5_groups.ts</code>)</p>
+<h2>4. Body Parsing &amp; Caching</h2>
+<p>
+  Xerus caches request bodies so they can be safely read multiple times.
+  (Source: <code>examples/3_body_parsing.ts</code>)
+</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { Middleware } from "xerus/Middleware";
+<pre><code class="language-ts">const raw = await c.parseBody(BodyType.TEXT);
+const json = await c.parseBody(BodyType.JSON);</code></pre>
 
-const app = new Xerus();
+<hr />
 
-const apiKeyMiddleware = new Middleware(async (c, next) => {
-  c.setHeader("X-API-Version", "v1");
+<h2>5. Middleware</h2>
+<p>
+  Onion-style middleware with explicit execution guarantees.
+  (Source: <code>examples/4_middleware.ts</code>)
+</p>
+
+<pre><code class="language-ts">const auth = new Middleware(async (c, next) => {
+  if (c.getHeader("Authorization") !== "secret") {
+    return c.setStatus(401).json({ error: "Unauthorized" });
+  }
   await next();
-});
+});</code></pre>
 
-// Create a group with a prefix and shared middleware
-const api = app.group("/api/v1", apiKeyMiddleware);
-
-// Final Path: /api/v1/users
-api.get("/users", (c) => c.json([{ id: 1, name: "Alice" }]));
-
-// Final Path: /api/v1/status
-api.get("/status", (c) => c.json({ healthy: true }));
-
-await app.listen(8080);</code></pre>
-
-<hr />
-
-<h2>8. Class-Based Validation</h2>
+<h3>Middleware Safeguards</h3>
 <p>
-    Xerus allows you to define request classes that encapsulate Zod schemas. 
-    You retrieve validated data by passing the <strong>Class Constructor</strong> to <code>c.getValid()</code>. 
-    (Source: <code>examples/10_validation.ts</code>)
+  Xerus detects floating promises. Calling <code>next()</code> without awaiting it
+  triggers a runtime error.
+  (Source: <code>examples/11_middlware_safeguard.ts</code>)
 </p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { HTTPContext } from "xerus/HTTPContext";
-import { Validator } from "xerus/Validator";
-import { z } from "zod";
+<pre><code class="language-ts">// ❌ Incorrect
+next();
 
-// 1. Define a Validation Class using Zod
-class CreateUserRequest {
-  static schema = z.object({
-    username: z.string().min(3),
-    email: z.string().email(),
-    age: z.number().min(18)
-  });
-
-  public username: string;
-  public email: string;
-  public age: number;
-
-  constructor(data: any) {
-    this.username = data.username;
-    this.email = data.email;
-    this.age = data.age;
-  }
-
-  validate() {
-    CreateUserRequest.schema.parse(this);
-  }
-}
-
-const app = new Xerus();
-
-// 2. Register Route with Validation Middleware
-app.post(
-  "/users",
-  async (c: HTTPContext) => {
-    // 3. Retrieve Validated Data by Class
-    const user = c.getValid(CreateUserRequest);
-
-    return c.json({
-      message: "User created",
-      user: { name: user.username, email: user.email }
-    });
-  },    
-  Validator(CreateUserRequest)  
-);
-
-await app.listen(8080);</code></pre>
+// ✅ Correct
+await next();</code></pre>
 
 <hr />
 
-<h2>9. Cookie Management</h2>
-<p>Helper methods for setting, getting, and clearing cookies with secure defaults. (Source: <code>examples/6_cookies.ts</code>)</p>
+<h2>6. Route Groups</h2>
+<p>Shared prefixes and middleware. (Source: <code>examples/5_groups.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-
-const app = new Xerus();
-
-app.get("/login", (c) => {
-  c.setCookie("session_id", "xyz-123", {
-    httpOnly: true,
-    maxAge: 3600, // 1 hour
-    sameSite: "Lax"
-  });
-  return c.text("Cookie Set!");
-});
-
-app.get("/dashboard", (c) => {
-  const session = c.getCookie("session_id");
-  return c.text(`Logged in with session: ${session}`);
-});
-
-await app.listen(8080);</code></pre>
+<pre><code class="language-ts">const api = app.group("/api/v1", apiKeyMiddleware);
+api.get("/users", (c) => c.json([]));</code></pre>
 
 <hr />
 
-<h2>10. Static Files &amp; Embedding</h2>
+<h2>7. Cookies</h2>
+<p>Secure cookie helpers. (Source: <code>examples/6_cookies.ts</code>)</p>
+
+<pre><code class="language-ts">c.setCookie("session_id", "xyz", { httpOnly: true });
+const session = c.getCookie("session_id");
+c.clearCookie("session_id");</code></pre>
+
+<hr />
+
+<h2>8. Static Files &amp; Embedding</h2>
 <p>
-    Serve files from disk (hot reload) or compile them into the binary using Bun macros (single-file deployment).
-    (Source: <code>examples/7_static_files.ts</code>)
+  Serve from disk or embed at compile time.
+  (Source: <code>examples/7_static_files.ts</code>)
 </p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { resolve } from "path";
-import { embedDir } from "xerus/macros" with { type: "macro" };
-
-const app = new Xerus();
-
-// 1. Disk Serving (Hot reloads)
-app.static("/files", resolve(".")); 
-
-// 2. Embedded Serving (Compiled into binary)
-const srcFiles = embedDir(resolve("../src"));
-app.embed("/source-code", srcFiles);
-
-await app.listen(8080);</code></pre>
+<pre><code class="language-ts">app.static("/files", resolve("."));
+const embedded = embedDir(resolve("../src"));
+app.embed("/source", embedded);</code></pre>
 
 <hr />
 
-<h2>11. WebSockets</h2>
-<p>Xerus wraps Bun's WebSocket implementation with middleware support and named lifecycle handlers (open, message, close, drain). (Source: <code>examples/8_websocket.ts</code>)</p>
+<h2>9. WebSockets</h2>
+<p>Lifecycle hooks with middleware support. (Source: <code>examples/8_websocket.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-import { logger } from "xerus/Middleware";
-
-const app = new Xerus();
-
-app.ws("/chat", {
-  open: {
-    handler: async (ws) => {
-      ws.send("Welcome to Xerus Chat!");
-    },
-    middlewares: [logger] // Runs only on Open
-  },
-  message: async (ws, message) => {
-    ws.send(`You said: ${message}`);
-  }
-});
-
-await app.listen(8080);</code></pre>
+<pre><code class="language-ts">app.ws("/chat", {
+  open: async (ws) => ws.send("Welcome"),
+  message: async (ws, msg) => ws.send(msg),
+});</code></pre>
 
 <hr />
 
-<h2>12. Error Handling</h2>
-<p>Define custom logic for 404 (Not Found) and 500 (Internal Error). (Source: <code>examples/9_error_handling.ts</code>)</p>
+<h2>10. Error Handling</h2>
+<p>Custom 404 and global error hooks. (Source: <code>examples/9_error_handling.ts</code>)</p>
 
-<pre><code class="language-ts">import { Xerus } from "xerus";
-
-const app = new Xerus();
-
-// Custom 404 Handler
-app.onNotFound(async (c) => {
-  return c.setStatus(404).json({ error: "Resource Not Found", path: c.path });
-});
-
-// Global Error Handler
-app.onErr(async (c) => {
-  const err = c.getErr();
-  console.error("Critical Failure:", err);
-  return c.setStatus(500).json({ error: "Internal Server Error" });
-});
-
-await app.listen(8080);</code></pre>
+<pre><code class="language-ts">app.onNotFound((c) => c.setStatus(404).json({ error: "Not Found" }));
+app.onErr((c) => c.setStatus(500).json({ error: "Internal Error" }));</code></pre>
 
 <hr />
 
-<h2>Appendix: Source Directory Structure</h2>
-<p>Based on <code>Directory: src</code>, here is an overview of the core components:</p>
+<h2>11. Validation (Multiple Classes)</h2>
+<p>
+  Multiple validators may run on the same request.
+  Data is retrieved by constructor, not string keys.
+  (Source: <code>examples/10_validation.ts</code>)
+</p>
 
-<ul>
-    <li><strong>Xerus.ts:</strong> The main entry point. Manages the <code>TrieNode</code> router, global middlewares, and the server <code>listen</code> loop.</li>
-    <li><strong>HTTPContext.ts:</strong> Wraps Bun's <code>Request</code> and <code>Response</code>. Handles state (OPEN, WRITTEN, STREAMING), body parsing, and stores validation results.</li>
-    <li><strong>HTTPHandler.ts &amp; Middleware.ts:</strong> Implements the Onion architecture. <code>HTTPHandler</code> compiles a chain of middlewares into a single executable function.</li>
-    <li><strong>ObjectPool.ts:</strong> Manages a pool of <code>HTTPContext</code> objects to reduce garbage collection pressure under high load.</li>
-    <li><strong>Validator.ts &amp; TypeValidator.ts:</strong> Provides the <code>Validator</code> middleware which takes a class constructor, parses the body into it, and runs <code>validate()</code>.</li>
-    <li><strong>WSHandler.ts:</strong> Adapts the Xerus middleware chain for WebSocket events (open, message, close, drain).</li>
-    <li><strong>macros.ts:</strong> Contains the <code>embedDir</code> Bun macro for reading files at compile-time.</li>
-</ul>
+<pre><code class="language-ts">const user = c.getValid(CreateUserRequest);
+const meta = c.getValid(MetadataRequest);</code></pre>
+
+<hr />
+
+<h2>12. Routing Precedence</h2>
+<p>
+  Deterministic routing: Exact &gt; Param &gt; Wildcard.
+  (Source: <code>examples/12_conflict_routes.ts</code>)
+</p>
+
+<hr />
+
+<h2>13. CORS</h2>
+<p>Built-in CORS middleware. (Source: <code>examples/13_cors.ts</code>)</p>
+
+<pre><code class="language-ts">app.use(cors());
+app.get("/restricted", handler, cors({ origin: "https://example.com" }));</code></pre>
+
+<hr />
+
+<h2>14. Streaming Responses</h2>
+<p>Native <code>ReadableStream</code> support. (Source: <code>examples/14_streaming.ts</code>)</p>
+
+<hr />
+
+<h2>15. File Downloads</h2>
+<p>Send files with proper headers. (Source: <code>examples/15_file_download.ts</code>)</p>
+
+<hr />
+
+<h2>16. Request-Scoped Data</h2>
+<p>Per-request storage via <code>HTTPContext</code>. (Source: <code>examples/16_request_scoped_data.ts</code>)</p>
+
+<hr />
+
+<h2>17. HTTPContext Pooling</h2>
+<p>Configure pool size for high-load services. (Source: <code>examples/17_http_context_pool.ts</code>)</p>
+
+<hr />
+
+<h2>18. Async Error Propagation</h2>
+<p>Errors bubble correctly through middleware. (Source: <code>examples/18_async_error_propagation.ts</code>)</p>
+
+<hr />
+
+<h2>19. Multiple Validators</h2>
+<p>Multiple validation classes from one body. (Source: <code>examples/19_multi_validator.ts</code>)</p>
+
+<hr />
+
+<h2>20. Grouped WebSockets</h2>
+<p>WebSockets inside route groups. (Source: <code>examples/20_ws_grouped_chat.ts</code>)</p>
+
+<hr />
+
+<h2>21. Route Introspection</h2>
+<p>Demonstrates exact vs param vs wildcard resolution. (Source: <code>examples/21_route_introspection.ts</code>)</p>
+
+<hr />
+
+<h2>Appendix: Example Directory</h2>
+<p>
+  The <code>examples/</code> directory is the canonical documentation source.
+  This README is generated from <code>README.html</code> using:
+</p>
+
+<pre><code class="language-bash">make readme</code></pre>
 
 </body>
 </html>
