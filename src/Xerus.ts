@@ -15,12 +15,12 @@ import type {
   WSOpenFunc,
 } from "./WSHandlerFuncs";
 import { WSHandler } from "./WSHandler";
-import { resolve, join } from "path"; 
+import { resolve, join } from "path";
 import { ObjectPool } from "./ObjectPool";
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
-  private routes: Record<string, HTTPHandler> = {}; 
+  private routes: Record<string, HTTPHandler> = {};
   private globalMiddlewares: Middleware<HTTPContext>[] = [];
   private notFoundHandler?: HTTPHandler;
   private errHandler?: HTTPHandler;
@@ -37,7 +37,7 @@ export class Xerus {
     // Default pool size of 200 as requested
     // Logic: Factory creates a new blank HTTPContext
     this.contextPool = new ObjectPool<HTTPContext>(
-      () => new HTTPContext(), 
+      () => new HTTPContext(),
       200
     );
   }
@@ -130,6 +130,82 @@ export class Xerus {
     return this;
   }
 
+  /**
+   * Recursive Trie Search with Backtracking.
+   * Priority: Exact Match -> Param Match -> Wildcard Match
+   */
+  private search(
+    node: TrieNode,
+    parts: string[],
+    index: number,
+    method: string,
+    params: Record<string, string>
+  ): { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> } | null {
+    
+    // Base Case: We have consumed all path segments
+    if (index === parts.length) {
+      // 1. Check if this node has a direct handler
+      if (node.handlers[method] || node.wsHandler) {
+        return { 
+          handler: node.handlers[method], 
+          wsHandler: node.wsHandler, 
+          params 
+        };
+      }
+      
+      // 2. Check if this node has a Wildcard Child that can consume the "empty" remainder
+      // This allows /static-site to match /static-site/*
+      if (node.wildcard) {
+        const wcNode = node.wildcard;
+        if (wcNode.handlers[method] || wcNode.wsHandler) {
+            return {
+                handler: wcNode.handlers[method],
+                wsHandler: wcNode.wsHandler,
+                params
+            };
+        }
+      }
+
+      // If neither, this path is dead.
+      return null;
+    }
+
+    const part = parts[index];
+
+    // 1. Try Exact Match
+    const exactNode = node.children[part];
+    if (exactNode) {
+      const result = this.search(exactNode, parts, index + 1, method, { ...params });
+      if (result) return result; // Found a match down this path
+    }
+
+    // 2. Try Param Match
+    const paramNode = node.children[":param"];
+    if (paramNode) {
+      const newParams = { ...params };
+      if (paramNode.paramKey) newParams[paramNode.paramKey] = part;
+      
+      const result = this.search(paramNode, parts, index + 1, method, newParams);
+      if (result) return result;
+    }
+
+    // 3. Try Wildcard Match
+    // If a wildcard exists, it consumes the REST of the path.
+    // We check if the wildcard node itself has a handler.
+    if (node.wildcard) {
+      const wcNode = node.wildcard;
+      if (wcNode.handlers[method] || wcNode.wsHandler) {
+        return {
+          handler: wcNode.handlers[method],
+          wsHandler: wcNode.wsHandler,
+          params
+        };
+      }
+    }
+
+    return null;
+  }
+
   find(
     method: string,
     path: string,
@@ -137,50 +213,25 @@ export class Xerus {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
+    // 1. Fast Map Lookup (Registered Exact Routes)
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], params: {} };
     }
 
+    // 2. Cache Lookup (Previously resolved dynamic routes)
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
+      // LRU Refresh
       this.resolvedRoutes.delete(cacheKey);
       this.resolvedRoutes.set(cacheKey, cached);
       return cached;
     }
 
+    // 3. Recursive Search (Exact -> Param -> Wildcard)
     const parts = normalizedPath.split("/").filter(Boolean);
-    let node: TrieNode = this.root;
-    let params: Record<string, string> = {};
+    const result = this.search(this.root, parts, 0, method, {}) ?? { handler: undefined, params: {} };
 
-    for (const part of parts) {
-      let exactMatch: TrieNode | undefined = node.children[part];
-      let paramMatch: TrieNode | undefined = node.children[":param"];
-      let wildcardMatch: TrieNode | undefined = node.wildcard;
-
-      if (exactMatch) {
-        node = exactMatch;
-      } else if (paramMatch) {
-        node = paramMatch;
-        node.paramKey && (params[node.paramKey] = part);
-      } else if (wildcardMatch) {
-        node = wildcardMatch;
-        break;
-      } else {
-        return { handler: undefined, params: {} };
-      }
-    }
-
-    let matchedHandler = node.handlers[method];
-    if (!matchedHandler && node.wildcard) {
-      matchedHandler = node.wildcard.handlers[method];
-    }
-
-    const result = { 
-        handler: matchedHandler, 
-        wsHandler: node.wsHandler, 
-        params 
-    };
-
+    // 4. Update Cache
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
@@ -199,9 +250,6 @@ export class Xerus {
 
     // --- WebSocket Logic ---
     // Note: We DO NOT use the ObjectPool for WebSockets.
-    // WebSockets are long-lived. If we upgrade, the context remains attached to the socket
-    // indefinitely. Returning it to the pool would cause data corruption if the pool
-    // issued that context to a new HTTP request while the socket was still open.
     if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
       const context = new HTTPContext();
       context.reset(req, params); // Initialize manually
@@ -233,7 +281,6 @@ export class Xerus {
       
     } catch (e: any) {
       // 5. Global Error Catching
-      // If context failed to acquire (unlikely), we create a temporary one just for the error
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
       
@@ -256,7 +303,6 @@ export class Xerus {
 
     } finally {
       // 6. Release Context back to Pool
-      // We only release if we successfully acquired it to begin with.
       if (context) {
         this.contextPool.release(context);
       }
