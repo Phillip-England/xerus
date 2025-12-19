@@ -1,451 +1,210 @@
-# Xerus
-
-An Express-like HTTP Library for Bun
-
-## Docs
-
-Read the [docs](https://xerus.dev)
-
-## Installation
-
-```bash
-bun add github:phillip-england/xerus
-cd xerus
-make install # to install xerus binary for quick scaffolding
-cd ..
-xerus init myapp # using xerus for quick scaffolding
-cd myapp
-make dev # start local server
-```
-
-## Quickstart
-
-```ts
-import { HTTPContext, logger, Xerus } from "xerus/xerus";
-
-let app = new Xerus();
-
-app.use(logger);
-app.static("static");
-
-app.get("/", async (c: HTTPContext) => {
-  return c.html(`<h1>O'Doyle Rules!</h1>`);
-});
-
-await app.listen();
-```
-
-## HTTPHandlerFunc
-
-An `HTTPHandlerFunc` takes in an `HTTPContext` and returns `Promise<Response>`:
-
-```ts
-let handler = async (c: HTTPContext) => {
-  return c.html(`<h1>O'Doyle Rules</h1>`);
-};
-
-app.get("/", handler);
-```
-
-## Routing
-
-`Xerus` supports static, dynamic, and wildcard paths:
-
-```ts
-app.get("/", handler);
-app.get("/user/:id", handler);
-app.get("/static/*", handler);
-```
-
-Group routing is also supported:
-
-```ts
-app.group("/api")
-  .post("/user/:id", handler)
-  .post("/user/post/:postNumber", handler);
-```
-
-## File Based Routing
-
-Xerus offers a file-based routing system which can be used as follows:
-
-```ts
-import { FileRouter } from "xerus";
-import path from "path";
-
-let router = await FileRouter.new({
-  "src": path.join(process.cwd(), "app"),
-  "port": 8080,
-});
-```
-
-### App Initalization (file based routing)
-
-Assuming `./app` is your project root, `./app/+init.tsx` is where you can run
-any init logic:
-
-Below, I set up logging and serving static files.
-
-`./app/+init.tsx`:
-
-```ts
-let module = new InitModule();
-
-module.init(async (app: Xerus) => {
-  app.use(logger);
-  app.static("static");
-});
-
-export default module;
-```
-
-### Routes (file based routing)
-
-Assuming `./app` is your project root, `./app/+route.tsx` will provide the logic
-for all routes hitting `/`:
-
-`./app/+route.tsx`:
-
-```ts
-let module = new RouteModule();
-
-module.get(async (c: HTTPContext) => {
-  return c.jsx(
-    <GuestLayout title="Home Page">
-      <h1>Home Page!</h1>
-    </GuestLayout>,
-  );
-});
-
-export default module;
-```
-
-For `/about`, place the following in `./app/about/route.tsx`:
-
-```ts
-let module = new RouteModule();
-
-module.get(async (c: HTTPContext) => {
-  return c.jsx(
-    <GuestLayout title="About Page">
-      <h1>Home Page!</h1>
-    </GuestLayout>,
-  );
-});
-
-export default module;
-```
-
-For dynamic routing, try `./app/user/:id/+route.tsx`:
-
-```ts
-let module = new RouteModule();
-
-module.get(async (c: HTTPContext) => {
-  return c.jsx(
-    <GuestLayout title="User Page">
-      <h1>User {c.getParam("id")}</h1>
-    </GuestLayout>,
-  );
-});
-
-export default module;
-```
-
-### Middlware (file based routing)
-
-Middlware is export out of `+route.tsx` file. All middlware can be of type
-`Cascade` or `Isolate`.
-
-In short, `Cascade` middleware will pour down onto any file beneath itself in
-the filesystem whereas `Isolate` middleware will only affect the route it is
-exported from.
-
-For example, here we apply the same middleware, once as `Isolate`, then again as
-`Cascade`:
-
-```ts
-const testmw = new Middleware(
-  async (c: HTTPContext, next: MiddlewareNextFn) => {
-    console.log("before");
-    await next();
-    console.log("after");
-  },
-);
-
-let module = new RouteModule();
-
-module.get(
-  async (c: HTTPContext) => {
-    return c.jsx(
-      <GuestLayout title="Home Page">
-        <h1>User {c.getParam("id")}</h1>
-      </GuestLayout>,
-    );
-  },
-  isolate(testmw),
-  cascade(testmw),
-);
-
-export default module;
-```
-
-Middleware is excuted from top to bottom in sync with the filesystem.
-
-## Static Files
-
-Use a wildcard to serve static files from `./static`:
-
-```ts
-app.get("/static/*", async (c: HTTPContext) => {
-  return await c.file("." + c.path);
-});
-```
-
-## Middleware
-
-Middleware executes in the following order:
-
-1. Global
-2. Group
-3. Route
-
-Create a new `Middleware`:
-
-```ts
-let mw = new Middleware(
-  async (c: HTTPContext, next: MiddlewareNextFn): Promise<void | Response> => {
-    console.log("logic before handler");
-    next();
-    console.log("logic after handler");
-  },
-);
-```
-
-Link it globally:
-
-```ts
-app.use(mw);
-```
-
-Or to a group:
-
-```ts
-app.group("/api", mw) // <=====
-  .post("/user/:id", handler)
-  .post("/user/post/:postNumber", handler);
-```
-
-Or to a route:
-
-```ts
-app.get("/", handler, mw); // <=====
-```
-
-Chain as many as you'd like to all three types:
-
-```ts
-app.use(mw, mw, mw);
-
-app.group("/api", mw, mw, mw)
-  .post("/user/:id", handler)
-  .post("/user/post/:postNumber", handler);
-
-app.get("/", handler, mw, mw, mw);
-```
-
-## HTTPContext
-
-`HTTPContext` allows us to work with the incoming requests and prepare
-responses. Here are the features it provides.
-
-### Redirect The Request
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  return c.html(`<h1>O'Doyle Rules</h1>`);
-});
-
-app.get("/redirect", async (c: HTTPContext) => {
-  return c.redirect("/");
-});
-```
-
-### Parse The Request Body
-
-Use the `BodyType` enum to enforce a specific type of data in the request body:
-
-```ts
-app.post("/body/text", async (c: HTTPContext) => {
-  let data = await c.parseBody(BodyType.TEXT);
-  return c.json({ data: data });
-});
-
-app.post("/body/json", async (c: HTTPContext) => {
-  let data = await c.parseBody(BodyType.JSON);
-  return c.json({ data: data });
-});
-
-app.post("/body/multipart", async (c: HTTPContext) => {
-  let data = await c.parseBody(BodyType.MULTIPART_FORM);
-  return c.json({ data: data });
-});
-
-app.post("/body/form", async (c: HTTPContext) => {
-  let data = await c.parseBody(BodyType.FORM);
-  return c.json({ data: data });
-});
-```
-
-### Get Dynamic Path Param
-
-```ts
-app.get("/user/:id", async (c: HTTPContext) => {
-  let id = c.getParam("id");
-  return c.html(`<h1>O'Doyle Rules Times ${id}!</h1>`);
-});
-```
-
-### Set Status Code
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  return c.setStatus(404).html(`<h1>O'Doyle Not Found</h1>`);
-});
-```
-
-### Set Response Headers
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  c.setHeader("X-Who-Rules", `O'Doyle Rules`);
-  return c.html(`<h1>O'Doyle Rules!</h1>`);
-});
-```
-
-### Get Request Header
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  let headerVal = c.getHeader("X-Who-Rules");
-  if (headerVal) {
-    return c.html(`<h1>${headerVal}</h1>`);
-  }
-  return c.html(`<h1>Header missing</h1>`);
-});
-```
-
-### Respond with HTML, JSON, or TEXT
-
-```ts
-app.get("/html", async (c: HTTPContext) => {
-  return c.html(`<h1>O'Doyle Rules!</h1>`);
-});
-
-app.get("/json", async (c: HTTPContext) => {
-  return c.json({ message: `O'Doyle Rules!` });
-});
-
-app.get("/text", async (c: HTTPContext) => {
-  return c.text(`O'Doyle Rules!`);
-});
-```
-
-### Stream A Response
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-      let count = 0;
-      const interval = setInterval(() => {
-        controller.enqueue(encoder.encode(`O'Doyle Rules! ${count}\n`));
-        count++;
-        if (count >= 3) {
-          clearInterval(interval);
-          controller.close();
-        }
-      }, 1000);
-    },
-  });
-  c.setHeader("Content-Type", "text/plain");
-  c.setHeader("Content-Disposition", 'attachment; filename="odoyle_rules.txt"');
-  return c.stream(stream);
-});
-```
-
-### Response With A File
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  return c.file("./path/to/file");
-});
-```
-
-### Stream A File
-
-```ts
-app.get("/", async (c: HTTPContext) => {
-  return c.file("./path/to/file", true);
-});
-```
-
-### Set, Get, And Clear Cookies
-
-```ts
-app.get("/set", async (c: HTTPContext) => {
-  c.setCookie("secret", "O'Doyle_Rules!");
-  return c.redirect("/get");
-});
-
-app.get("/get", async (c: HTTPContext) => {
-  let cookie = c.getCookie("secret");
-  if (cookie) {
-    return c.text(`visit /clear to clear the cookie with the value: ${cookie}`);
-  }
-  return c.text("visit /set to set the cookie");
-});
-
-app.get("/clear", async (c: HTTPContext) => {
-  c.clearCookie("secret");
-  return c.redirect("/get");
-});
-```
-
-## Custom 404
-
-```ts
-app.onNotFound(async (c: HTTPContext): Promise<Response> => {
-  return c.setStatus(404).text("404 Not Found");
-});
-```
-
-## Custom Error Handling
-
-```ts
-app.onErr(async (c: HTTPContext): Promise<Response> => {
-  let err = c.getErr();
-  console.error(err);
-  return c.setStatus(500).text("internal server error");
-});
-```
-
-## Web Sockets
-
-Setup a new websocket route, using `onConnect` for pre-connect authorization:
-
-```ts
-app.ws("/chat", {
-  async open(ws) {
-    let c = ws.data; // get the context
-  },
-  async message(ws, message) {
-  },
-  async close(ws, code, message) {
-  },
-  async onConnect(c: WSContext) {
-    c.set("secret", "O'Doyle"); // set pre-connect data
-  },
-});
-```
+Saved at path
+  Relative: README.md
+  Absolute: /Users/phillipengland/src/xerus/README.md
+dency web framework built specifically for the **Bun** runtime. It features an onion-architecture middleware system, trie-based routing, object pooling for reduced GC pressure, and compile-time asset embedding.
+
+* * *
+
+Features
+--------
+
+*   🚀 **Bun Native:** Optimized for Bun's `serve` and `file` APIs.
+*   🧅 **Onion Middleware:** Koa-style `await next()` middleware execution.
+*   ♻️ **Object Pooling:** Reuses `HTTPContext` instances to minimize garbage collection overhead.
+*   🛡️ **Type-Safe Validation:** Class-based request validation using Zod integration.
+*   ⚡ **Trie Router:** fast lookups for static, parameter, and wildcard routes.
+*   📦 **Asset Embedding:** Macros to compile static files directly into your binary.
+*   🔌 **WebSockets:** First-class support with middleware integration for WS events.
+
+* * *
+
+Installation
+------------
+
+    bun add xerus
+
+* * *
+
+Quick Start
+-----------
+
+Create a simple HTTP server in `index.ts`:
+
+    import { Xerus } from "xerus";
+    import { HTTPContext } from "xerus/HTTPContext";
+    
+    const app = new Xerus();
+    
+    app.get("/", (c: HTTPContext) => {
+      return c.json({ message: "Hello from Xerus! 🐿️" });
+    });
+    
+    await app.listen(8080);
+
+* * *
+
+Routing
+-------
+
+Xerus uses a Trie-based router supporting exact paths, parameters, and wildcards.
+
+    // Exact match
+    app.get("/users/me", (c) => c.text("Current User"));
+    
+    // Parameters
+    app.get("/users/:id", (c) => {
+      const id = c.getParam("id");
+      return c.json({ id });
+    });
+    
+    // Wildcards
+    app.get("/files/*", (c) => {
+      return c.text(`Requested path: ${c.path}`);
+    });
+    
+    // Route Groups
+    const api = app.group("/api/v1");
+    api.get("/status", (c) => c.json({ status: "ok" }));
+
+* * *
+
+Context & Response
+------------------
+
+The `HTTPContext` object is pooled. It provides helpers for responses and parsing.
+
+### Sending Responses
+
+    app.get("/demo", (c) => {
+      // Chainable methods
+      c.setStatus(201)
+       .setHeader("X-Powered-By", "Xerus")
+       .json({ success: true });
+       
+      // Or HTML
+      // c.html("<h1>Hello</h1>");
+      
+      // Or Redirect
+      // c.redirect("/login");
+    });
+
+### Body Parsing
+
+Xerus handles JSON, Text, Forms, and Multipart data uniformly.
+
+    import { BodyType } from "xerus/BodyType";
+    
+    app.post("/upload", async (c) => {
+      // Types: JSON, TEXT, FORM, MULTIPART_FORM
+      const body = await c.parseBody(BodyType.JSON);
+      return c.json({ received: body });
+    });
+
+* * *
+
+Middleware
+----------
+
+Xerus uses the "Onion" architecture. You **must** await `next()` to continue the chain.
+
+    import { Middleware } from "xerus/Middleware";
+    
+    const logger = new Middleware(async (c, next) => {
+      const start = performance.now();
+      
+      // 1. Logic before handler
+      console.log(`-> ${c.method} ${c.path}`);
+    
+      // 2. Execute downstream middleware/handler
+      await next(); 
+    
+      // 3. Logic after handler (Response is generated but not sent yet)
+      const duration = performance.now() - start;
+      console.log(`<- Done in ${duration.toFixed(2)}ms`);
+    });
+    
+    app.use(logger);
+
+* * *
+
+Class-Based Validation
+----------------------
+
+Xerus integrates Zod validation directly into the request lifecycle using the `Validator` middleware.
+
+    import { z } from "zod";
+    import { Validator } from "xerus/Validator";
+    
+    // 1. Define the Request Class
+    class CreateUser {
+      username: string;
+      email: string;
+    
+      constructor(data: any) {
+        this.username = data.username;
+        this.email = data.email;
+      }
+    
+      async validate() {
+        const schema = z.object({
+          username: z.string().min(3),
+          email: z.string().email(),
+        });
+        await schema.parseAsync(this);
+      }
+    }
+    
+    // 2. Use it in a route
+    app.post("/signup", async (c) => {
+      // Type-safe retrieval!
+      const body = c.getValid(CreateUser); 
+      return c.json({ welcome: body.username });
+    }, Validator(CreateUser));
+
+* * *
+
+WebSockets
+----------
+
+Xerus provides a clean API for WebSockets, supporting lifecycle hooks and middleware.
+
+    app.ws("/chat", {
+      open: async (ws) => {
+        ws.send("Welcome!");
+      },
+      message: async (ws, msg) => {
+        ws.send(`Echo: ${msg}`);
+      },
+      close: async (ws) => {
+        console.log("Client disconnected");
+      }
+    });
+
+* * *
+
+Static Files & Embedding
+------------------------
+
+You can serve files from disk or embed them into the binary using Bun macros.
+
+    import { resolve } from "path";
+    import { embedDir } from "xerus/macros" with { type: "macro" };
+    
+    // 1. Serve from Disk (Hot reloads)
+    app.static("/public", resolve("./public"));
+    
+    // 2. Embed into Binary (Single file deployment)
+    const assets = embedDir(resolve("./assets"));
+    app.embed("/assets", assets);
+
+* * *
+
+Performance Tuning
+------------------
+
+### Object Pooling
+
+Xerus reuses `HTTPContext` objects to avoid creating thousands of short-lived objects under high load. You can configure the pool size based on your concurrency needs.
+
+    // Resize pool to handle 1000 concurrent requests
+    app.setHTTPContextPool(1000);
