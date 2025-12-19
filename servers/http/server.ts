@@ -8,7 +8,8 @@ import { middlewares } from "./5_middlewares";
 import { errorHandling } from "./6_errorHandling";
 import { routingComplexity } from "./7_routingComplexity";
 import { validation } from "./8_validation";
-import { middlewareErrors } from "./9_middlewareErrors"; // Import new module
+import { middlewareErrors } from "./9_middlewareErrors";
+import { safeguard } from "./10_safeguard"; // Import new module
 
 const app = new Xerus();
 
@@ -22,5 +23,6 @@ errorHandling(app);
 routingComplexity(app);
 validation(app);
 middlewareErrors(app);
+safeguard(app); // Register new module
 
 app.listen(8080);

@@ -7,6 +7,8 @@ import type {
 import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
 import type { ServerWebSocket } from "bun";
+import { SystemErr } from "./SystemErr";
+import { SystemErrCode } from "./SystemErrCode";
 
 export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
@@ -37,10 +39,27 @@ export class WSHandler {
 
       base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
         const context = ws.data;
+        let nextPending = false;
+
+        const safeNext = async () => {
+          nextPending = true;
+          try {
+             await nextChain(ws, ...args);
+          } finally {
+             nextPending = false;
+          }
+        };
+
         // Refactored: Updated to match strict Promise<void> signature of Middleware
-        await middleware.execute(context, async () => {
-          await nextChain(ws, ...args);
-        });
+        await middleware.execute(context, safeNext);
+
+        // SAFEGUARD: Check for floating promises
+        if (nextPending) {
+           throw new SystemErr(
+             SystemErrCode.MIDDLEWARE_ERROR, 
+             "A WebSocket Middleware called next() but did not await it."
+           );
+        }
       };
     }
     return base;

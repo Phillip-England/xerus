@@ -1,6 +1,8 @@
 import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
 import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
+import { SystemErr } from "./SystemErr";
+import { SystemErrCode } from "./SystemErrCode";
 
 export class HTTPHandler {
   private mainHandler: HTTPHandlerFunc;
@@ -30,14 +32,31 @@ export class HTTPHandler {
       const nextChain = chain;
 
       chain = async (context: HTTPContext): Promise<void> => {
-        // Refactored: Removed "if (context.isDone) return" check.
-        // We trust the middleware to call next() if it wants to proceed.
-        // This ensures that if next() IS called, we await it properly,
-        // allowing errors to bubble up to the 'try/catch' in upstream middleware.
+        let nextPending = false;
+
+        // We wrap the next function to track its state
+        const safeNext = async () => {
+          nextPending = true;
+          try {
+            await nextChain(context);
+          } finally {
+            nextPending = false;
+          }
+        };
         
-        await middleware.execute(context, async () => {
-           await nextChain(context);
-        });
+        // Execute the middleware
+        await middleware.execute(context, safeNext);
+
+        // SAFEGUARD: 
+        // If nextPending is still true here, it means the middleware function 
+        // returned (finished) BUT the next() promise is still running.
+        // This implies they called next() but did not await it.
+        if (nextPending) {
+           throw new SystemErr(
+             SystemErrCode.MIDDLEWARE_ERROR, 
+             "A Middleware called next() but did not await it. This breaks the request lifecycle and error handling."
+           );
+        }
       };
     }
     this.compiledChain = chain;
