@@ -1,3 +1,4 @@
+
 import { SystemErrCode } from "./SystemErrCode";
 import { HTTPContext } from "./HTTPContext";
 import { SystemErr } from "./SystemErr";
@@ -27,5 +28,11 @@ export const SystemErrRecord: Record<SystemErrCode, HTTPHandlerFunc> = {
   [SystemErrCode.WEBSOCKET_UPGRADE_FAILURE]: (c: HTTPContext) => {
     let err = c.getErr() as SystemErr;
     c.setStatus(500).text(err.message);
+  },
+  [SystemErrCode.HEADERS_ALREADY_SENT]: (c: HTTPContext) => {
+    let err = c.getErr() as SystemErr;
+    // We cannot set status or text if headers are sent, so we log it 
+    // and rely on the existing response or framework panic handling.
+    console.error(`[CRITICAL] ${err.message}`);
   },
 };

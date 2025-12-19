@@ -2,6 +2,7 @@ import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
+import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
 
 export class HTTPContext {
@@ -16,7 +17,8 @@ export class HTTPContext {
   private _body?: string | Record<string, any> | FormData;
   data: Record<string, any>;
   private err: Error | undefined | string;
-  private _isDone: boolean = false;
+  
+  private _state: ContextState = ContextState.OPEN;
 
   constructor(req: Request, params: Record<string, string> = {}) {
     this.req = req;
@@ -30,14 +32,32 @@ export class HTTPContext {
     this.data = {};
   }
 
-  // --- NEW: Helper to get validated class instances ---
+  // --- Helper to get validated class instances ---
   getValid<T>(): T {
     return this.data["validated_data"] as T;
   }
   // ----------------------------------------------------
 
   get isDone(): boolean {
-    return this._isDone;
+    // Stops the downstream chain if body is set or streaming
+    return this._state !== ContextState.OPEN;
+  }
+
+  // Guard clause: Only throws if we are STREAMING or SENT.
+  // WRITTEN state now allows header modifications.
+  private ensureConfigurable() {
+    if (this._state === ContextState.STREAMING || this._state === ContextState.SENT) {
+      throw new SystemErr(
+        SystemErrCode.HEADERS_ALREADY_SENT, 
+        "Cannot modify headers or status after response has started streaming."
+      );
+    }
+  }
+
+  finalize() {
+    if (this._state === ContextState.OPEN) {
+      this._state = ContextState.WRITTEN;
+    }
   }
 
   setErr(err: Error | undefined | string) {
@@ -53,9 +73,10 @@ export class HTTPContext {
   }
 
   redirect(location: string, status: number = 302): void {
-    this._isDone = true;
+    this.ensureConfigurable();
     this.res.setStatus(status);
     this.res.setHeader("Location", location);
+    this.finalize();
   }
 
   async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
@@ -90,11 +111,13 @@ export class HTTPContext {
   }
 
   setStatus(code: number): this {
+    this.ensureConfigurable();
     this.res.setStatus(code);
     return this;
   }
 
   setHeader(name: string, value: string): this {
+    this.ensureConfigurable();
     this.res.setHeader(name, value);
     return this;
   }
@@ -104,37 +127,43 @@ export class HTTPContext {
   }
 
   html(content: string): void {
+    this.ensureConfigurable();
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
-    this._isDone = true;
+    this.finalize();
   }
 
   text(content: string): void {
+    this.ensureConfigurable();
     if (!this.res.getHeader("Content-Type")) this.setHeader("Content-Type", "text/plain");
     this.res.body(content);
-    this._isDone = true;
+    this.finalize();
   }
 
   json(data: any): void {
+    this.ensureConfigurable();
     this.setHeader("Content-Type", "application/json");
     this.res.body(JSON.stringify(data));
-    this._isDone = true;
+    this.finalize();
   }
 
   stream(stream: ReadableStream): void {
-    this._isDone = true;
+    this.ensureConfigurable();
     this.setHeader("Content-Type", "application/octet-stream");
     this.res.body(stream);
+    // Streaming locks the headers immediately
+    this._state = ContextState.STREAMING;
   }
 
   async file(path: string): Promise<void> {
-    this._isDone = true;
+    this.ensureConfigurable();
     let file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
     }
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     this.res.body(file);
+    this.finalize();
   }
 
   setStore(key: string, value: any): void {
@@ -157,6 +186,7 @@ export class HTTPContext {
   }
 
   setCookie(name: string, value: string, options: CookieOptions = {}) {
+    this.ensureConfigurable();
     let cookieString = `${name}=${encodeURIComponent(value)}`;
     options.path ??= "/";
     options.httpOnly ??= true;

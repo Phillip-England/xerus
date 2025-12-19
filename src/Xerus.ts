@@ -141,7 +141,7 @@ export class Xerus {
         node = exactMatch;
       } else if (paramMatch) {
         node = paramMatch;
-        if (node.paramKey) params[node.paramKey] = part;
+        node.paramKey && (params[node.paramKey] = part);
       } else if (wildcardMatch) {
         node = wildcardMatch;
         break;
@@ -302,7 +302,7 @@ export class Xerus {
         c.setHeader("Content-Type", file.type);
         c.res.body(file.content);
         
-        (c as any)._isDone = true; 
+        c.finalize(); // Updated to use the public API
       });
   }
 
