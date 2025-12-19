@@ -16,7 +16,10 @@ export class HTTPContext {
   path: string = "/";
   method: string = "GET";
   route: string = "";
-  segments: string[] = [];
+  
+  // Lazy Segment Store
+  private _segments: string[] | null = null;
+  
   params: Record<string, string> = {};
   private _body?: string | Record<string, any> | FormData;
   
@@ -31,18 +34,12 @@ export class HTTPContext {
   private _state: ContextState = ContextState.OPEN;
 
   constructor() {
-    // We instantiate the response object once.
-    // The reset() method will wipe it clean.
     this.res = new MutResponse();
   }
 
-  /**
-   * Resets the context with new Request data.
-   * Replaces the logic previously found in the constructor.
-   */
   reset(req: Request, params: Record<string, string> = {}) {
     this.req = req;
-    this.res.reset(); // Wipe the response object
+    this.res.reset(); 
 
     // Reset State
     this._state = ContextState.OPEN;
@@ -51,12 +48,11 @@ export class HTTPContext {
     this.err = undefined;
     
     // Clear Stores
-    // Creating a new object is usually faster than deleting keys for small objects
     this.data = {}; 
     this._validatorStore.clear();
 
-    // Optimization: Parse path manually to avoid new URL() overhead
-    const urlIndex = req.url.indexOf("/", 8); // Skip "http://" or "https://"
+    // Optimization: Parse path manually
+    const urlIndex = req.url.indexOf("/", 8);
     const queryIndex = req.url.indexOf("?", urlIndex);
     
     const pathStr = queryIndex === -1 
@@ -67,13 +63,10 @@ export class HTTPContext {
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
     
-    // Recalculate segments
-    // Note: We could optimize this further by pooling arrays if GC is an issue
-    this.segments = this.path.split("/").filter(Boolean);
+    this._segments = null;
     this.params = params;
   }
 
-  // Lazy Getter for URL
   get url(): URL {
     if (!this._url) {
       this._url = new URL(this.req.url);
@@ -81,25 +74,27 @@ export class HTTPContext {
     return this._url;
   }
 
-  // --- Helper to get validated class instances ---
-  
+  get segments(): string[] {
+    if (!this._segments) {
+        this._segments = this.path.split("/").filter(Boolean);
+    }
+    return this._segments;
+  }
+
   setValid<T>(type: Constructable<T>, instance: T): void {
     this._validatorStore.set(type, instance);
   }
 
   getValid<T>(type: Constructable<T>): T {
     const validData = this._validatorStore.get(type);
-
     if (!validData) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR, 
-        `getValid(${type.name}) called but no validation data found for that Class. Did you forget to add the Validator middleware?`
+        `getValid(${type.name}) called but no validation data found.`
       );
     }
-
     return validData as T;
   }
-  // ----------------------------------------------------
 
   get isDone(): boolean {
     return this._state !== ContextState.OPEN;
@@ -277,7 +272,9 @@ export class HTTPContext {
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
-    this.res.headers.append("Set-Cookie", cookieString);
+    
+    // UPDATED: Use setHeader so MutResponse can route this to the cookie array
+    this.setHeader("Set-Cookie", cookieString); 
   }
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
