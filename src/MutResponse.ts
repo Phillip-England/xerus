@@ -9,6 +9,14 @@ export class MutResponse {
     this.bodyContent = "";
   }
 
+  // New: Resets the response object for reuse
+  reset(): void {
+    this.statusCode = 200;
+    // Creating a new Headers object is often cleaner than deleting keys manually
+    this.headers = new Headers(); 
+    this.bodyContent = "";
+  }
+
   setStatus(code: number): this {
     this.statusCode = code;
     return this;

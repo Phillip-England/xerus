@@ -9,7 +9,8 @@ import { errorHandling } from "./6_errorHandling";
 import { routingComplexity } from "./7_routingComplexity";
 import { validation } from "./8_validation";
 import { middlewareErrors } from "./9_middlewareErrors";
-import { safeguard } from "./10_safeguard"; // Import new module
+import { safeguard } from "./10_safeguard"; 
+import { objectPool } from "./11_objectPool"; // Import new module
 
 const app = new Xerus();
 
@@ -23,6 +24,7 @@ errorHandling(app);
 routingComplexity(app);
 validation(app);
 middlewareErrors(app);
-safeguard(app); // Register new module
+safeguard(app); 
+objectPool(app); // Register object pool test routes
 
 app.listen(8080);

@@ -16,6 +16,7 @@ import type {
 } from "./WSHandlerFuncs";
 import { WSHandler } from "./WSHandler";
 import { resolve, join } from "path"; 
+import { ObjectPool } from "./ObjectPool";
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
@@ -28,6 +29,26 @@ export class Xerus {
     { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 500;
+
+  // Object Pool Configuration
+  private contextPool: ObjectPool<HTTPContext>;
+
+  constructor() {
+    // Default pool size of 200 as requested
+    // Logic: Factory creates a new blank HTTPContext
+    this.contextPool = new ObjectPool<HTTPContext>(
+      () => new HTTPContext(), 
+      200
+    );
+  }
+
+  /**
+   * Configures the ObjectPool size for HTTPContexts.
+   * This allows pre-allocation of contexts to reduce GC overhead.
+   */
+  setHTTPContextPool(size: number) {
+    this.contextPool.resize(size);
+  }
 
   private register(
     method: string,
@@ -176,30 +197,46 @@ export class Xerus {
 
     const { handler, wsHandler, params } = this.find(method, path);
 
+    // --- WebSocket Logic ---
+    // Note: We DO NOT use the ObjectPool for WebSockets.
+    // WebSockets are long-lived. If we upgrade, the context remains attached to the socket
+    // indefinitely. Returning it to the pool would cause data corruption if the pool
+    // issued that context to a new HTTP request while the socket was still open.
     if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
-      const context = new HTTPContext(req, params);
+      const context = new HTTPContext();
+      context.reset(req, params); // Initialize manually
       (context as any)._wsHandler = wsHandler; 
       if (server.upgrade(req, { data: context })) return;
     }
 
+    // --- Standard HTTP Logic with Object Pooling ---
     let context: HTTPContext | undefined;
     
     try {
-      // 1. Setup Context
-      context = new HTTPContext(req, params);
+      // 1. Acquire Context from Pool
+      context = this.contextPool.acquire();
       
-      // 2. Execute Handler Chain
-      // If a middleware or the main handler throws, it bubbles to the catch block below.
-      if (handler) return await handler.execute(context);
+      // 2. Setup Context (Reset data from previous use)
+      context.reset(req, params);
       
-      // 3. Handle 404 (if no handler found)
-      if (this.notFoundHandler) return await this.notFoundHandler.execute(context);
+      // 3. Execute Handler Chain
+      if (handler) {
+        return await handler.execute(context);
+      }
+      
+      // 4. Handle 404
+      if (this.notFoundHandler) {
+        return await this.notFoundHandler.execute(context);
+      }
 
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
       
     } catch (e: any) {
-      // 4. Global Error Catching
-      const c = context || new HTTPContext(req);
+      // 5. Global Error Catching
+      // If context failed to acquire (unlikely), we create a temporary one just for the error
+      const c = context || new HTTPContext();
+      if (!context) c.reset(req, {});
+      
       c.setErr(e);
       
       // Handle known System Errors
@@ -216,6 +253,13 @@ export class Xerus {
       const defaultInternalHandler = SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR];
       await defaultInternalHandler(c);
       return c.res.send();
+
+    } finally {
+      // 6. Release Context back to Pool
+      // We only release if we successfully acquired it to begin with.
+      if (context) {
+        this.contextPool.release(context);
+      }
     }
   }
 

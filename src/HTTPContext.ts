@@ -9,32 +9,53 @@ import type { CookieOptions } from "./CookieOptions";
 export type Constructable<T> = new (...args: any[]) => T;
 
 export class HTTPContext {
+  // @ts-ignore: Initialized in reset()
   req: Request;
   res: MutResponse;
   private _url: URL | null = null;
-  path: string;
-  method: string;
-  route: string;
-  segments: string[];
-  params: Record<string, string>;
+  path: string = "/";
+  method: string = "GET";
+  route: string = "";
+  segments: string[] = [];
+  params: Record<string, string> = {};
   private _body?: string | Record<string, any> | FormData;
   
   // Generic data store (for strings/legacy middleware)
-  data: Record<string, any>;
+  data: Record<string, any> = {};
   
   // New Type-Safe Validator Store
-  // Keys are Class Constructors, Values are Instances
   private _validatorStore = new Map<Function, any>();
 
   private err: Error | undefined | string;
     
   private _state: ContextState = ContextState.OPEN;
 
-  constructor(req: Request, params: Record<string, string> = {}) {
-    this.req = req;
+  constructor() {
+    // We instantiate the response object once.
+    // The reset() method will wipe it clean.
     this.res = new MutResponse();
+  }
 
-    // Optimization: Parse path manually to avoid new URL() overhead on every request
+  /**
+   * Resets the context with new Request data.
+   * Replaces the logic previously found in the constructor.
+   */
+  reset(req: Request, params: Record<string, string> = {}) {
+    this.req = req;
+    this.res.reset(); // Wipe the response object
+
+    // Reset State
+    this._state = ContextState.OPEN;
+    this._url = null;
+    this._body = undefined;
+    this.err = undefined;
+    
+    // Clear Stores
+    // Creating a new object is usually faster than deleting keys for small objects
+    this.data = {}; 
+    this._validatorStore.clear();
+
+    // Optimization: Parse path manually to avoid new URL() overhead
     const urlIndex = req.url.indexOf("/", 8); // Skip "http://" or "https://"
     const queryIndex = req.url.indexOf("?", urlIndex);
     
@@ -45,9 +66,11 @@ export class HTTPContext {
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
+    
+    // Recalculate segments
+    // Note: We could optimize this further by pooling arrays if GC is an issue
     this.segments = this.path.split("/").filter(Boolean);
     this.params = params;
-    this.data = {};
   }
 
   // Lazy Getter for URL
@@ -60,18 +83,10 @@ export class HTTPContext {
 
   // --- Helper to get validated class instances ---
   
-  /**
-   * Internal method used by Validator Middleware to store instances safely.
-   */
   setValid<T>(type: Constructable<T>, instance: T): void {
     this._validatorStore.set(type, instance);
   }
 
-  /**
-   * Type-safe retrieval of validated data.
-   * Usage: const body = c.getValid(UserSignupRequest);
-   * Returns: UserSignupRequest (Automatically inferred)
-   */
   getValid<T>(type: Constructable<T>): T {
     const validData = this._validatorStore.get(type);
 
@@ -125,13 +140,11 @@ export class HTTPContext {
   }
 
   async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    // 1. Cache Hit Logic
     if (this._body !== undefined) {
-      // FIX: If we cached as TEXT previously, but now request JSON, attempt to parse the string.
       if (expectedType === BodyType.JSON && typeof this._body === "string") {
         try {
           const parsed = JSON.parse(this._body);
-          this._body = parsed; // Upgrade cache to object
+          this._body = parsed; 
           return parsed;
         } catch (err: any) {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
@@ -140,11 +153,9 @@ export class HTTPContext {
       return this._body;
     }
 
-    // 2. Initial Parse Logic
     const contentType = this.req.headers.get("Content-Type") || "";
     let parsedData: any;
 
-    // Force TEXT read if requested, regardless of Content-Type (allows logging raw JSON before parsing)
     if (expectedType === BodyType.TEXT) {
       parsedData = await this.req.text();
     } 
@@ -162,7 +173,6 @@ export class HTTPContext {
       parsedData = await this.req.formData();
     } 
     else {
-      // Fallback
       if (expectedType !== BodyType.TEXT) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
       parsedData = await this.req.text();
     }
