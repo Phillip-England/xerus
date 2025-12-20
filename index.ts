@@ -14,7 +14,6 @@ export * from "./src/SystemErr";
 export * from "./src/SystemErrCode";
 export * from "./src/SystemErrRecord";
 export * from "./src/TrieNode";
-export * from "./src/TypeValidator";
 export * from "./src/Validator";
 export * from "./src/WSContext";
 export * from "./src/WSHandler";
