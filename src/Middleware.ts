@@ -188,40 +188,69 @@ export const csrf = (opts?: {
   });
 };
 
+/**
+ * Timeout middleware (soft timeout)
+ *
+ * - Returns a 504 quickly if downstream takes too long.
+ * - Does NOT rely on HTTPContext helpers after marking timed out (those early-return).
+ * - Prevents the middleware safeguard from throwing by setting __timeoutSent.
+ * - Keeps pooled contexts safe by holding release until downstream finishes.
+ */
 export const timeout = (ms: number, opts?: { message?: string }) => {
-  const message = opts?.message ?? `Request timed out after ${ms}ms`;
+  const detail = opts?.message ?? `Request timed out after ${ms}ms`;
+  const TIMEOUT = Symbol("XERUS_TIMEOUT");
 
   return new Middleware(async (c: HTTPContext, next) => {
     let timer: any;
-    let timedOut = false;
 
-    // We create a promise that rejects when the timeout hits
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      timer = setTimeout(() => {
-        timedOut = true;
-        if (!c.isDone) {
-          c.data.__timeoutSent = true;
-          const fn = (c as any).gatewayTimeout;
-          if (typeof fn === "function") fn.call(c, message, "TIMEOUT");
-          else c.errorJSON(504, "TIMEOUT", message);
-        }
-        reject(new Error("TIMEOUT_REACHED"));
-      }, ms);
+    // Start downstream immediately
+    const downstream = (async () => {
+      await next();
+    })();
+
+    // A rejecting promise is easier to race cleanly.
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(TIMEOUT), ms);
     });
 
     try {
-      // Race the actual work against our timeout
-      await Promise.race([next(), timeoutPromise]);
-    } catch (e: any) {
-      // If it's our specific timeout error, we just return.
-      // The response is already set by the setTimeout block.
-      if (e.message === "TIMEOUT_REACHED") {
-        return;
+      // If downstream wins, we fully await it (satisfies safeguard).
+      await Promise.race([downstream, timeoutPromise]);
+      return;
+    } catch (e) {
+      if (e !== TIMEOUT) {
+        // Real downstream error: let it bubble
+        throw e;
       }
-      // Otherwise, it was a real error in the handler, throw it.
-      throw e;
+
+      // Timeout won:
+      // 1) Mark first so any later writes become NO-OPs.
+      c.data.__timeoutSent = true;
+
+      // 2) Only write 504 if nothing has been written yet.
+      if (!c.isDone) {
+        // Write directly to MutResponse (HTTPContext helpers early-return once timed out)
+        c.clearResponse();
+
+        c.res.setStatus(504);
+        c.res.setHeader("Content-Type", "application/json");
+        c.res.body(
+          JSON.stringify({
+            error: {
+              code: "TIMEOUT",
+              message: "Gateway Timeout",
+              detail,
+            },
+          }),
+        );
+        c.finalize();
+      }
+
+      // 3) Hold pool release until downstream finishes (prevents reuse races).
+      (c.data as any).__holdRelease = downstream.catch(() => {});
+      return;
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     }
   });
 };

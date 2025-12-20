@@ -255,12 +255,10 @@ export class Xerus {
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
 
-        // If upgrade fails, release immediately
         context.clearResponse();
         this.contextPool.release(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
       } catch (e) {
-        // Ensure release if something goes wrong before returning
         if (context) this.contextPool.release(context);
         throw e;
       }
@@ -300,14 +298,29 @@ export class Xerus {
       );
       console.error(e);
 
-      // Unified JSON fallback
       c.errorJSON(500, SystemErrCode.INTERNAL_SERVER_ERR, "Internal Server Error", {
         detail: e?.message ?? "Unknown",
         warning: "No error handling strategy found.",
       });
       return c.res.send();
     } finally {
-      if (context) this.contextPool.release(context);
+      if (context) {
+        const hold = (context.data as any)?.__holdRelease;
+        if (hold && typeof (hold as any).then === "function") {
+          // ensure we only schedule this once
+          delete (context.data as any).__holdRelease;
+
+          const ctx = context;
+          (hold as Promise<void>).finally(() => {
+            // minimal cleanup; reset() will do full cleanup on reuse
+            ctx.clearResponse();
+            ctx.setErr(undefined);
+            this.contextPool.release(ctx);
+          });
+        } else {
+          this.contextPool.release(context);
+        }
+      }
     }
   }
 
@@ -346,10 +359,8 @@ export class Xerus {
           } catch (e: any) {
             console.error("[WS ERROR] Close:", e.message);
           } finally {
-            // ✅ WS pooling fix: release pooled HTTPContext when socket closes
             const ctx = ws.data as HTTPContext;
             if (ctx && ctx._isWS) {
-              // minimal cleanup; reset will handle full cleanup on reuse
               (ctx as any)._wsHandler = undefined;
               ctx._wsMessage = null;
               ctx.setStore("_wsCloseArgs", undefined);
