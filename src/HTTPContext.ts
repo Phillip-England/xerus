@@ -23,16 +23,10 @@ export class HTTPContext {
   params: Record<string, string> = {};
   private _body?: string | Record<string, any> | FormData;
 
-  // Staging area for WebSocket messages to allow Validator access
-  // UPDATED: Allow Buffer so binary data isn't corrupted
   public _wsMessage: string | Buffer | null = null;
   
-  // Generic data store (for strings/legacy middleware)
   data: Record<string, any> = {};
-  
-  // New Type-Safe Validator Store
   private _validatorStore = new Map<Function, any>();
-
   private err: Error | undefined | string;
     
   private _state: ContextState = ContextState.OPEN;
@@ -46,19 +40,16 @@ export class HTTPContext {
     this.req = req;
     this.res.reset(); 
 
-    // Reset State
     this._state = ContextState.OPEN;
     this._url = null;
     this._body = undefined;
     this._rawBody = null; 
     this.err = undefined;
-    this._wsMessage = null; // Reset WS Message
+    this._wsMessage = null; 
     
-    // Clear Stores
     this.data = {}; 
     this._validatorStore.clear();
 
-    // Optimization: Parse path manually
     const urlIndex = req.url.indexOf("/", 8);
     const queryIndex = req.url.indexOf("?", urlIndex);
     
@@ -74,12 +65,6 @@ export class HTTPContext {
     this.params = params;
   }
 
-  /**
-   * SOFT RESET: Clears only the response state and content.
-   * This is used by the framework when an error occurs to ensure the
-   * Error Handler has a clean slate to write to, without losing 
-   * the request context (params, data store, etc.).
-   */
   clearResponse() {
     this.res.reset();
     this._state = ContextState.OPEN;
@@ -145,12 +130,9 @@ export class HTTPContext {
     return this.res.getHeader(name);
   }
 
-  // Helper to prevent "Double Render" bugs
   private ensureBodyModifiable() {
-    this.ensureConfigurable(); // Run the standard check first
+    this.ensureConfigurable(); 
     if (this._state === ContextState.WRITTEN) {
-       // We don't throw, we just log/return to be safe, OR throw if you want strictness.
-       // Throwing prevents hard-to-debug logic errors.
        throw new SystemErr(
          SystemErrCode.INTERNAL_SERVER_ERR, 
          "Double Response: Attempted to write body after response was finalized (e.g. after redirect)."
@@ -158,12 +140,48 @@ export class HTTPContext {
     }
   }
 
-// Update redirect to ensure it finalizes correctly
-  redirect(location: string, status: number = 302): void {
+  /**
+   * Redirects to a specific path with optional query parameters.
+   * * @param path The path to redirect to (e.g., "/" or "/login")
+   * @param statusOrQuery Either the HTTP Status Code (number) OR a Query Object (Record)
+   * @param status If the second arg was a query object, this is the status code (default 302)
+   */
+  redirect(path: string, status?: number): void;
+  redirect(path: string, query: Record<string, any>, status?: number): void;
+  redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
     this.ensureConfigurable();
 
-    // SAFEGUARD: Prevent Header Injection or invalid URL crashes
-    if (/[\r\n]/.test(location)) {
+    let status = 302;
+    let finalLocation = path;
+
+    // Detect Overload Signature
+    if (typeof arg2 === "number") {
+      // Signature: redirect(path, status)
+      status = arg2;
+    } else if (arg2 && typeof arg2 === "object") {
+      // Signature: redirect(path, query, status?)
+      if (typeof arg3 === "number") {
+        status = arg3;
+      }
+      
+      // Auto-Encode Query Params using URLSearchParams
+      // This handles special chars like newlines, spaces, etc.
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(arg2)) {
+        params.append(key, String(value));
+      }
+      
+      const queryString = params.toString();
+      if (queryString.length > 0) {
+        // Smartly append '?' or '&' depending on existing path
+        const separator = finalLocation.includes("?") ? "&" : "?";
+        finalLocation += separator + queryString;
+      }
+    }
+
+    // SAFEGUARD: Even with auto-encoding, we check the final string just in case 
+    // the user manually put a newline in the 'path' argument.
+    if (/[\r\n]/.test(finalLocation)) {
        throw new SystemErr(
          SystemErrCode.INTERNAL_SERVER_ERR,
          "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?"
@@ -171,22 +189,18 @@ export class HTTPContext {
     }
 
     this.res.setStatus(status);
-    this.res.setHeader("Location", location);
+    this.res.setHeader("Location", finalLocation);
     this.finalize(); 
   }
 
-async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    // A. HIT CACHE: JSON Object
+  async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
     if (this._body !== undefined && expectedType === BodyType.JSON) {
       return this._body;
     }
-
-    // B. HIT CACHE: Raw Text
     if (this._rawBody !== null && expectedType === BodyType.TEXT) {
       return this._rawBody;
     }
 
-    // C. CROSS-CONVERSION (Cache Hit)
     if (this._rawBody !== null) {
       if (expectedType === BodyType.JSON) {
         try {
@@ -202,20 +216,14 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
       }
     }
 
-    // D. FIRST READ: Parse from Request
     const contentType = this.req.headers.get("Content-Type") || "";
 
-    // --- RESTORED STRICTNESS CHECKS ---
-    // These ensure we fail FAST if the client sends the wrong data type, 
-    // satisfying the tests in 3_parseBody.test.ts and 8_validation.test.ts
     if (contentType.includes("application/json")) {
-       // Allow JSON or TEXT, but fail if we expect FORM
        if (expectedType !== BodyType.JSON && expectedType !== BodyType.TEXT) {
            throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
        }
     }
     else if (contentType.includes("application/x-www-form-urlencoded")) {
-       // Allow FORM or TEXT, but fail if we expect JSON
        if (expectedType !== BodyType.FORM && expectedType !== BodyType.TEXT) {
            throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
        }
@@ -224,12 +232,9 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
        if (expectedType !== BodyType.MULTIPART_FORM) {
            throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
        }
-       // Multipart specific handling must happen here
        return await this.req.formData();
     }
-    // ----------------------------------
 
-    // Universal Strategy: Read as Text first to preserve the raw data
     const text = await this.req.text();
     this._rawBody = text;
 
@@ -251,7 +256,6 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
       return Object.fromEntries(new URLSearchParams(text));
     }
 
-    // Fallback
     return text;
   }
 
@@ -275,15 +279,12 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
 
   setHeader(name: string, value: string): this {
     this.ensureConfigurable();
-    
-    // SAFEGUARD: Prevent Response Header Injection
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `Attempted to set invalid header "${name}". Values cannot contain newlines.`
       );
     }
-
     this.res.setHeader(name, value);
     return this;
   }
@@ -292,23 +293,22 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
     return this.req.headers.get(name);
   }
 
-// Update Body Methods to use the new check
   html(content: string): void {
-    this.ensureBodyModifiable(); // <--- UPDATED
+    this.ensureBodyModifiable(); 
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
     this.finalize();
   }
 
   text(content: string): void {
-    this.ensureBodyModifiable(); // <--- UPDATED
+    this.ensureBodyModifiable(); 
     if (!this.res.getHeader("Content-Type")) this.setHeader("Content-Type", "text/plain");
     this.res.body(content);
     this.finalize();
   }
 
   json(data: any): void {
-    this.ensureBodyModifiable(); // <--- UPDATED
+    this.ensureBodyModifiable(); 
     this.setHeader("Content-Type", "application/json");
     this.res.body(JSON.stringify(data));
     this.finalize();

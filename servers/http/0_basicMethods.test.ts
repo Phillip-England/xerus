@@ -45,3 +45,32 @@ test("DELETE /items/1 should return success message", async () => {
   expect(res.status).toBe(200);
   expect(data.message).toBe("Item 1 deleted");
 });
+
+// --- Redirect Tests ---
+
+test("Redirect: Simple redirect should return 302 and Location", async () => {
+  const res = await fetch(`${BaseURL}/redir/simple`, { redirect: "manual" });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("Location")).toBe("/");
+});
+
+test("Redirect: Should merge query params correctly", async () => {
+  const res = await fetch(`${BaseURL}/redir/query`, { redirect: "manual" });
+  const loc = res.headers.get("Location");
+  
+  expect(res.status).toBe(302);
+  // Expecting /?existing=1&new=2
+  expect(loc).toContain("existing=1");
+  expect(loc).toContain("new=2");
+  expect(loc).toContain("&");
+});
+
+test("Redirect: Should auto-encode unsafe characters", async () => {
+  const res = await fetch(`${BaseURL}/redir/unsafe`, { redirect: "manual" });
+  const loc = res.headers.get("Location");
+
+  expect(res.status).toBe(302);
+  // The CRLF should be encoded, preventing header injection
+  expect(loc).not.toContain("\r\n");
+  expect(loc).toContain("Hack%0D%0ALocation%3A+google.com");
+});
