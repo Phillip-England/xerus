@@ -36,6 +36,7 @@ export class HTTPContext {
   private err: Error | undefined | string;
     
   private _state: ContextState = ContextState.OPEN;
+  private _rawBody: string | null = null;
 
   constructor() {
     this.res = new MutResponse();
@@ -49,6 +50,7 @@ export class HTTPContext {
     this._state = ContextState.OPEN;
     this._url = null;
     this._body = undefined;
+    this._rawBody = null; // <--- ADD THIS
     this.err = undefined;
     this._wsMessage = null; // Reset WS Message
     
@@ -132,53 +134,105 @@ export class HTTPContext {
     return this.res.getHeader(name);
   }
 
+  // Helper to prevent "Double Render" bugs
+  private ensureBodyModifiable() {
+    this.ensureConfigurable(); // Run the standard check first
+    if (this._state === ContextState.WRITTEN) {
+       // We don't throw, we just log/return to be safe, OR throw if you want strictness.
+       // Throwing prevents hard-to-debug logic errors.
+       throw new SystemErr(
+         SystemErrCode.INTERNAL_SERVER_ERR, 
+         "Double Response: Attempted to write body after response was finalized (e.g. after redirect)."
+       );
+    }
+  }
+
+// Update redirect to ensure it finalizes correctly
   redirect(location: string, status: number = 302): void {
     this.ensureConfigurable();
     this.res.setStatus(status);
     this.res.setHeader("Location", location);
-    this.finalize();
+    this.finalize(); 
   }
 
-  async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    if (this._body !== undefined) {
-      if (expectedType === BodyType.JSON && typeof this._body === "string") {
+async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
+    // A. HIT CACHE: JSON Object
+    if (this._body !== undefined && expectedType === BodyType.JSON) {
+      return this._body;
+    }
+
+    // B. HIT CACHE: Raw Text
+    if (this._rawBody !== null && expectedType === BodyType.TEXT) {
+      return this._rawBody;
+    }
+
+    // C. CROSS-CONVERSION (Cache Hit)
+    if (this._rawBody !== null) {
+      if (expectedType === BodyType.JSON) {
         try {
-          const parsed = JSON.parse(this._body);
-          this._body = parsed; 
+          const parsed = JSON.parse(this._rawBody);
+          this._body = parsed;
           return parsed;
         } catch (err: any) {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
-      return this._body;
+      if (expectedType === BodyType.FORM) {
+        return Object.fromEntries(new URLSearchParams(this._rawBody));
+      }
     }
 
+    // D. FIRST READ: Parse from Request
     const contentType = this.req.headers.get("Content-Type") || "";
-    let parsedData: any;
+
+    // --- RESTORED STRICTNESS CHECKS ---
+    // These ensure we fail FAST if the client sends the wrong data type, 
+    // satisfying the tests in 3_parseBody.test.ts and 8_validation.test.ts
+    if (contentType.includes("application/json")) {
+       // Allow JSON or TEXT, but fail if we expect FORM
+       if (expectedType !== BodyType.JSON && expectedType !== BodyType.TEXT) {
+           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
+       }
+    }
+    else if (contentType.includes("application/x-www-form-urlencoded")) {
+       // Allow FORM or TEXT, but fail if we expect JSON
+       if (expectedType !== BodyType.FORM && expectedType !== BodyType.TEXT) {
+           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+       }
+    }
+    else if (contentType.includes("multipart/form-data")) {
+       if (expectedType !== BodyType.MULTIPART_FORM) {
+           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+       }
+       // Multipart specific handling must happen here
+       return await this.req.formData();
+    }
+    // ----------------------------------
+
+    // Universal Strategy: Read as Text first to preserve the raw data
+    const text = await this.req.text();
+    this._rawBody = text;
 
     if (expectedType === BodyType.TEXT) {
-      parsedData = await this.req.text();
-    } 
-    else if (contentType.includes("application/json")) {
-      if (expectedType !== BodyType.JSON) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
-      try { parsedData = await this.req.json(); } 
-      catch (err: any) { throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`); }
-    } 
-    else if (contentType.includes("application/x-www-form-urlencoded")) {
-      if (expectedType !== BodyType.FORM) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
-      parsedData = Object.fromEntries(new URLSearchParams(await this.req.text()));
-    } 
-    else if (contentType.includes("multipart/form-data")) {
-      if (expectedType !== BodyType.MULTIPART_FORM) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
-      parsedData = await this.req.formData();
-    } 
-    else {
-      if (expectedType !== BodyType.TEXT) throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected TEXT data");
-      parsedData = await this.req.text();
+      return text;
     }
 
-    this._body = parsedData;
-    return parsedData;
+    if (expectedType === BodyType.JSON) {
+      try {
+        const parsed = JSON.parse(text);
+        this._body = parsed;
+        return parsed;
+      } catch (err: any) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+      }
+    }
+
+    if (expectedType === BodyType.FORM) {
+      return Object.fromEntries(new URLSearchParams(text));
+    }
+
+    // Fallback
+    return text;
   }
 
   getParam(name: string, defaultValue: string = ""): string {
@@ -209,22 +263,23 @@ export class HTTPContext {
     return this.req.headers.get(name);
   }
 
+// Update Body Methods to use the new check
   html(content: string): void {
-    this.ensureConfigurable();
+    this.ensureBodyModifiable(); // <--- UPDATED
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
     this.finalize();
   }
 
   text(content: string): void {
-    this.ensureConfigurable();
+    this.ensureBodyModifiable(); // <--- UPDATED
     if (!this.res.getHeader("Content-Type")) this.setHeader("Content-Type", "text/plain");
     this.res.body(content);
     this.finalize();
   }
 
   json(data: any): void {
-    this.ensureConfigurable();
+    this.ensureBodyModifiable(); // <--- UPDATED
     this.setHeader("Content-Type", "application/json");
     this.res.body(JSON.stringify(data));
     this.finalize();
@@ -238,6 +293,7 @@ export class HTTPContext {
   }
 
   async file(path: string): Promise<void> {
+    this.ensureBodyModifiable();
     this.ensureConfigurable();
     let file = Bun.file(path);
     if (!(await file.exists())) {
