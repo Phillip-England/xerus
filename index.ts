@@ -16,3 +16,4 @@ export * from "./src/WSContext";
 export * from "./src/WSHandler";
 export * from "./src/WSHandlerFuncs";
 export * from "./src/Xerus";
+export * from "./src/macros"
