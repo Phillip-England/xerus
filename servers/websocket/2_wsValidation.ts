@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
+import { WSRoute } from "../../src/WSRoute";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
@@ -10,7 +11,6 @@ class ChatMessage implements TypeValidator {
   content: string;
 
   constructor(data: any) {
-    // FIX: Use optional chaining to prevent crashes on bad input
     this.type = data?.type;
     this.content = data?.content;
   }
@@ -25,8 +25,9 @@ class ChatMessage implements TypeValidator {
 }
 
 export function wsValidationMethods(app: Xerus) {
-  app.message(
-    "/ws/validate",
+  const wsValRoute = new WSRoute("/ws/validate");
+
+  wsValRoute.message(
     async (ws, raw) => {
       const msg = ws.data.getValid(ChatMessage);
 
@@ -38,4 +39,6 @@ export function wsValidationMethods(app: Xerus) {
     },
     Validator(ChatMessage, Source.WS_MESSAGE)
   );
+
+  app.mount(wsValRoute);
 }

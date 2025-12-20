@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
+import { Route } from "../../src/Route";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
@@ -8,7 +9,7 @@ import type { TypeValidator } from "../../src/TypeValidator";
 
 class SecretHeader implements TypeValidator {
   val: string;
-  constructor(d: any) { this.val = d["X-Secret"]; } // Case-insensitive fetch, specific key map
+  constructor(d: any) { this.val = d["X-Secret"]; } 
   validate() { if (this.val !== "xerus-power") throw new Error("Invalid Secret"); }
 }
 
@@ -27,20 +28,26 @@ class PageQuery implements TypeValidator {
 export function flexibleValidation(app: Xerus) {
   
   // Header Target
-  app.get("/flex/header", async (c) => {
+  const headerRoute = new Route("GET", "/flex/header", async (c) => {
     c.json({ status: "ok" });
-  }, Validator(SecretHeader, Source.HEADER("X-Secret")));
+  });
+  headerRoute.use(Validator(SecretHeader, Source.HEADER("X-Secret")));
+  app.mount(headerRoute);
 
   // Param Target
-  app.get("/flex/param/:id", async (c) => {
+  const paramRoute = new Route("GET", "/flex/param/:id", async (c) => {
     const p = c.getValid(IdParam);
     c.json({ id: p.id });
-  }, Validator(IdParam, Source.PARAM("id")));
+  });
+  paramRoute.use(Validator(IdParam, Source.PARAM("id")));
+  app.mount(paramRoute);
 
   // Specific Query Target
-  app.get("/flex/query", async (c) => {
+  const queryRoute = new Route("GET", "/flex/query", async (c) => {
     const q = c.getValid(PageQuery);
     c.json({ page: q.page });
-  }, Validator(PageQuery, Source.QUERY("page")));
+  });
+  queryRoute.use(Validator(PageQuery, Source.QUERY("page")));
+  app.mount(queryRoute);
 
 }

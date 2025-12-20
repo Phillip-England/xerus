@@ -1,67 +1,41 @@
 import { Xerus } from "../src/Xerus";
-import { HTTPContext } from "../src/HTTPContext";
-import { Validator } from "../src/Validator";
+import { Route } from "../src/Route";
 import { z } from "zod";
-
-// 1. Define a Validation Class using Zod
-class CreateUserRequest {
-  // Zod Schema
-  static schema = z.object({
-    username: z.string().min(3),
-    email: z.string().email(),
-    age: z.number().min(18)
-  });
-
-  public username: string;
-  public email: string;
-  public age: number;
-
-  constructor(data: any) {
-    this.username = data.username;
-    this.email = data.email;
-    this.age = data.age;
-  }
-
-  // Required validate() method
-  validate() {
-    CreateUserRequest.schema.parse(this);
-  }
-}
-
-// 2. Define a separate validator (e.g., for metadata)
-class MetadataRequest {
-    static schema = z.object({
-        source: z.string()
-    });
-    public source: string;
-    constructor(data: any) { this.source = data.source; }
-    validate() { MetadataRequest.schema.parse(this); }
-}
 
 const app = new Xerus();
 
-// 3. Register Route with Validation Middleware
-// We no longer need to invent string keys like "user_body" or "meta"
-app.post(
-  "/users",
-  async (c: HTTPContext) => {
-    // 4. Retrieve Validated Data by Class
-    // The type of 'user' is automatically 'CreateUserRequest'
-    const user = c.getValid(CreateUserRequest);
-    const meta = c.getValid(MetadataRequest);
+// Create a Route
+const createUser = new Route("POST", "/users", async (c) => {
+    // 3. Access Validated Data
+    // "validJSON" is automatically populated by the validateJSON method
+    const user = c.validJSON;
 
     return c.json({
       message: "User created",
       user: {
         name: user.username,
         email: user.email,
-      },
-      source: meta.source
+      }
     });
-  },    
-  Validator(CreateUserRequest),
-  Validator(MetadataRequest),    
-);
+});
+
+// 2. Add Validation Logic
+// This replaces the old class-based middleware.
+// You get the raw data, and return the clean data.
+createUser.validateJSON(async (data) => {
+    // You can use Zod, plain JS, or any library here.
+    const schema = z.object({
+        username: z.string().min(3),
+        email: z.string().email(),
+        age: z.number().min(18)
+    });
+    
+    // If this throws, the request stops and sends a 400 error.
+    return await schema.parseAsync(data);
+});
+
+// Mount the route
+app.mount(createUser);
 
 console.log("Try sending POST to /users with JSON body");
 await app.listen(8080);

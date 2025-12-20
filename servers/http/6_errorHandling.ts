@@ -1,25 +1,29 @@
 import { Xerus } from "../../src/Xerus";
+import { Route } from "../../src/Route";
 import { HTTPContext } from "../../src/HTTPContext";
 import { mwErrorTrigger } from "../middleware/mwErrorTrigger";
 
 export function errorHandling(app: Xerus) {
-  // Global Error Handler using new signature (c, err)
+  // Global Error Handler
   app.onErr(async (c: HTTPContext, err: any) => {
-    // You no longer need to call c.getErr(), it's passed directly!
     const message = err instanceof Error ? err.message : "Unknown Error";
     return c.setStatus(500).json({ error: "Custom Global Handler", detail: message });
   });
 
-  app.get("/err/standard", async (c: HTTPContext) => {
-    throw new Error("Standard Route Failure");
-  });
+  app.mount(
+    new Route("GET", "/err/standard", async (c: HTTPContext) => {
+      throw new Error("Standard Route Failure");
+    })
+  );
 
-  app.get("/err/middleware", async (c: HTTPContext) => {
+  const mwErrorRoute = new Route("GET", "/err/middleware", async (c: HTTPContext) => {
     return c.text("This won't be reached");
-  }, mwErrorTrigger);
+  });
+  mwErrorRoute.use(mwErrorTrigger);
+  app.mount(mwErrorRoute);
 
   // Added this specifically for 6_errorHandling.test.ts
-  app.get("/err/file-missing", async (c: HTTPContext) => {
+  app.mount(new Route("GET", "/err/file-missing", async (c: HTTPContext) => {
     return await c.file("./non/existent/path/file.txt");
-  });
+  }));
 }

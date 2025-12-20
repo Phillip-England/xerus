@@ -1,110 +1,38 @@
 import { Xerus } from "./Xerus";
 import { Middleware } from "./Middleware";
-import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
-import type {
-  WSCloseFunc,
-  WSDrainFunc,
-  WSMessageFunc,
-  WSOpenFunc,
-} from "./WSHandlerFuncs";
+import { Route } from "./Route";
+import { WSRoute } from "./WSRoute";
+import { HTTPContext } from "./HTTPContext";
 
 export class RouteGroup {
   app: Xerus;
   prefixPath: string;
-  middlewares: Middleware[];
+  middlewares: Middleware<HTTPContext>[];
 
-  constructor(app: Xerus, prefixPath: string, ...middlewares: Middleware[]) {
+  constructor(app: Xerus, prefixPath: string, ...middlewares: Middleware<HTTPContext>[]) {
     this.app = app;
     this.prefixPath = prefixPath;
     this.middlewares = middlewares;
   }
 
-  // --- HTTP Methods ---
+  /**
+   * Mounts a Route or WSRoute to the application with the group's prefix and middleware.
+   */
+  mount(route: Route | WSRoute) {
+    // 1. Prefix the path
+    route.path = this.prefixPath + route.path;
 
-  get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
-    this.app.get(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
+    // 2. Apply Group Middlewares (HTTP Routes only)
+    if (route instanceof Route) {
+      // Prepend group middlewares to the route's middleware stack
+      route.use(...this.middlewares);
+    } 
+    // Note: For WSRoute, we usually don't apply HTTP middlewares blindly 
+    // because they are specific to Open/Message events. 
+    // Users should attach specific WS middleware manually or we'd need more complex logic here.
 
-  post(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
-    this.app.post(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  put(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
-    this.app.put(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  delete(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
-    this.app.delete(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  patch(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
-    this.app.patch(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  // --- WebSocket Methods ---
-
-  open(path: string, handler: WSOpenFunc, ...middlewares: Middleware[]) {
-    this.app.open(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  message(
-    path: string,
-    handler: WSMessageFunc,
-    ...middlewares: Middleware[]
-  ) {
-    this.app.message(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  close(path: string, handler: WSCloseFunc, ...middlewares: Middleware[]) {
-    this.app.close(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  drain(path: string, handler: WSDrainFunc, ...middlewares: Middleware[]) {
-    this.app.drain(
-      this.prefixPath + path,
-      handler,
-      ...this.middlewares.concat(middlewares),
-    );
+    // 3. Mount to App
+    this.app.mount(route);
     return this;
   }
 }

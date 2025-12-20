@@ -1,117 +1,82 @@
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
-import { HTTPContext } from "../../src/HTTPContext";
-import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource"; // Updated import name
-import type { TypeValidator } from "../../src/TypeValidator";
-
-// --- VALIDATOR CLASSES ---
-
-// 1. JSON Body Validator
-class UserSignupRequest implements TypeValidator {
-  username: string;
-  email: string;
-  age: number;
-
-  constructor(data: any) {
-    this.username = data.username;
-    this.email = data.email;
-    this.age = data.age;
-  }
-
-  async validate() {
-    const schema = z.object({
-      username: z.string().min(3, "Username must be at least 3 chars"),
-      email: z.email("Invalid email format"),
-      age: z.number().min(18, "Must be 18 or older"),
-    });
-    await schema.parseAsync(this);
-  }
-}
-
-// 2. Query Parameter Validator
-class SearchRequest implements TypeValidator {
-  query: string;
-  limit: number;
-
-  constructor(data: any) {
-    // Expected input: The entire query object (e.g., { q: "...", limit: "..." })
-    this.query = data.q || "";
-    this.limit = Number(data.limit) || 10;
-  }
-
-  async validate() {
-    const schema = z.object({
-      query: z.string().min(1, "Search query is required"),
-      limit: z.number().max(100, "Limit cannot exceed 100"),
-    });
-    await schema.parseAsync(this);
-  }
-}
-
-// 3. Form Data Validator
-class LoginRequest implements TypeValidator {
-  user: string;
-  pass: string;
-
-  constructor(data: any) {
-    // parseBody(FORM) returns a simple object Record<string, string>
-    this.user = data.username;
-    this.pass = data.password;
-  }
-
-  async validate() {
-    if(!this.user || !this.pass) throw new Error("Missing credentials");
-    if(this.pass.length < 6) throw new Error("Password too short");
-  }
-}
-
-
-// --- ROUTES ---
+import { Route } from "../../src/Route";
 
 export function validation(app: Xerus) {
   
-  // JSON Validation (Default)
-  app.post(
-    "/validation/signup", 
-    async (c: HTTPContext) => {
-      const validRequest = c.getValid(UserSignupRequest);
+  // 1. JSON Validation (Using Class-based Route with callback)
+  const signupRoute = new Route("POST", "/validation/signup", async (c) => {
+      const user = c.validJSON; // Access valid data
+      
       c.json({
         status: "success",
         user: { 
-          name: validRequest.username, 
-          email: validRequest.email,
-          age: validRequest.age
+          name: user.username, 
+          email: user.email,
+          age: user.age
         }
       });
-    },
-    Validator(UserSignupRequest, Source.JSON)
-  );
+  });
 
-  // Query Param Validation
-  // Updated: We call Source.QUERY() without args to get ALL query params
-  app.get(
-    "/validation/search",
-    async (c: HTTPContext) => {
-      const validReq = c.getValid(SearchRequest);
+  // Attach validation logic
+  signupRoute.validateJSON(async (data) => {
+      const schema = z.object({
+        username: z.string().min(3, "Username must be at least 3 chars"),
+        email: z.email("Invalid email format"),
+        age: z.number().min(18, "Must be 18 or older"),
+      });
+      return await schema.parseAsync(data);
+  });
+
+  app.mount(signupRoute);
+
+
+  // 2. Query Param Validation
+  const searchRoute = new Route("GET", "/validation/search", async (c) => {
+      const query = c.validQuery; // Access valid query
       c.json({
         status: "success",
-        search: { q: validReq.query, limit: validReq.limit }
+        search: { q: query.query, limit: query.limit }
       });
-    },
-    Validator(SearchRequest, Source.QUERY())
-  );
+  });
 
-  // Form Data Validation
-  app.post(
-    "/validation/login",
-    async (c: HTTPContext) => {
-      const validReq = c.getValid(LoginRequest);
+  searchRoute.validateQuery(async (data) => {
+      // Manual transformation + Zod
+      const formatted = {
+          query: data.q || "",
+          limit: Number(data.limit) || 10
+      };
+
+      const schema = z.object({
+        query: z.string().min(1, "Search query is required"),
+        limit: z.number().max(100, "Limit cannot exceed 100"),
+      });
+      
+      return await schema.parseAsync(formatted);
+  });
+
+  app.mount(searchRoute);
+
+
+  // 3. Form Data Validation
+  const loginRoute = new Route("POST", "/validation/login", async (c) => {
+      const form = c.validForm;
       c.json({
         status: "success",
-        msg: `Welcome ${validReq.user}`
+        msg: `Welcome ${form.username}`
       });
-    },
-    Validator(LoginRequest, Source.FORM)
-  );
+  });
+
+  loginRoute.validateForm((data) => {
+      // Simple manual validation without Zod
+      const user = data.username;
+      const pass = data.password;
+
+      if(!user || !pass) throw new Error("Missing credentials");
+      if(pass.length < 6) throw new Error("Password too short");
+      
+      return data;
+  });
+
+  app.mount(loginRoute);
 }

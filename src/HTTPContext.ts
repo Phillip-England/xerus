@@ -25,8 +25,13 @@ export class HTTPContext {
 
   public _wsMessage: string | Buffer | null = null;
   
+  // General Data Store (User middleware data)
   data: Record<string, any> = {};
-  private _validatorStore = new Map<Function, any>();
+
+  // Validated Data Store
+  // We now support both Class constructors AND string keys (json, query, form)
+  private _validatorStore = new Map<Function | string, any>();
+
   private err: Error | undefined | string;
     
   private _state: ContextState = ContextState.OPEN;
@@ -84,20 +89,36 @@ export class HTTPContext {
     return this._segments;
   }
 
-  setValid<T>(type: Constructable<T>, instance: T): void {
-    this._validatorStore.set(type, instance);
+  // --- Validation Storage ---
+
+  /**
+   * Store validated data.
+   * @param key A Class Constructor OR a string key (e.g., "json", "query")
+   * @param instance The validated data
+   */
+  setValid<T>(key: Constructable<T> | string, instance: T): void {
+    this._validatorStore.set(key, instance);
   }
 
-  getValid<T>(type: Constructable<T>): T {
-    const validData = this._validatorStore.get(type);
-    if (!validData) {
-      throw new SystemErr(
-        SystemErrCode.INTERNAL_SERVER_ERR, 
-        `getValid(${type.name}) called but no validation data found.`
-      );
-    }
-    return validData as T;
+  /**
+   * Retrieve validated data.
+   * @param key A Class Constructor OR a string key (e.g., "json", "query")
+   */
+  getValid<T>(key: Constructable<T> | string): T {
+    const validData = this._validatorStore.get(key);
+    // If not found, return empty object (safe default) or undefined
+    // For string keys, usually implies optional if missing, but let's be safe.
+    return (validData || {}) as T;
   }
+
+  // --- Legacy / Helper Accessors for standard Route validation ---
+  
+  get validJSON(): any { return this.getValid("json"); }
+  get validForm(): any { return this.getValid("form"); }
+  get validQuery(): any { return this.getValid("query"); }
+  get validParams(): any { return this.getValid("param"); }
+
+  // -------------------------
 
   get isDone(): boolean {
     return this._state !== ContextState.OPEN;
@@ -140,12 +161,6 @@ export class HTTPContext {
     }
   }
 
-  /**
-   * Redirects to a specific path with optional query parameters.
-   * * @param path The path to redirect to (e.g., "/" or "/login")
-   * @param statusOrQuery Either the HTTP Status Code (number) OR a Query Object (Record)
-   * @param status If the second arg was a query object, this is the status code (default 302)
-   */
   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
   redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
@@ -154,18 +169,13 @@ export class HTTPContext {
     let status = 302;
     let finalLocation = path;
 
-    // Detect Overload Signature
     if (typeof arg2 === "number") {
-      // Signature: redirect(path, status)
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
-      // Signature: redirect(path, query, status?)
       if (typeof arg3 === "number") {
         status = arg3;
       }
       
-      // Auto-Encode Query Params using URLSearchParams
-      // This handles special chars like newlines, spaces, etc.
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(arg2)) {
         params.append(key, String(value));
@@ -173,14 +183,11 @@ export class HTTPContext {
       
       const queryString = params.toString();
       if (queryString.length > 0) {
-        // Smartly append '?' or '&' depending on existing path
         const separator = finalLocation.includes("?") ? "&" : "?";
         finalLocation += separator + queryString;
       }
     }
 
-    // SAFEGUARD: Even with auto-encoding, we check the final string just in case 
-    // the user manually put a newline in the 'path' argument.
     if (/[\r\n]/.test(finalLocation)) {
        throw new SystemErr(
          SystemErrCode.INTERNAL_SERVER_ERR,
