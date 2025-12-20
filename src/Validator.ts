@@ -3,6 +3,7 @@ import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
 import type { Constructable } from "./HTTPContext";
 import { BodyType } from "./BodyType";
+import { ValidationSource } from "./ValidationSource";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { TypeValidator } from "./TypeValidator";
@@ -10,25 +11,43 @@ import type { TypeValidator } from "./TypeValidator";
 /**
  * Validator Middleware
  * @param TargetClass The class definition to instantiate and validate.
- * @note This no longer requires a storage string key. The Class itself is the key.
+ * @param source Where to derive the data from (JSON, FORM, QUERY). Defaults to JSON.
  */
 export const Validator = <T extends TypeValidator>(
-  TargetClass: Constructable<T>
+  TargetClass: Constructable<T>,
+  source: ValidationSource = ValidationSource.JSON
 ) => {
   return new Middleware(async (c: HTTPContext, next) => {
-    let rawBody: any;
+    let rawData: any;
 
-    // 1. Parse Raw JSON
-    // Note: If you are validating Query params instead of Body, 
-    // you might want to adjust how rawBody is sourced here based on another flag or check.
     try {
-      rawBody = await c.parseBody(BodyType.JSON);
+      switch (source) {
+        case ValidationSource.JSON:
+          rawData = await c.parseBody(BodyType.JSON);
+          break;
+        case ValidationSource.FORM:
+          rawData = await c.parseBody(BodyType.FORM);
+          break;
+        case ValidationSource.MULTIPART_FORM:
+          // Note: Multipart forms often contain Files which might not map directly 
+          // to simple class properties without custom logic, but we pass the FormData object (or converted object).
+          // parseBody(MULTIPART) currently returns FormData object. 
+          // User's class constructor must handle FormData input if used.
+          rawData = await c.parseBody(BodyType.MULTIPART_FORM);
+          break;
+        case ValidationSource.QUERY:
+          rawData = c.queries; // Use new getter for all query params
+          break;
+        default:
+          throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
+      }
     } catch (e: any) {
-      throw e; 
+        // If parsing fails (e.g. invalid JSON syntax), throw immediately
+        throw e;
     }
 
-    // 2. Instantiate the Class
-    const instance = new TargetClass(rawBody);
+    // 2. Instantiate the Class with the derived data
+    const instance = new TargetClass(rawData);
 
     // 3. Run the Class's validation logic
     try {

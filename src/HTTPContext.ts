@@ -184,6 +184,14 @@ export class HTTPContext {
     return this.url.searchParams.get(key) || defaultValue;
   }
 
+  /**
+   * Retrieves all query parameters as a key-value object.
+   * Useful for validating query strings.
+   */
+  get queries(): Record<string, string> {
+    return Object.fromEntries(this.url.searchParams);
+  }
+
   setStatus(code: number): this {
     this.ensureConfigurable();
     this.res.setStatus(code);

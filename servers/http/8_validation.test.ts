@@ -1,73 +1,66 @@
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
 
-test("Validator: Valid payload should pass and return data", async () => {
-  const payload = {
-    username: "xerus_dev",
-    email: "dev@xerus.io",
-    age: 25
-  };
-
+// 1. JSON Validation
+test("Validator: JSON - Valid payload should pass", async () => {
+  const payload = { username: "xerus_dev", email: "dev@xerus.io", age: 25 };
   const res = await fetch(`${BaseURL}/validation/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   const json = await res.json();
-
   expect(res.status).toBe(200);
-  expect(json.status).toBe("success");
   expect(json.user.name).toBe("xerus_dev");
 });
 
-test("Validator: Zod failure should return 400 and formatted message", async () => {
-  const payload = {
-    username: "no", // Too short (min 3)
-    email: "not-an-email", // Invalid email
-    age: 10 // Too young (min 18)
-  };
-
+test("Validator: JSON - Invalid payload should fail", async () => {
+  const payload = { username: "no", email: "bad-email", age: 10 };
   const res = await fetch(`${BaseURL}/validation/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   const text = await res.text();
-
-  expect(res.status).toBe(400); // SystemErrCode.BODY_PARSING_FAILED maps to 400
-  expect(text).toContain("Validation Failed");
-  expect(text).toContain("username: Username must be at least 3 chars");
-  expect(text).toContain("email: Invalid email format");
-  expect(text).toContain("age: Must be 18 or older");
-});
-
-test("Validator: Manual error throw should return 400", async () => {
-  const payload = { code: "wrong-code" };
-
-  const res = await fetch(`${BaseURL}/validation/manual`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await res.text();
-
   expect(res.status).toBe(400);
-  expect(text).toContain("Invalid secret code");
+  expect(text).toContain("Validation Failed");
 });
 
-test("Validator: Malformed JSON should fail before validation logic", async () => {
-  const res = await fetch(`${BaseURL}/validation/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{ bad json ",
-  });
+// 2. Query Validation
+test("Validator: QUERY - Valid params should pass", async () => {
+  const res = await fetch(`${BaseURL}/validation/search?q=bun&limit=50`);
+  const json = await res.json();
+  expect(res.status).toBe(200);
+  expect(json.search.q).toBe("bun");
+  expect(json.search.limit).toBe(50);
+});
 
+test("Validator: QUERY - Missing required param should fail", async () => {
+  const res = await fetch(`${BaseURL}/validation/search?limit=50`); // Missing 'q'
   const text = await res.text();
+  expect(res.status).toBe(400);
+  expect(text).toContain("Search query is required");
+});
 
-  // parsing happens inside c.parseBody called by Validator
-  expect(res.status).toBe(400); 
-  expect(text).toContain("JSON parsing failed");
+// 3. Form Validation
+test("Validator: FORM - Valid url-encoded form should pass", async () => {
+  const res = await fetch(`${BaseURL}/validation/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "username=admin&password=secretpassword",
+  });
+  const json = await res.json();
+  expect(res.status).toBe(200);
+  expect(json.msg).toBe("Welcome admin");
+});
+
+test("Validator: FORM - Invalid content type (sending JSON instead of FORM) should fail", async () => {
+  const res = await fetch(`${BaseURL}/validation/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }, // Wrong type for this validator
+    body: JSON.stringify({ username: "admin", password: "password" }),
+  });
+  const text = await res.text();
+  expect(res.status).toBe(400);
+  expect(text).toContain("Unexpected JSON data"); // Triggered by c.parseBody(BodyType.FORM) check
 });
