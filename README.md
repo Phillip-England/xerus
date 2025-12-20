@@ -19,7 +19,10 @@ strict middleware correctness.
   Wildcard).
 - 📦 **Embedded Assets:** Compile static files into a single binary via
   Bun macros.
-- 🔌 **WebSockets:** Middleware-aware lifecycle hooks.
+- 🔌 **Isolated WebSockets:** Individual handlers for open, message,
+  close, and drain events.
+- 🚨 **Granular Error Handling:** Define error handlers per-route or
+  globally.
 
 ------------------------------------------------------------------------
 
@@ -205,20 +208,25 @@ app.embed("/source-code", srcFiles);
 
 ## 9. WebSockets
 
-Lifecycle hooks with middleware support. (Source:
+Xerus uses isolated handlers for WebSocket events. Routes are merged
+automatically, allowing you to define handlers separately. (Source:
 `examples/8_websocket.ts`)
 
 ``` ts
-app.ws("/chat", {
-  open: {
-    handler: async (ws) => {
-      ws.send("Welcome to Xerus Chat!");
-    },
-    middlewares: [logger] // Middleware specifically for the Open event
-  },
-  message: async (ws, message) => {
-    ws.send(`You said: ${message}`);
-  }
+// 1. Open Handler (with specific middleware)
+app.open("/chat", async (ws) => {
+  ws.send("Welcome!");
+}, logger);
+
+// 2. Message Handler
+app.message("/chat", async (ws, message) => {
+  ws.send(`You said: ${message}`);
+  if (message === "close") ws.close();
+});
+
+// 3. Close Handler
+app.close("/chat", async (ws, code, reason) => {
+  console.log("Closed");
 });
 ```
 
@@ -226,17 +234,34 @@ app.ws("/chat", {
 
 ## 10. Error Handling
 
-Custom 404 and global error hooks. (Source:
-`examples/9_error_handling.ts`)
+Xerus supports both global error handlers and granular, per-route error
+handlers. (Source: `examples/9_error_handling.ts`)
+
+### Global Handlers
 
 ``` ts
 app.onNotFound(async (c) => c.setStatus(404).json({ error: "Resource Not Found" }));
 
-app.onErr(async (c) => {
-  const err = c.getErr();
-  console.error("Critical Failure:", err);
+app.onErr(async (c, err) => {
+  console.error("Global Failure:", err);
   return c.setStatus(500).json({ error: "Internal Server Error" });
 });
+```
+
+### Granular (Per-Route) Handlers
+
+Pass an error handler as the 3rd argument (before middlewares) to catch
+errors for a specific route.
+
+``` ts
+app.get(
+  "/risky",
+  async (c) => { throw new Error("Boom!"); },
+  // Local Error Handler
+  async (c, err) => {
+    c.setStatus(400).json({ handled_locally: true, error: err.message });
+  }
+);
 ```
 
 ------------------------------------------------------------------------
@@ -266,6 +291,21 @@ app.post("/users", async (c) => {
   const user = c.getValid(CreateUserRequest);
   return c.json({ name: user.username });
 }, Validator(CreateUserRequest));
+```
+
+### Flexible Validation Sources
+
+Validate Headers, Query Params, and Route Params. (Source:
+`examples/22_flexible_validation.ts`)
+
+``` ts
+app.get(
+  "/users/:id",
+  handler,
+  Validator(UserIdParam, Source.PARAM("id")),
+  Validator(SortQuery, Source.QUERY("sort")),
+  Validator(ApiKeyHeader, Source.HEADER("x-api-key"))
+);
 ```
 
 ------------------------------------------------------------------------
@@ -381,7 +421,9 @@ Defining WebSocket routes inside prefix groups. (Source:
 
 ``` ts
 const ws = app.group("/ws", logger);
-ws.ws("/chat", { ... });
+
+ws.open("/chat", async (ws) => { ... });
+ws.message("/chat", async (ws, msg) => { ... });
 ```
 
 ------------------------------------------------------------------------

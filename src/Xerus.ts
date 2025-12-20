@@ -4,7 +4,7 @@ import { HTTPHandler } from "./HTTPHandler";
 import { Middleware } from "./Middleware";
 import { RouteGroup } from "./RouteGroup";
 import { HTTPContext } from "./HTTPContext";
-import type { HTTPHandlerFunc } from "./HTTPHandlerFunc";
+import type { HTTPHandlerFunc, HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
@@ -34,18 +34,12 @@ export class Xerus {
   private contextPool: ObjectPool<HTTPContext>;
 
   constructor() {
-    // Default pool size of 200 as requested
-    // Logic: Factory creates a new blank HTTPContext
     this.contextPool = new ObjectPool<HTTPContext>(
       () => new HTTPContext(),
       200
     );
   }
 
-  /**
-   * Configures the ObjectPool size for HTTPContexts.
-   * This allows pre-allocation of contexts to reduce GC overhead.
-   */
   setHTTPContextPool(size: number) {
     this.contextPool.resize(size);
   }
@@ -71,10 +65,7 @@ export class Xerus {
     }
 
     if (handlerObj instanceof WSHandler) {
-      // WebSocket Logic: MERGE handlers if one already exists
       if (node.wsHandler) {
-        // We merge the new handler's defined hooks into the existing node's handler.
-        // This allows defining .open() and .message() in separate calls.
         if (handlerObj.compiledOpen) node.wsHandler.compiledOpen = handlerObj.compiledOpen;
         if (handlerObj.compiledMessage) node.wsHandler.compiledMessage = handlerObj.compiledMessage;
         if (handlerObj.compiledClose) node.wsHandler.compiledClose = handlerObj.compiledClose;
@@ -83,7 +74,6 @@ export class Xerus {
         node.wsHandler = handlerObj;
       }
     } else {
-      // HTTP Logic: Strict conflict checking
       if (node.handlers[method]) {
         throw new SystemErr(
           SystemErrCode.ROUTE_ALREADY_REGISTERED,
@@ -97,10 +87,6 @@ export class Xerus {
     }
   }
 
-  /**
-   * Recursive Trie Search with Backtracking.
-   * Priority: Exact Match -> Param Match -> Wildcard Match
-   */
   private search(
     node: TrieNode,
     parts: string[],
@@ -108,10 +94,7 @@ export class Xerus {
     method: string,
     params: Record<string, string>
   ): { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> } | null {
-    
-    // Base Case: We have consumed all path segments
     if (index === parts.length) {
-      // 1. Check if this node has a direct handler
       if (node.handlers[method] || node.wsHandler) {
         return { 
           handler: node.handlers[method], 
@@ -119,9 +102,6 @@ export class Xerus {
           params 
         };
       }
-      
-      // 2. Check if this node has a Wildcard Child that can consume the "empty" remainder
-      // This allows /static-site to match /static-site/*
       if (node.wildcard) {
         const wcNode = node.wildcard;
         if (wcNode.handlers[method] || wcNode.wsHandler) {
@@ -132,33 +112,24 @@ export class Xerus {
             };
         }
       }
-
-      // If neither, this path is dead.
       return null;
     }
 
     const part = parts[index];
-
-    // 1. Try Exact Match
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
-      if (result) return result; // Found a match down this path
+      if (result) return result; 
     }
 
-    // 2. Try Param Match
     const paramNode = node.children[":param"];
     if (paramNode) {
       const newParams = { ...params };
       if (paramNode.paramKey) newParams[paramNode.paramKey] = part;
-      
       const result = this.search(paramNode, parts, index + 1, method, newParams);
       if (result) return result;
     }
 
-    // 3. Try Wildcard Match
-    // If a wildcard exists, it consumes the REST of the path.
-    // We check if the wildcard node itself has a handler.
     if (node.wildcard) {
       const wcNode = node.wildcard;
       if (wcNode.handlers[method] || wcNode.wsHandler) {
@@ -180,25 +151,20 @@ export class Xerus {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
-    // 1. Fast Map Lookup (Registered Exact Routes)
     if (this.routes[cacheKey]) {
       return { handler: this.routes[cacheKey], params: {} };
     }
 
-    // 2. Cache Lookup (Previously resolved dynamic routes)
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
-      // LRU Refresh
       this.resolvedRoutes.delete(cacheKey);
       this.resolvedRoutes.set(cacheKey, cached);
       return cached;
     }
 
-    // 3. Recursive Search (Exact -> Param -> Wildcard)
     const parts = normalizedPath.split("/").filter(Boolean);
     const result = this.search(this.root, parts, 0, method, {}) ?? { handler: undefined, params: {} };
 
-    // 4. Update Cache
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
@@ -215,31 +181,23 @@ export class Xerus {
 
     const { handler, wsHandler, params } = this.find(method, path);
 
-    // --- WebSocket Logic ---
-    // Note: We DO NOT use the ObjectPool for WebSockets.
     if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
       const context = new HTTPContext();
-      context.reset(req, params); // Initialize manually
+      context.reset(req, params); 
       (context as any)._wsHandler = wsHandler; 
       if (server.upgrade(req, { data: context })) return;
     }
 
-    // --- Standard HTTP Logic with Object Pooling ---
     let context: HTTPContext | undefined;
     
     try {
-      // 1. Acquire Context from Pool
       context = this.contextPool.acquire();
-      
-      // 2. Setup Context (Reset data from previous use)
       context.reset(req, params);
       
-      // 3. Execute Handler Chain
       if (handler) {
         return await handler.execute(context);
       }
       
-      // 4. Handle 404
       if (this.notFoundHandler) {
         return await this.notFoundHandler.execute(context);
       }
@@ -247,29 +205,30 @@ export class Xerus {
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
       
     } catch (e: any) {
-      // 5. Global Error Catching
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
       
       c.setErr(e);
       
-      // Handle known System Errors
       if (e instanceof SystemErr) {
         const errHandler = SystemErrRecord[e.typeOf];
         await errHandler(c);
         return c.res.send();
       }
       
-      // Handle User-defined Error Handler
+      // Handle User-defined GLOBAL Error Handler
       if (this.errHandler) return await this.errHandler.execute(c);
       
-      // Fallback 500
+      // NO HANDLERS FOUND - Fallback
+      console.warn(`[XERUS WARNING] Route ${method} ${path} threw an error but has no granular error handler AND no global error handler was set via app.onErr().`);
+      console.error(e);
+
       const defaultInternalHandler = SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR];
+      c.setStatus(500).text(`Internal Server Error\n\nError: ${e.message}\n\n[System Warning] No error handling strategy found.`);
       await defaultInternalHandler(c);
       return c.res.send();
 
     } finally {
-      // 6. Release Context back to Pool
       if (context) {
         this.contextPool.release(context);
       }
@@ -303,72 +262,116 @@ export class Xerus {
     console.log(`🚀 Server running on ${server.port}`);
   }
 
-  get(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+  private parseArgs(
+    args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]
+  ): { errHandler?: HTTPErrorHandlerFunc, middlewares: Middleware<HTTPContext>[] } {
+    let errHandler: HTTPErrorHandlerFunc | undefined;
+    let middlewares: Middleware<HTTPContext>[] = [];
+
+    if (args.length > 0) {
+       if (typeof args[0] === 'function') {
+           errHandler = args[0] as HTTPErrorHandlerFunc;
+           middlewares = args.slice(1) as Middleware<HTTPContext>[];
+       } else {
+           middlewares = args as Middleware<HTTPContext>[];
+       }
+    }
+
+    return { errHandler, middlewares };
+  }
+  
+  private validateRoute(method: string, path: string, errHandler?: HTTPErrorHandlerFunc) {
+      if (!errHandler && !this.errHandler) {
+          console.warn(`[XERUS WARNING] Registering ${method} ${path} without a Granular Error Handler and no Global Error Handler (app.onErr) is set. Uncaught errors will default to a raw 500.`);
+      }
+  }
+
+  // --- HTTP Methods ---
+
+  get(path: string, h: HTTPHandlerFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
+    this.validateRoute("GET", path, errHandler);
+
+    const handler = new HTTPHandler(h, errHandler);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.register("GET", path, handler);
     return this;
   }
 
-  post(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+  post(path: string, h: HTTPHandlerFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
+    this.validateRoute("POST", path, errHandler);
+
+    const handler = new HTTPHandler(h, errHandler);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.register("POST", path, handler);
     return this;
   }
 
-  put(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+  put(path: string, h: HTTPHandlerFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
+    this.validateRoute("PUT", path, errHandler);
+
+    const handler = new HTTPHandler(h, errHandler);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.register("PUT", path, handler);
     return this;
   }
 
-  delete(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+  delete(path: string, h: HTTPHandlerFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
+    this.validateRoute("DELETE", path, errHandler);
+
+    const handler = new HTTPHandler(h, errHandler);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.register("DELETE", path, handler);
     return this;
   }
 
-  patch(path: string, h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+  patch(path: string, h: HTTPHandlerFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
+    this.validateRoute("PATCH", path, errHandler);
+
+    const handler = new HTTPHandler(h, errHandler);
+    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
     this.register("PATCH", path, handler);
     return this;
   }
 
-  // --- Isolated WebSocket Methods ---
+  // --- WebSocket Methods ---
 
-  open(path: string, handler: WSOpenFunc, ...middlewares: Middleware<HTTPContext>[]) {
+  open(path: string, handler: WSOpenFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
     const wsHandler = new WSHandler();
-    wsHandler.setOpen(handler, this.globalMiddlewares.concat(middlewares));
+    wsHandler.setOpen(handler, this.globalMiddlewares.concat(middlewares), errHandler);
     this.register("WS", path, wsHandler);
     return this;
   }
 
-  message(path: string, handler: WSMessageFunc, ...middlewares: Middleware<HTTPContext>[]) {
+  message(path: string, handler: WSMessageFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
     const wsHandler = new WSHandler();
-    wsHandler.setMessage(handler, this.globalMiddlewares.concat(middlewares));
+    wsHandler.setMessage(handler, this.globalMiddlewares.concat(middlewares), errHandler);
     this.register("WS", path, wsHandler);
     return this;
   }
 
-  close(path: string, handler: WSCloseFunc, ...middlewares: Middleware<HTTPContext>[]) {
+  close(path: string, handler: WSCloseFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
     const wsHandler = new WSHandler();
-    wsHandler.setClose(handler, this.globalMiddlewares.concat(middlewares));
+    wsHandler.setClose(handler, this.globalMiddlewares.concat(middlewares), errHandler);
     this.register("WS", path, wsHandler);
     return this;
   }
 
-  drain(path: string, handler: WSDrainFunc, ...middlewares: Middleware<HTTPContext>[]) {
+  drain(path: string, handler: WSDrainFunc, ...args: (Middleware<HTTPContext> | HTTPErrorHandlerFunc)[]) {
+    const { errHandler, middlewares } = this.parseArgs(args);
     const wsHandler = new WSHandler();
-    wsHandler.setDrain(handler, this.globalMiddlewares.concat(middlewares));
+    wsHandler.setDrain(handler, this.globalMiddlewares.concat(middlewares), errHandler);
     this.register("WS", path, wsHandler);
     return this;
   }
 
-  // Updated: Accepts number[] in content because Macros return arrays
   embed(pathPrefix: string, embeddedFiles: Record<string, { content: string | Buffer | Uint8Array | number[]; type: string }>) {
       const prefix = pathPrefix === "/" ? "" : pathPrefix;
       
@@ -380,14 +383,12 @@ export class Xerus {
         
         c.setHeader("Content-Type", file.type);
         
-        // Convert number[] back to Uint8Array for the Response body
         let bodyData = file.content;
         if (Array.isArray(bodyData)) {
             bodyData = new Uint8Array(bodyData);
         }
 
         c.res.body(bodyData);
-        
         c.finalize(); 
       });
   }
@@ -411,14 +412,28 @@ export class Xerus {
     
   use(...m: Middleware<HTTPContext>[]) { this.globalMiddlewares.push(...m); }
   group(prefix: string, ...m: Middleware<HTTPContext>[]) { return new RouteGroup(this, prefix, ...m); }
-  onErr(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
-    const handler = new HTTPHandler(h);
-    handler.setMiddlewares(this.globalMiddlewares.concat(m));
-    this.errHandler = handler;
-  }
+  
   onNotFound(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {
     const handler = new HTTPHandler(h);
     handler.setMiddlewares(this.globalMiddlewares.concat(m));
     this.notFoundHandler = handler;
+  }
+
+  /**
+   * Registers a global error handler.
+   * This handler is called when a route fails AND has no local error handler defined.
+   * * @param h The error handler function: (c: HTTPContext, err: any) => Promise<void>
+   * @param m Optional middlewares to run specifically for the error handler
+   */
+  onErr(h: HTTPErrorHandlerFunc, ...m: Middleware<HTTPContext>[]) {
+    // Adapter: Wrap the (c, err) function into a standard (c) HTTPHandlerFunc
+    const wrapper: HTTPHandlerFunc = async (c: HTTPContext) => {
+        const err = c.getErr();
+        await h(c, err);
+    };
+
+    const handler = new HTTPHandler(wrapper);
+    handler.setMiddlewares(this.globalMiddlewares.concat(m));
+    this.errHandler = handler;
   }
 }

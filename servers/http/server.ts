@@ -12,9 +12,12 @@ import { middlewareErrors } from "./9_middlewareErrors";
 import { safeguard } from "./10_safeguard"; 
 import { objectPool } from "./11_objectPool";
 import { precedence } from "./12_precedence"; 
-import { flexibleValidation } from "./13_flexibleValidation"; // New
+import { flexibleValidation } from "./13_flexibleValidation"; 
 
 const app = new Xerus();
+
+// must be at top
+errorHandling(app); 
 
 basicMethods(app);
 routeGrouping(app);
@@ -22,13 +25,12 @@ staticFiles(app);
 parseBody(app);
 cookieHandling(app);
 middlewares(app);
-errorHandling(app);
 routingComplexity(app);
 validation(app);
 middlewareErrors(app);
 safeguard(app); 
 objectPool(app);
 precedence(app);
-flexibleValidation(app); // Register new routes
+flexibleValidation(app);
 
 app.listen(8080);

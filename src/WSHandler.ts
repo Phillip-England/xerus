@@ -9,6 +9,7 @@ import { HTTPContext } from "./HTTPContext";
 import type { ServerWebSocket } from "bun";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
+import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 
 export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
@@ -23,13 +24,32 @@ export class WSHandler {
     reason: string,
   ) => Promise<void>;
 
+  // Store granular error handlers for each lifecycle event
+  private openErrHandler?: HTTPErrorHandlerFunc;
+  private messageErrHandler?: HTTPErrorHandlerFunc;
+  private drainErrHandler?: HTTPErrorHandlerFunc;
+  private closeErrHandler?: HTTPErrorHandlerFunc;
+
   public createChain(
     handler: Function,
     middlewares: Middleware<HTTPContext>[],
+    errHandler?: HTTPErrorHandlerFunc
   ): any {
     // Base handler execution
     let base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
-      await handler(ws, ...args);
+      try {
+        await handler(ws, ...args);
+      } catch (e: any) {
+         if (errHandler) {
+             const context = ws.data;
+             context.setErr(e);
+             await errHandler(context, e);
+             // WebSockets cannot "return" a response like HTTP, 
+             // but the error handler can log or send a message via ws.send
+         } else {
+             throw e; // Bubble to global
+         }
+      }
     };
 
     // Wrap middlewares
@@ -50,10 +70,17 @@ export class WSHandler {
           }
         };
 
-        // Refactored: Updated to match strict Promise<void> signature of Middleware
-        await middleware.execute(context, safeNext);
+        try {
+            await middleware.execute(context, safeNext);
+        } catch (e: any) {
+             if (errHandler) {
+                 context.setErr(e);
+                 await errHandler(context, e);
+             } else {
+                 throw e;
+             }
+        }
 
-        // SAFEGUARD: Check for floating promises
         if (nextPending) {
            throw new SystemErr(
              SystemErrCode.MIDDLEWARE_ERROR, 
@@ -65,19 +92,23 @@ export class WSHandler {
     return base;
   }
 
-  setOpen(handler: WSOpenFunc, middlewares: Middleware<HTTPContext>[]) {
-    this.compiledOpen = this.createChain(handler, middlewares);
+  setOpen(handler: WSOpenFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
+    this.openErrHandler = errHandler;
+    this.compiledOpen = this.createChain(handler, middlewares, errHandler);
   }
 
-  setMessage(handler: WSMessageFunc, middlewares: Middleware<HTTPContext>[]) {
-    this.compiledMessage = this.createChain(handler, middlewares);
+  setMessage(handler: WSMessageFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
+    this.messageErrHandler = errHandler;
+    this.compiledMessage = this.createChain(handler, middlewares, errHandler);
   }
 
-  setDrain(handler: WSDrainFunc, middlewares: Middleware<HTTPContext>[]) {
-    this.compiledDrain = this.createChain(handler, middlewares);
+  setDrain(handler: WSDrainFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
+    this.drainErrHandler = errHandler;
+    this.compiledDrain = this.createChain(handler, middlewares, errHandler);
   }
 
-  setClose(handler: WSCloseFunc, middlewares: Middleware<HTTPContext>[]) {
-    this.compiledClose = this.createChain(handler, middlewares);
+  setClose(handler: WSCloseFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
+    this.closeErrHandler = errHandler;
+    this.compiledClose = this.createChain(handler, middlewares, errHandler);
   }
 }

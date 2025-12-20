@@ -24,7 +24,8 @@
   <li>🛡️ <strong>Class-Based Validation:</strong> Zod-backed request validation using constructors and DI.</li>
   <li>⚡ <strong>Trie Router:</strong> Deterministic precedence (Exact &gt; Param &gt; Wildcard).</li>
   <li>📦 <strong>Embedded Assets:</strong> Compile static files into a single binary via Bun macros.</li>
-  <li>🔌 <strong>WebSockets:</strong> Middleware-aware lifecycle hooks.</li>
+  <li>🔌 <strong>Isolated WebSockets:</strong> Individual handlers for open, message, close, and drain events.</li>
+  <li>🚨 <strong>Granular Error Handling:</strong> Define error handlers per-route or globally.</li>
 </ul>
 
 <hr />
@@ -186,32 +187,54 @@ app.embed("/source-code", srcFiles);</code></pre>
 <hr />
 
 <h2>9. WebSockets</h2>
-<p>Lifecycle hooks with middleware support. (Source: <code>examples/8_websocket.ts</code>)</p>
+<p>
+  Xerus uses isolated handlers for WebSocket events. Routes are merged automatically, allowing you to define handlers separately.
+  (Source: <code>examples/8_websocket.ts</code>)
+</p>
 
-<pre><code class="language-ts">app.ws("/chat", {
-  open: {
-    handler: async (ws) => {
-      ws.send("Welcome to Xerus Chat!");
-    },
-    middlewares: [logger] // Middleware specifically for the Open event
-  },
-  message: async (ws, message) => {
-    ws.send(`You said: ${message}`);
-  }
+<pre><code class="language-ts">// 1. Open Handler (with specific middleware)
+app.open("/chat", async (ws) => {
+  ws.send("Welcome!");
+}, logger);
+
+// 2. Message Handler
+app.message("/chat", async (ws, message) => {
+  ws.send(`You said: ${message}`);
+  if (message === "close") ws.close();
+});
+
+// 3. Close Handler
+app.close("/chat", async (ws, code, reason) => {
+  console.log("Closed");
 });</code></pre>
 
 <hr />
 
 <h2>10. Error Handling</h2>
-<p>Custom 404 and global error hooks. (Source: <code>examples/9_error_handling.ts</code>)</p>
+<p>
+  Xerus supports both global error handlers and granular, per-route error handlers.
+  (Source: <code>examples/9_error_handling.ts</code>)
+</p>
 
+<h3>Global Handlers</h3>
 <pre><code class="language-ts">app.onNotFound(async (c) => c.setStatus(404).json({ error: "Resource Not Found" }));
 
-app.onErr(async (c) => {
-  const err = c.getErr();
-  console.error("Critical Failure:", err);
+app.onErr(async (c, err) => {
+  console.error("Global Failure:", err);
   return c.setStatus(500).json({ error: "Internal Server Error" });
 });</code></pre>
+
+<h3>Granular (Per-Route) Handlers</h3>
+<p>Pass an error handler as the 3rd argument (before middlewares) to catch errors for a specific route.</p>
+
+<pre><code class="language-ts">app.get(
+  "/risky",
+  async (c) => { throw new Error("Boom!"); },
+  // Local Error Handler
+  async (c, err) => {
+    c.setStatus(400).json({ handled_locally: true, error: err.message });
+  }
+);</code></pre>
 
 <hr />
 
@@ -240,6 +263,17 @@ app.post("/users", async (c) => {
   const user = c.getValid(CreateUserRequest);
   return c.json({ name: user.username });
 }, Validator(CreateUserRequest));</code></pre>
+
+<h3>Flexible Validation Sources</h3>
+<p>Validate Headers, Query Params, and Route Params. (Source: <code>examples/22_flexible_validation.ts</code>)</p>
+
+<pre><code class="language-ts">app.get(
+  "/users/:id",
+  handler,
+  Validator(UserIdParam, Source.PARAM("id")),
+  Validator(SortQuery, Source.QUERY("sort")),
+  Validator(ApiKeyHeader, Source.HEADER("x-api-key"))
+);</code></pre>
 
 <hr />
 
@@ -331,7 +365,9 @@ app.get("/restricted", handler, cors({
 <p>Defining WebSocket routes inside prefix groups. (Source: <code>examples/20_ws_grouped_chat.ts</code>)</p>
 
 <pre><code class="language-ts">const ws = app.group("/ws", logger);
-ws.ws("/chat", { ... });</code></pre>
+
+ws.open("/chat", async (ws) => { ... });
+ws.message("/chat", async (ws, msg) => { ... });</code></pre>
 
 <hr />
 
