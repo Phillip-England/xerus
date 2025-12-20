@@ -242,20 +242,42 @@ export class Xerus {
       fetch: (req, server) => app.handleHTTP(req, server),
       websocket: {
         async open(ws: ServerWebSocket<any>) {
-          const handler = ws.data._wsHandler as WSHandler;
-          if (handler?.compiledOpen) await handler.compiledOpen(ws);
+          try {
+            const handler = ws.data._wsHandler as WSHandler;
+            if (handler?.compiledOpen) await handler.compiledOpen(ws);
+          } catch (e: any) {
+            console.error("[WS ERROR] Open:", e.message);
+            // 1011 = Internal Error
+            ws.close(1011, "Middleware or Handler Error during Open"); 
+          }
         },
         async message(ws: ServerWebSocket<any>, message) {
-          const handler = ws.data._wsHandler as WSHandler;
-          if (handler?.compiledMessage) await handler.compiledMessage(ws, message);
+          try {
+            const handler = ws.data._wsHandler as WSHandler;
+            if (handler?.compiledMessage) await handler.compiledMessage(ws, message);
+          } catch (e: any) {
+            console.error("[WS ERROR] Message:", e.message);
+            // We MUST close the socket if validation fails (and bubbles up here) 
+            // so that client-side 'onclose' events trigger.
+            ws.close(1011, "Validation Failed"); 
+          }
         },
         async close(ws: ServerWebSocket<any>, code, message) {
-          const handler = ws.data._wsHandler as WSHandler;
-          if (handler?.compiledClose) await handler.compiledClose(ws, code, message);
+          try {
+            const handler = ws.data._wsHandler as WSHandler;
+            if (handler?.compiledClose) await handler.compiledClose(ws, code, message);
+          } catch (e: any) {
+            console.error("[WS ERROR] Close:", e.message);
+          }
         },
         async drain(ws: ServerWebSocket<any>) {
-          const handler = ws.data._wsHandler as WSHandler;
-          if (handler?.compiledDrain) await handler.compiledDrain(ws);
+          try {
+            const handler = ws.data._wsHandler as WSHandler;
+            if (handler?.compiledDrain) await handler.compiledDrain(ws);
+          } catch (e: any) {
+            console.error("[WS ERROR] Drain:", e.message);
+            ws.close(1011, "Drain Error");
+          }
         },
       },
     });

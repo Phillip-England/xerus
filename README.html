@@ -1,44 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Xerus Framework</title>
+    <meta charset="UTF-8">
+    <title>Xerus Framework Documentation</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1, h2, h3 { border-bottom: 1px solid #eaeaea; padding-bottom: 10px; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; border: 1px solid #ddd; }
+        code { font-family: monospace; color: #333; }
+        .filename { font-family: monospace; color: #666; font-size: 0.9em; margin-bottom: 5px; display: block; font-weight: bold; }
+        section { margin-bottom: 40px; }
+    </style>
 </head>
 <body>
 
-<h1>Xerus 🐿️</h1>
+<header>
+    <h1>Xerus Framework Documentation</h1>
+    <p>Comprehensive guide and examples for the Xerus HTTP & WebSocket framework.</p>
+</header>
 
-<p>
-  <strong>Xerus</strong> is a high-performance, native web framework for <strong>Bun</strong>.
-  It is designed around deterministic routing, zero-allocation hot paths, and strict
-  middleware correctness.
-</p>
+<main>
 
-<hr />
+    <section id="basics">
+        <h2>1. Basics</h2>
+        <p>Fundamental concepts for setting up a server and defining routes.</p>
 
-<h2>Features</h2>
-<ul>
-  <li>🚀 <strong>Bun Native:</strong> Built directly on Bun’s <code>serve</code> and <code>file</code> APIs.</li>
-  <li>🧅 <strong>Onion Middleware:</strong> Koa-style <code>await next()</code> with runtime safeguard enforcement.</li>
-  <li>♻️ <strong>Object Pooling:</strong> Reuses <code>HTTPContext</code> instances to reduce GC pressure.</li>
-  <li>🛡️ <strong>Class-Based Validation:</strong> Zod-backed request validation using constructors and DI.</li>
-  <li>⚡ <strong>Trie Router:</strong> Deterministic precedence (Exact &gt; Param &gt; Wildcard).</li>
-  <li>📦 <strong>Embedded Assets:</strong> Compile static files into a single binary via Bun macros.</li>
-  <li>🔌 <strong>Isolated WebSockets:</strong> Individual handlers for open, message, close, and drain events.</li>
-  <li>🚨 <strong>Granular Error Handling:</strong> Define error handlers per-route or globally.</li>
-</ul>
-
-<hr />
-
-<h2>Installation</h2>
-<pre><code class="language-bash">bun add xerus</code></pre>
-
-<hr />
-
-<h2>1. Hello World</h2>
-<p>Minimal Xerus server. (Source: <code>examples/0_hello.ts</code>)</p>
-
-<pre><code class="language-ts">import { Xerus } from "../src/Xerus";
+        <h3>Hello World</h3>
+        <span class="filename">examples/0_hello.ts</span>
+        <pre><code>import { Xerus } from "../src/Xerus";
 import { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
@@ -50,339 +39,285 @@ app.get("/", async (c: HTTPContext) => {
 console.log("Listening on http://localhost:8080");
 await app.listen(8080);</code></pre>
 
-<hr />
-
-<h2>2. Response Helpers</h2>
-<p>Text, JSON, HTML, and redirects. (Source: <code>examples/1_methods.ts</code>)</p>
-
-<pre><code class="language-ts">app.get("/text", async (c) => c.text("Just some plain text."));
+        <h3>Response Methods</h3>
+        <p>Helper methods for sending Text, JSON, HTML, and Redirects.</p>
+        <span class="filename">examples/1_methods.ts</span>
+        <pre><code>app.get("/text", async (c) => c.text("Just some plain text."));
 app.get("/json", async (c) => c.json({ framework: "Xerus", speed: "Fast" }));
-app.get("/html", async (c) => c.html(`
-  &lt;div style="font-family: sans-serif;"&gt;
-    &lt;h1&gt;Rich HTML&lt;/h1&gt;
-    &lt;button&gt;Click Me&lt;/button&gt;
-  &lt;/div&gt;
-`));
+app.get("/html", async (c) => c.html("&lt;h1&gt;Rich HTML&lt;/h1&gt;"));
 app.get("/go-home", async (c) => c.redirect("/html"));</code></pre>
 
-<hr />
-
-<h2>3. Route Params &amp; Queries</h2>
-<p>Named parameters and query helpers. (Source: <code>examples/2_params_and_query.ts</code>)</p>
-
-<pre><code class="language-ts">// Dynamic Parameters
+        <h3>Parameters & Query Strings</h3>
+        <p>Accessing dynamic route parameters (<code>:id</code>) and URL query strings.</p>
+        <span class="filename">examples/2_params_and_query.ts</span>
+        <pre><code>// Dynamic Parameters: /user/123
 app.get("/user/:id", async (c) => {
   const userId = c.getParam("id");
   return c.json({ userId });
 });
 
-// Multiple Parameters
-app.get("/post/:year/:month", async (c) => {
-  const { year, month } = c.params;
-  return c.json({ year, month });
+// Query Strings: /search?q=bun&limit=10
+app.get("/search", async (c) => {
+  const query = c.query("q");
+  const limit = c.query("limit", "10"); // Default to 10
+  return c.json({ search_term: query, results_limit: limit });
+});</code></pre>
+    </section>
+
+    <section id="request-handling">
+        <h2>2. Request Handling & Data</h2>
+        
+        <h3>Body Parsing</h3>
+        <p>Parsing JSON, Text, Forms, and Multipart data using the <code>BodyType</code> enum.</p>
+        <span class="filename">examples/3_body_parsing.ts</span>
+        <pre><code>import { BodyType } from "../src/BodyType";
+
+// Parse JSON
+app.post("/api/json", async (c) => {
+  const data = await c.parseBody(BodyType.JSON);
+  return c.json({ received: data });
 });
 
-// Query Strings
-app.get("/search", async (c) => {
-  return c.json({ 
-    search_term: c.query("q"), 
-    results_limit: c.query("limit", "10") 
+// Parse File Uploads
+app.post("/api/upload", async (c) => {
+  const data = await c.parseBody(BodyType.MULTIPART_FORM) as FormData;
+  const file = data.get("file"); 
+  return c.json({ fileName: file instanceof File ? file.name : "unknown" });
+});</code></pre>
+
+        <h3>Cookie Management</h3>
+        <p>Setting, reading, and clearing HTTP cookies.</p>
+        <span class="filename">examples/6_cookies.ts</span>
+        <pre><code>app.get("/login", async (c) => {
+  c.setCookie("session_id", "xyz-123", {
+    httpOnly: true,
+    maxAge: 3600,
+    sameSite: "Lax"
   });
+  return c.text("Cookie Set!");
+});
+
+app.get("/dashboard", async (c) => {
+  const session = c.getCookie("session_id");
+  return c.text(`Logged in with session: ${session}`);
 });</code></pre>
 
-<hr />
-
-<h2>4. Body Parsing &amp; Caching</h2>
-<p>
-  Xerus caches request bodies. You can read the body as text (for logging) and then again as JSON without error.
-  (Source: <code>examples/3_body_parsing.ts</code>)
-</p>
-
-<pre><code class="language-ts">app.post("/api/log-then-parse", async (c) => {
-  // 1. Read as text (reuses cache if read previously)
-  const rawString = await c.parseBody(BodyType.TEXT);
-  console.log("Raw Body:", rawString);
-
-  // 2. Read as JSON (reuses the cache and parses it)
-  const jsonData = await c.parseBody(BodyType.JSON);
-  
-  return c.json({ was_logged: true, data: jsonData });
+        <h3>File Downloads</h3>
+        <p>Serving arbitrary files from disk within a handler.</p>
+        <span class="filename">examples/15_file_download.ts</span>
+        <pre><code>app.get("/download", async (c) => {
+  await c.file("./README.md");
 });</code></pre>
 
-<hr />
-
-<h2>5. Middleware</h2>
-<p>
-  Onion-style middleware with explicit execution guarantees.
-  (Source: <code>examples/4_middleware.ts</code>)
-</p>
-
-<pre><code class="language-ts">const requireAuth = new Middleware(async (c, next) => {
-  if (c.getHeader("Authorization") !== "secret-token") {
-    return c.setStatus(401).json({ error: "Unauthorized" });
-  }
-  console.log("Auth passed!");
+        <h3>Context Storage (Request Scoped Data)</h3>
+        <p>Sharing data between middleware and handlers using <code>setStore/getStore</code>.</p>
+        <span class="filename">examples/16_request_scoped_data.ts</span>
+        <pre><code>const attachUser = new Middleware(async (c, next) => {
+  c.setStore("user", { id: 1, name: "Jace" });
   await next();
 });
 
-// Use globally or per-route
-app.use(logger);
-app.get("/admin", async (c) => c.text("Welcome, Admin."), requireAuth);</code></pre>
+app.get("/me", async (c) => {
+  const user = c.getStore("user");
+  return c.json({ user });
+}, attachUser);</code></pre>
+    </section>
 
-<h3>Middleware Safeguards</h3>
-<p>
-  Xerus detects floating promises. Calling <code>next()</code> without awaiting it
-  triggers a runtime error. (Source: <code>examples/11_middlware_safeguard.ts</code>)
-</p>
+    <section id="middleware">
+        <h2>3. Middleware & Architecture</h2>
 
-<pre><code class="language-ts">// ❌ Incorrect (Triggers 500 Logic Error)
-next();
+        <h3>Custom Middleware</h3>
+        <p>Defining middleware with the Onion pattern (await next).</p>
+        <span class="filename">examples/4_middleware.ts</span>
+        <pre><code>const requireAuth = new Middleware(async (c, next) => {
+  const token = c.getHeader("Authorization");
+  if (token !== "secret-token") {
+    return c.setStatus(401).json({ error: "Unauthorized" });
+  }
+  await next();
+});
 
-// ✅ Correct
-await next();</code></pre>
+app.use(logger); // Global
+app.get("/admin", async (c) => c.text("Admin"), requireAuth); // Local</code></pre>
 
-<hr />
+        <h3>Route Grouping</h3>
+        <p>Organizing routes under prefixes and applying shared middleware.</p>
+        <span class="filename">examples/5_groups.ts</span>
+        <pre><code>const api = app.group("/api/v1", apiKeyMiddleware);
 
-<h2>6. Route Groups</h2>
-<p>Shared prefixes and middleware. (Source: <code>examples/5_groups.ts</code>)</p>
-
-<pre><code class="language-ts">const api = app.group("/api/v1", apiKeyMiddleware);
-
-// Path: /api/v1/users
 api.get("/users", async (c) => {
   return c.json([{ id: 1, name: "Alice" }]);
 });</code></pre>
 
-<hr />
-
-<h2>7. Cookies</h2>
-<p>Secure cookie helpers. (Source: <code>examples/6_cookies.ts</code>)</p>
-
-<pre><code class="language-ts">c.setCookie("session_id", "xyz-123", {
-  httpOnly: true,
-  maxAge: 3600,
-  sameSite: "Lax"
-});
-
-const session = c.getCookie("session_id");
-c.clearCookie("session_id");</code></pre>
-
-<hr />
-
-<h2>8. Static Files &amp; Embedding</h2>
-<p>
-  Serve from disk or embed at compile time.
-  (Source: <code>examples/7_static_files.ts</code>)
-</p>
-
-<pre><code class="language-ts">import { embedDir } from "../src/macros" with { type: "macro" };
-
-// 1. Disk Serving
-app.static("/files", resolve(".")); 
-
-// 2. Embedded Serving (Single Binary)
-const srcFiles = embedDir(resolve("../src"));
-app.embed("/source-code", srcFiles);</code></pre>
-
-<hr />
-
-<h2>9. WebSockets</h2>
-<p>
-  Xerus uses isolated handlers for WebSocket events. Routes are merged automatically, allowing you to define handlers separately.
-  (Source: <code>examples/8_websocket.ts</code>)
-</p>
-
-<pre><code class="language-ts">// 1. Open Handler (with specific middleware)
-app.open("/chat", async (ws) => {
-  ws.send("Welcome!");
-}, logger);
-
-// 2. Message Handler
-app.message("/chat", async (ws, message) => {
-  ws.send(`You said: ${message}`);
-  if (message === "close") ws.close();
-});
-
-// 3. Close Handler
-app.close("/chat", async (ws, code, reason) => {
-  console.log("Closed");
+        <h3>Middleware Safeguards</h3>
+        <p>Xerus detects "floating promises" where middleware forgets to <code>await next()</code>.</p>
+        <span class="filename">examples/11_middlware_safeguard.ts</span>
+        <pre><code>// This triggers a 500 Error
+const mwBroken = new Middleware(async (c, next) => {
+  next(); // Missing await!
 });</code></pre>
 
-<hr />
+        <h3>CORS</h3>
+        <p>Built-in CORS middleware configuration.</p>
+        <span class="filename">examples/13_cors.ts</span>
+        <pre><code>import { cors } from "../src/Middleware";
 
-<h2>10. Error Handling</h2>
-<p>
-  Xerus supports both global error handlers and granular, per-route error handlers.
-  (Source: <code>examples/9_error_handling.ts</code>)
-</p>
+app.use(cors({
+  origin: "https://example.com",
+  methods: ["GET", "POST"],
+  credentials: true
+}));</code></pre>
 
-<h3>Global Handlers</h3>
-<pre><code class="language-ts">app.onNotFound(async (c) => c.setStatus(404).json({ error: "Resource Not Found" }));
+        <h3>Dependency Injection</h3>
+        <p>Injecting services (like Databases) into the context via middleware.</p>
+        <span class="filename">examples/25_dependency_injection.ts</span>
+        <pre><code>const injectDB = new Middleware(async (c, next) => {
+  c.setStore("db", new Database());
+  await next();
+});
 
-app.onErr(async (c, err) => {
-  console.error("Global Failure:", err);
-  return c.setStatus(500).json({ error: "Internal Server Error" });
-});</code></pre>
+app.use(injectDB);</code></pre>
 
-<h3>Granular (Per-Route) Handlers</h3>
-<p>Pass an error handler as the 3rd argument (before middlewares) to catch errors for a specific route.</p>
+        <h3>Object Pooling</h3>
+        <p>Optimizing high-throughput scenarios by recycling context objects.</p>
+        <span class="filename">examples/17_http_context_pool.ts</span>
+        <pre><code>// Recycle up to 500 context objects to reduce GC pressure
+app.setHTTPContextPool(500);</code></pre>
+    </section>
 
-<pre><code class="language-ts">app.get(
-  "/risky",
-  async (c) => { throw new Error("Boom!"); },
-  // Local Error Handler
-  async (c, err) => {
-    c.setStatus(400).json({ handled_locally: true, error: err.message });
-  }
-);</code></pre>
+    <section id="validation">
+        <h2>4. Validation</h2>
+        <p>Class-based, type-safe validation powered by Zod.</p>
 
-<hr />
-
-<h2>11. Class-Based Validation</h2>
-<p>
-  Zod-backed validation classes. Data is injected directly into the context type-safely.
-  (Source: <code>examples/10_validation.ts</code>)
-</p>
-
-<pre><code class="language-ts">class CreateUserRequest {
-  static schema = z.object({
-    username: z.string().min(3),
-    email: z.string().email()
-  });
-  
-  constructor(data: any) {
-    this.username = data.username;
-    this.email = data.email;
-  }
-
+        <h3>Basic Body Validation</h3>
+        <p>Validating JSON bodies and injecting the typed class instance.</p>
+        <span class="filename">examples/10_validation.ts</span>
+        <pre><code>class CreateUserRequest {
+  static schema = z.object({ username: z.string().min(3) });
+  public username: string;
+  constructor(data: any) { this.username = data.username; }
   validate() { CreateUserRequest.schema.parse(this); }
 }
 
 app.post("/users", async (c) => {
-  // Retrieve validated instance
-  const user = c.getValid(CreateUserRequest);
+  const user = c.getValid(CreateUserRequest); // Typed!
   return c.json({ name: user.username });
 }, Validator(CreateUserRequest));</code></pre>
 
-<h3>Flexible Validation Sources</h3>
-<p>Validate Headers, Query Params, and Route Params. (Source: <code>examples/22_flexible_validation.ts</code>)</p>
+        <h3>Multiple Validators</h3>
+        <p>Chaining multiple validators on a single route.</p>
+        <span class="filename">examples/19_multi_validator.ts</span>
+        <pre><code>app.post("/create", async (c) => {
+  const user = c.getValid(User);
+  const meta = c.getValid(Meta);
+  c.json({ user, meta });
+}, Validator(User), Validator(Meta));</code></pre>
 
-<pre><code class="language-ts">app.get(
-  "/users/:id",
-  handler,
-  Validator(UserIdParam, Source.PARAM("id")),
-  Validator(SortQuery, Source.QUERY("sort")),
-  Validator(ApiKeyHeader, Source.HEADER("x-api-key"))
-);</code></pre>
+        <h3>Flexible Sources</h3>
+        <p>Validating Headers, Query Params, and Path Params using <code>Source</code>.</p>
+        <span class="filename">examples/22_flexible_validation.ts</span>
+        <pre><code>import { Source } from "../src/ValidationSource";
 
-<hr />
+app.get("/users/:id", async (c) => {
+  const { id } = c.getValid(UserIdParam);
+}, Validator(UserIdParam, Source.PARAM("id")));</code></pre>
+    </section>
 
-<h2>12. Routing Precedence</h2>
-<p>
-  Deterministic routing: Exact &gt; Param &gt; Wildcard.
-  (Source: <code>examples/12_conflict_routes.ts</code>)
-</p>
+    <section id="advanced-routing">
+        <h2>5. Advanced Routing & Content</h2>
 
-<pre><code class="language-ts">// 1. Exact
-app.get("/files/static", ...); 
+        <h3>Static Files & Embedding</h3>
+        <p>Serving from disk or embedding files into the binary with Bun Macros.</p>
+        <span class="filename">examples/7_static_files.ts</span>
+        <pre><code>import { embedDir } from "../src/macros" with { type: "macro" };
 
-// 2. Param (matches /files/123)
-app.get("/files/:id", ...);
+// Disk
+app.static("/files", resolve("."));
 
-// 3. Wildcard (matches /files/a/b)
-app.get("/files/*", ...);</code></pre>
+// Embedded Memory
+const assets = embedDir(resolve("../src"));
+app.embed("/assets", assets);</code></pre>
 
-<hr />
+        <h3>Route Precedence</h3>
+        <p>Understanding how Exact, Param, and Wildcard routes resolve.</p>
+        <span class="filename">examples/12_conflict_routes.ts</span>
+        <pre><code>// 1. Exact (/files/static) wins
+// 2. Param (/files/:id) is second
+// 3. Wildcard (/files/*) is last fallback</code></pre>
 
-<h2>13. CORS</h2>
-<p>Built-in CORS middleware. (Source: <code>examples/13_cors.ts</code>)</p>
-
-<pre><code class="language-ts">// Global
-app.use(cors());
-
-// Per-Route
-app.get("/restricted", handler, cors({ 
-  origin: "https://example.com",
-  credentials: true 
-}));</code></pre>
-
-<hr />
-
-<h2>14. Streaming Responses</h2>
-<p>Native <code>ReadableStream</code> support. (Source: <code>examples/14_streaming.ts</code>)</p>
-
-<pre><code class="language-ts">app.get("/stream", async (c) => {
+        <h3>Streaming</h3>
+        <p>Streaming responses using <code>ReadableStream</code>.</p>
+        <span class="filename">examples/14_streaming.ts</span>
+        <pre><code>app.get("/stream", async (c) => {
   const stream = new ReadableStream({ ... });
   c.stream(stream);
 });</code></pre>
 
-<hr />
-
-<h2>15. File Downloads</h2>
-<p>Send files with automatic MIME detection. (Source: <code>examples/15_file_download.ts</code>)</p>
-
-<pre><code class="language-ts">app.get("/download", async (c) => {
-  await c.file("./README.md");
+        <h3>Server-Sent Events (SSE)</h3>
+        <p>Using streams to push events to the client.</p>
+        <span class="filename">examples/24_server_sent_events.ts</span>
+        <pre><code>app.get("/events", async (c) => {
+  c.setHeader("Content-Type", "text/event-stream");
+  // ... create stream ...
+  c.stream(stream);
 });</code></pre>
 
-<hr />
+        <h3>HTMX Integration</h3>
+        <p>Checking headers to return HTML fragments.</p>
+        <span class="filename">examples/26_htmx_fragments.ts</span>
+        <pre><code>app.get("/search", async (c) => {
+  if (c.getHeader("HX-Request")) {
+    return c.html("&lt;li&gt;Fragment Only&lt;/li&gt;");
+  }
+  return c.html("&lt;html&gt;Full Page&lt;/html&gt;");
+});</code></pre>
+    </section>
 
-<h2>16. Request-Scoped Data</h2>
-<p>
-  Demonstrates passing data through the request lifecycle.
-  (Source: <code>examples/16_request_scoped_data.ts</code>)
-</p>
+    <section id="websockets">
+        <h2>6. WebSockets</h2>
 
-<hr />
+        <h3>Basic Handlers</h3>
+        <p>Handling Open, Message, and Close events.</p>
+        <span class="filename">examples/8_websocket.ts</span>
+        <pre><code>app.open("/chat", async (ws) => ws.send("Welcome!"));
+app.message("/chat", async (ws, msg) => ws.send(`Echo: ${msg}`));</code></pre>
 
-<h2>17. HTTPContext Pooling</h2>
-<p>Configure pool size for high-load services to reduce garbage collection. (Source: <code>examples/17_http_context_pool.ts</code>)</p>
-
-<pre><code class="language-ts">app.setHTTPContextPool(500);</code></pre>
-
-<hr />
-
-<h2>18. Async Error Propagation</h2>
-<p>Errors bubble correctly through async middleware chains. (Source: <code>examples/18_async_error_propagation.ts</code>)</p>
-
-<hr />
-
-<h2>19. Multiple Validators</h2>
-<p>Apply multiple validation classes to a single route. (Source: <code>examples/19_multi_validator.ts</code>)</p>
-
-<pre><code class="language-ts">app.post("/create", async (c) => {
-    const user = c.getValid(User);
-    const meta = c.getValid(Meta);
-    c.json({ user, meta });
-  },
-  Validator(User),
-  Validator(Meta)
-);</code></pre>
-
-<hr />
-
-<h2>20. Grouped WebSockets</h2>
-<p>Defining WebSocket routes inside prefix groups. (Source: <code>examples/20_ws_grouped_chat.ts</code>)</p>
-
-<pre><code class="language-ts">const ws = app.group("/ws", logger);
-
-ws.open("/chat", async (ws) => { ... });
+        <h3>Grouped WebSockets</h3>
+        <p>Using Route Groups with WebSockets.</p>
+        <span class="filename">examples/20_ws_grouped_chat.ts</span>
+        <pre><code>const ws = app.group("/ws");
 ws.message("/chat", async (ws, msg) => { ... });</code></pre>
 
-<hr />
+        <h3>WebSocket Validation</h3>
+        <p>Validating incoming messages using <code>Source.WS_MESSAGE</code>.</p>
+        <span class="filename">examples/23_ws_validation.ts</span>
+        <pre><code>class ChatMessage { ... }
 
-<h2>21. Route Introspection</h2>
-<p>Demonstrates how the router resolves conflicting paths. (Source: <code>examples/21_route_introspection.ts</code>)</p>
+ws.message("/channel", async (ws, raw) => {
+  const msg = ws.data.getValid(ChatMessage); // Fully typed
+  console.log(msg.text);
+}, Validator(ChatMessage, Source.WS_MESSAGE));</code></pre>
+    </section>
 
-<hr />
+    <section id="error-handling">
+        <h2>7. Error Handling</h2>
+        <p>Handling 404s, global errors, and async error propagation.</p>
+        <span class="filename">examples/9_error_handling.ts</span>
+        <pre><code>// 404 Handler
+app.onNotFound(async (c) => {
+  return c.setStatus(404).json({ error: "Not Found" });
+});
 
-<h2>Appendix: Example Directory</h2>
-<p>
-  The <code>examples/</code> directory is the canonical documentation source.
-  This README is generated from <code>README.html</code> using:
-</p>
+// Global Error Handler
+app.onErr(async (c) => {
+  const err = c.getErr();
+  return c.setStatus(500).json({ error: err.message });
+});</code></pre>
 
-<pre><code class="language-bash">make readme</code></pre>
+        <span class="filename">examples/18_async_error_propagation.ts</span>
+        <p>Errors thrown in handlers automatically bubble up through middleware to the global handler.</p>
+    </section>
 
+</main>
 </body>
 </html>

@@ -22,6 +22,9 @@ export class HTTPContext {
   
   params: Record<string, string> = {};
   private _body?: string | Record<string, any> | FormData;
+
+  // Staging area for WebSocket messages to allow Validator access
+  public _wsMessage: string | Buffer | null = null;
   
   // Generic data store (for strings/legacy middleware)
   data: Record<string, any> = {};
@@ -46,6 +49,7 @@ export class HTTPContext {
     this._url = null;
     this._body = undefined;
     this.err = undefined;
+    this._wsMessage = null; // Reset WS Message
     
     // Clear Stores
     this.data = {}; 

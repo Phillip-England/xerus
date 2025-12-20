@@ -59,6 +59,13 @@ export class WSHandler {
 
       base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
         const context = ws.data;
+
+        // INJECTION: If this is a message event (args[0] exists), inject it into context
+        // This allows Middleware (like Validator) to access the raw message via c._wsMessage
+        if (args.length > 0) {
+            context._wsMessage = args[0];
+        }
+
         let nextPending = false;
 
         const safeNext = async () => {

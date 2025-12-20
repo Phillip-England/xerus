@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Middleware } from "./Middleware";
 import { HTTPContext, type Constructable } from "./HTTPContext";
 import { BodyType } from "./BodyType";
-import { Source, type ValidationConfig } from "./ValidationSource"; // Updated import
+import { Source, type ValidationConfig } from "./ValidationSource"; 
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { TypeValidator } from "./TypeValidator";
@@ -28,14 +28,24 @@ export const Validator = <T extends TypeValidator>(
           else if (config.format === "MULTIPART") rawData = await c.parseBody(BodyType.MULTIPART_FORM);
           break;
 
+        case "WS_MESSAGE":
+          // Retrieve the injected message
+          rawData = c._wsMessage;
+          
+          if (typeof rawData === "string") {
+            try {
+              rawData = JSON.parse(rawData);
+            } catch (e) {
+               // Parsing failed. Keep as string.
+            }
+          }
+          break;
+
         case "QUERY":
-          // If a key is specified, we extract JUST that key into an object wrapper
-          // e.g. ?page=1 becomes { page: "1" }
           if (config.key) {
             const val = c.query(config.key);
             rawData = { [config.key]: val }; 
           } else {
-            // Otherwise take all queries
             rawData = c.queries;
           }
           break;
@@ -60,7 +70,10 @@ export const Validator = <T extends TypeValidator>(
     }
 
     // 2. Instantiate the Class with the derived data
-    const instance = new TargetClass(rawData);
+    // FIX: Ensure we pass an empty object if rawData is null/undefined 
+    // to prevent "Cannot read properties of undefined" inside the constructor.
+    const safeData = rawData ?? {};
+    const instance = new TargetClass(safeData);
 
     // 3. Run the Class's validation logic
     try {

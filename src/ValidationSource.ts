@@ -2,7 +2,7 @@
  * Configuration object telling the Validator middleware where to look.
  */
 export interface ValidationConfig {
-  target: "BODY" | "QUERY" | "PARAM" | "HEADER";
+  target: "BODY" | "QUERY" | "PARAM" | "HEADER" | "WS_MESSAGE";
   format?: "JSON" | "FORM" | "MULTIPART";
   key?: string; // If present, we look for this specific key
 }
@@ -19,6 +19,13 @@ export const Source = {
   JSON: { target: "BODY", format: "JSON" } as ValidationConfig,
   FORM: { target: "BODY", format: "FORM" } as ValidationConfig,
   MULTIPART: { target: "BODY", format: "MULTIPART" } as ValidationConfig,
+  
+  // WebSocket Targets
+  /**
+   * Targets the incoming WebSocket message.
+   * Automatically attempts to parse strings as JSON.
+   */
+  WS_MESSAGE: { target: "WS_MESSAGE" } as ValidationConfig,
 
   // Specific Targets (Functions)
   
