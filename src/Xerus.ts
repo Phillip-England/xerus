@@ -254,6 +254,8 @@ export class Xerus {
         async message(ws: ServerWebSocket<any>, message) {
           try {
             const handler = ws.data._wsHandler as WSHandler;
+            
+            // UPDATED: Pass through raw message (String or Buffer) to protect binary data
             if (handler?.compiledMessage) await handler.compiledMessage(ws, message);
           } catch (e: any) {
             console.error("[WS ERROR] Message:", e.message);

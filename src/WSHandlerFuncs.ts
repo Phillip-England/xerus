@@ -9,7 +9,7 @@ export type WSCloseFunc = (
 
 export type WSMessageFunc = (
   ws: ServerWebSocket<HTTPContext>,
-  message: string | Buffer,
+  message: string | Buffer, // UPDATED: Allow Buffer for binary data
 ) => Promise<void>;
 
 export type WSOpenFunc = (ws: ServerWebSocket<HTTPContext>) => Promise<void>;

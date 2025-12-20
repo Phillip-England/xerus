@@ -15,7 +15,7 @@ export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
   public compiledMessage?: (
     ws: ServerWebSocket<HTTPContext>,
-    message: string | Buffer,
+    message: string | Buffer, // UPDATED: Allow Buffer
   ) => Promise<void>;
   public compiledDrain?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
   public compiledClose?: (
@@ -44,8 +44,6 @@ export class WSHandler {
              const context = ws.data;
              context.setErr(e);
              await errHandler(context, e);
-             // WebSockets cannot "return" a response like HTTP, 
-             // but the error handler can log or send a message via ws.send
          } else {
              throw e; // Bubble to global
          }
@@ -61,7 +59,6 @@ export class WSHandler {
         const context = ws.data;
 
         // INJECTION: If this is a message event (args[0] exists), inject it into context
-        // This allows Middleware (like Validator) to access the raw message via c._wsMessage
         if (args.length > 0) {
             context._wsMessage = args[0];
         }

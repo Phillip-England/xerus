@@ -32,6 +32,12 @@ export const Validator = <T extends TypeValidator>(
           // Retrieve the injected message
           rawData = c._wsMessage;
           
+          // UPDATED: Automatically convert Buffer to string for validation attempts.
+          // This allows users to validate JSON without breaking binary support in handlers.
+          if (Buffer.isBuffer(rawData)) {
+            rawData = rawData.toString();
+          }
+
           if (typeof rawData === "string") {
             try {
               rawData = JSON.parse(rawData);

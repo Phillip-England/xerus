@@ -24,6 +24,7 @@ export class HTTPContext {
   private _body?: string | Record<string, any> | FormData;
 
   // Staging area for WebSocket messages to allow Validator access
+  // UPDATED: Allow Buffer so binary data isn't corrupted
   public _wsMessage: string | Buffer | null = null;
   
   // Generic data store (for strings/legacy middleware)
@@ -188,10 +189,6 @@ export class HTTPContext {
     return this.url.searchParams.get(key) || defaultValue;
   }
 
-  /**
-   * Retrieves all query parameters as a key-value object.
-   * Useful for validating query strings.
-   */
   get queries(): Record<string, string> {
     return Object.fromEntries(this.url.searchParams);
   }
@@ -285,7 +282,6 @@ export class HTTPContext {
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
     
-    // UPDATED: Use setHeader so MutResponse can route this to the cookie array
     this.setHeader("Set-Cookie", cookieString); 
   }
 

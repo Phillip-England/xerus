@@ -20,10 +20,7 @@ export function wsAdvancedMethods(app: Xerus) {
 
   // 2. Binary Data Echo
   app.message("/ws/binary", async (ws, message) => {
-    if (message instanceof Buffer) {
-      // Echo back the binary data
-      ws.send(message);
-    }
+    ws.send(message);
   });
 
   // 3. Close Handler Tracking
