@@ -1,42 +1,43 @@
+// PATH: /home/jacex/src/xerus/servers/websocket/1_wsAdvanced.ts
+
 import { Xerus } from "../../src/Xerus";
-import { WSRoute } from "../../src/WSRoute";
+import { WSRoute, WSMethod } from "../../src/WSRoute";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Route } from "../../src/Route";
+import type { WSContext } from "../../src/WSContext";
 
 export function wsAdvancedMethods(app: Xerus) {
-  // 1. Pub/Sub - A simple chat room
-  const roomRoute = new WSRoute("/ws/room/:name");
-  
-  roomRoute.open(async (ws) => {
-    const room = ws.data.getParam("name");
-    ws.subscribe(room);
-    ws.publish(room, `User joined ${room}`);
-  });
+  // 1. Pub/Sub (OPEN + MESSAGE)
+  app.mount(
+    new WSRoute(WSMethod.OPEN, "/ws/room/:name", async (c: WSContext) => {
+      const room = c.http.getParam("name");
+      c.ws.subscribe(room);
+      c.ws.publish(room, `User joined ${room}`);
+    }),
 
-  roomRoute.message(async (ws, message) => {
-    const room = ws.data.getParam("name");
-    ws.publish(room, message);
-  });
-  
-  app.mount(roomRoute);
+    new WSRoute(WSMethod.MESSAGE, "/ws/room/:name", async (c: WSContext) => {
+      const room = c.http.getParam("name");
+      c.ws.publish(room, c.message);
+    }),
+  );
 
-  // 2. Binary Data Echo
-  const binRoute = new WSRoute("/ws/binary");
-  binRoute.message(async (ws, message) => {
-    ws.send(message);
-  });
-  app.mount(binRoute);
+  // 2. Binary Echo (MESSAGE)
+  app.mount(
+    new WSRoute(WSMethod.MESSAGE, "/ws/binary", async (c: WSContext) => {
+      c.ws.send(c.message);
+    }),
+  );
 
-  // 3. Close Handler Tracking
+  // 3. Close tracking (CLOSE)
   let closedConnections = 0;
-  
-  app.mount(new Route("GET", "/ws-stats", async (c: HTTPContext) => {
-    c.json({ closed: closedConnections });
-  }));
 
-  const lifecycleRoute = new WSRoute("/ws/lifecycle");
-  lifecycleRoute.close(async (ws, code, reason) => {
-    closedConnections++;
-  });
-  app.mount(lifecycleRoute);
+  app.mount(
+    new Route("GET", "/ws-stats", async (c: HTTPContext) => {
+      c.json({ closed: closedConnections });
+    }),
+
+    new WSRoute(WSMethod.CLOSE, "/ws/lifecycle", async (_c: WSContext) => {
+      closedConnections++;
+    }),
+  );
 }

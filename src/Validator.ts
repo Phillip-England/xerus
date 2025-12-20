@@ -1,26 +1,20 @@
-import { z } from "zod";
 import { Middleware } from "./Middleware";
 import { HTTPContext, type Constructable } from "./HTTPContext";
 import { BodyType } from "./BodyType";
-import { Source, type ValidationConfig } from "./ValidationSource"; 
+import { type ValidationConfig } from "./ValidationSource";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { TypeValidator } from "./TypeValidator";
+import { z } from "zod";
 
-/**
- * Validator Middleware
- * @param TargetClass The class definition to instantiate and validate.
- * @param config Where to derive the data from. Defaults to Source.JSON.
- */
 export const Validator = <T extends TypeValidator>(
   TargetClass: Constructable<T>,
-  config: ValidationConfig = Source.JSON
+  config: ValidationConfig,
 ) => {
   return new Middleware(async (c: HTTPContext, next) => {
     let rawData: any;
 
     try {
-      // 1. Extract Data based on Configuration
       switch (config.target) {
         case "BODY":
           if (config.format === "JSON") rawData = await c.parseBody(BodyType.JSON);
@@ -28,82 +22,104 @@ export const Validator = <T extends TypeValidator>(
           else if (config.format === "MULTIPART") rawData = await c.parseBody(BodyType.MULTIPART_FORM);
           break;
 
-        case "WS_MESSAGE":
-          // Retrieve the injected message
-          rawData = c._wsMessage;
-          
-          // UPDATED: Automatically convert Buffer to string for validation attempts.
-          // This allows users to validate JSON without breaking binary support in handlers.
-          if (Buffer.isBuffer(rawData)) {
-            rawData = rawData.toString();
-          }
-
-          if (typeof rawData === "string") {
-            try {
-              rawData = JSON.parse(rawData);
-            } catch (e) {
-               // Parsing failed. Keep as string.
-            }
-          }
-          break;
-
         case "QUERY":
-          if (config.key) {
-            const val = c.query(config.key);
-            rawData = { [config.key]: val }; 
-          } else {
-            rawData = c.queries;
-          }
+          rawData = config.key ? { [config.key]: c.query(config.key) } : c.queries;
           break;
 
         case "PARAM":
           if (!config.key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.PARAM requires a key");
-          const paramVal = c.getParam(config.key);
-          rawData = { [config.key]: paramVal };
+          rawData = { [config.key]: c.getParam(config.key) };
           break;
 
         case "HEADER":
           if (!config.key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.HEADER requires a key");
-          const headerVal = c.getHeader(config.key) || "";
-          rawData = { [config.key]: headerVal };
+          rawData = { [config.key]: c.getHeader(config.key) };
+          break;
+
+        case "WS_MESSAGE":
+          rawData = c._wsMessage;
+          if (Buffer.isBuffer(rawData)) rawData = rawData.toString();
+          if (typeof rawData === "string") {
+            try {
+              rawData = JSON.parse(rawData);
+            } catch {
+              // allow raw string
+            }
+          }
+          break;
+
+        case "WS_CLOSE":
+          rawData = c.getStore("_wsCloseArgs") || {};
           break;
 
         default:
           throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
       }
     } catch (e: any) {
-        throw e;
+      // Extraction/parsing problems
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `Data Extraction Failed: ${e.message}`);
     }
 
-    // 2. Instantiate the Class with the derived data
-    // FIX: Ensure we pass an empty object if rawData is null/undefined 
-    // to prevent "Cannot read properties of undefined" inside the constructor.
     const safeData = rawData ?? {};
     const instance = new TargetClass(safeData);
 
-    // 3. Run the Class's validation logic
     try {
-      // UPDATED: Pass the HTTPContext to the validate method
       await instance.validate(c);
     } catch (e: any) {
+      // ✅ Validation problems (semantic)
       if (e instanceof z.ZodError) {
-        const errorMessages = e.issues
-          .map((err: any) => `${err.path.join(".")}: ${err.message}`)
-          .join(", ");
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          `Validation Failed: ${errorMessages}`
-        );
+        const msg = e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, `Validation Failed: ${msg}`);
       }
-
-      throw new SystemErr(
-        SystemErrCode.BODY_PARSING_FAILED,
-        e.message || "Validation failed"
-      );
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e.message || "Validation failed");
     }
 
-    // 4. Store the validated class instance
-    c.setValid(TargetClass, instance);
+    // ✅ Store typed instance
+    c.validated.set(TargetClass, instance);
+
+    // ✅ Store convenience categories + string keys (multi-validator friendly)
+    switch (config.target) {
+      case "BODY":
+        if (config.format === "JSON") {
+          c.validated.json = instance;
+          c.validated.set("json", instance);
+        } else if (config.format === "FORM") {
+          c.validated.form = instance;
+          c.validated.set("form", instance);
+        } else if (config.format === "MULTIPART") {
+          c.validated.multipart = instance;
+          c.validated.set("multipart", instance);
+        }
+        break;
+
+      case "QUERY":
+        c.validated.query = instance;
+        c.validated.set(config.key ? `query:${config.key}` : "query", instance);
+        c.validated.set("query", instance);
+        break;
+
+      case "PARAM":
+        c.validated.params = instance;
+        c.validated.set(config.key ? `param:${config.key}` : "param", instance);
+        c.validated.set("param", instance);
+        break;
+
+      case "HEADER":
+        c.validated.headers = instance;
+        c.validated.set(config.key ? `header:${config.key}` : "header", instance);
+        c.validated.set("header", instance);
+        break;
+
+      case "WS_MESSAGE":
+        c.validated.wsMessage = instance;
+        c.validated.set("ws_message", instance);
+        break;
+
+      case "WS_CLOSE":
+        c.validated.wsClose = instance;
+        c.validated.set("ws_close", instance);
+        break;
+    }
 
     await next();
   });

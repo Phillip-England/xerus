@@ -1,3 +1,5 @@
+// PATH: /home/jacex/src/xerus/servers/http/6_errorHandling.test.ts
+
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
 
@@ -6,8 +8,8 @@ test("Errors: GET /err/standard should be caught by app.onErr", async () => {
   const data = await res.json();
 
   expect(res.status).toBe(500);
-  expect(data.error).toBe("Custom Global Handler");
-  expect(data.detail).toBe("Standard Route Failure");
+  expect(data.error.message).toBe("Custom Global Handler");
+  expect(data.error.detail).toBe("Standard Route Failure");
 });
 
 test("Errors: GET /err/middleware should be caught by app.onErr", async () => {
@@ -15,7 +17,7 @@ test("Errors: GET /err/middleware should be caught by app.onErr", async () => {
   const data = await res.json();
 
   expect(res.status).toBe(500);
-  expect(data.detail).toBe("Failure in Middleware");
+  expect(data.error.detail).toBe("Failure in Middleware");
 });
 
 test("Errors: Non-existent route should trigger SystemErr (404)", async () => {
@@ -28,10 +30,6 @@ test("Errors: Non-existent route should trigger SystemErr (404)", async () => {
 });
 
 test("Errors: Accessing missing file should trigger SystemErr (404)", async () => {
-  // Define a route that tries to serve a non-existent file
-  // Note: We register this inside the test context via the app instance
-  const res = await fetch(`${BaseURL}/err/file-missing`); 
-  // We'll use the existing /file-missing from your server.ts if available, 
-  // or rely on a standard 404 from static serving.
+  const res = await fetch(`${BaseURL}/err/file-missing`);
   expect(res.status).toBe(404);
 });

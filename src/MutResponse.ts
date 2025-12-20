@@ -2,7 +2,7 @@ export class MutResponse {
   statusCode: number;
   headers: Record<string, string>;
   // Store cookies separately to allow multiple 'Set-Cookie' headers
-  cookies: string[]; 
+  cookies: string[];
   bodyContent: BodyInit | null;
 
   constructor() {
@@ -15,7 +15,7 @@ export class MutResponse {
   reset(): void {
     this.statusCode = 200;
     this.headers = {};
-    this.cookies = []; // Reset cookies
+    this.cookies = [];
     this.bodyContent = "";
   }
 
@@ -24,8 +24,11 @@ export class MutResponse {
     return this;
   }
 
+  /**
+   * Prefer using appendCookie() for Set-Cookie to avoid footguns.
+   * This still supports "Set-Cookie" for backwards compatibility.
+   */
   setHeader(name: string, value: string): this {
-    // Special handling for Set-Cookie to allow multiples
     if (name.toLowerCase() === "set-cookie") {
       this.cookies.push(value);
     } else {
@@ -34,9 +37,16 @@ export class MutResponse {
     return this;
   }
 
+  /**
+   * Explicit cookie API (recommended)
+   */
+  appendCookie(value: string): this {
+    this.cookies.push(value);
+    return this;
+  }
+
   getHeader(name: string): string {
     if (name.toLowerCase() === "set-cookie") {
-      // Return the last set cookie if multiple exist (simplification for internal checks)
       return this.cookies.length > 0 ? this.cookies[this.cookies.length - 1] : "";
     }
     return this.headers[name] || "";
@@ -48,7 +58,7 @@ export class MutResponse {
   }
 
   send(): Response {
-    // 1. Fast Path: No cookies? Use the plain object (Zero allocation overhead)
+    // Fast Path: No cookies
     if (this.cookies.length === 0) {
       return new Response(this.bodyContent, {
         status: this.statusCode,
@@ -56,8 +66,7 @@ export class MutResponse {
       });
     }
 
-    // 2. Slow Path: We have cookies. We must merge them.
-    // We use the Headers object here to handle the merging correctly for the browser.
+    // Slow Path: merge Set-Cookie correctly
     const h = new Headers(this.headers);
     for (const cookie of this.cookies) {
       h.append("Set-Cookie", cookie);

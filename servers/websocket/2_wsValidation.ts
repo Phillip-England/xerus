@@ -1,11 +1,12 @@
+// PATH: /home/jacex/src/xerus/servers/websocket/2_wsValidation.ts
+
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
-import { WSRoute } from "../../src/WSRoute";
-import { Validator } from "../../src/Validator";
+import { WSRoute, WSMethod } from "../../src/WSRoute";
 import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
+import type { WSContext } from "../../src/WSContext";
 
-// 1. Define the Message Structure
 class ChatMessage implements TypeValidator {
   type: "chat" | "ping";
   content: string;
@@ -25,20 +26,11 @@ class ChatMessage implements TypeValidator {
 }
 
 export function wsValidationMethods(app: Xerus) {
-  const wsValRoute = new WSRoute("/ws/validate");
-
-  wsValRoute.message(
-    async (ws, raw) => {
-      const msg = ws.data.getValid(ChatMessage);
-
-      if (msg.type === "ping") {
-        ws.send("pong");
-      } else {
-        ws.send(`received: ${msg.content}`);
-      }
-    },
-    Validator(ChatMessage, Source.WS_MESSAGE)
+  app.mount(
+    new WSRoute(WSMethod.MESSAGE, "/ws/validate", async (c: WSContext, data) => {
+      const msg = data.get(ChatMessage); // ✅ from data object
+      if (msg.type === "ping") c.ws.send("pong");
+      else c.ws.send(`received: ${msg.content}`);
+    }).validate(ChatMessage, Source.WS_MESSAGE),
   );
-
-  app.mount(wsValRoute);
 }

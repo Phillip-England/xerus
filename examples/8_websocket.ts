@@ -1,30 +1,27 @@
+// PATH: /home/jacex/src/xerus/examples/8_websocket.ts
+
 import { Xerus } from "../src/Xerus";
-import { HTTPContext } from "../src/HTTPContext";
+import { WSRoute, WSMethod } from "../src/WSRoute";
 import { logger } from "../src/Middleware";
-import type { ServerWebSocket } from "bun";
+import type { WSContext } from "../src/WSContext";
 
 const app = new Xerus();
 
-// 1. Open Handler (with specific middleware)
-app.open("/chat", async (ws: ServerWebSocket<HTTPContext>) => {
-  console.log("Client connected");
-  ws.send("Welcome to Xerus Chat!");
-}, logger);
+app.mount(
+  new WSRoute(WSMethod.OPEN, "/chat", async (c: WSContext) => {
+    console.log("Client connected", c.http.path);
+    c.ws.send("Welcome to Xerus Chat!");
+  }).use(logger),
 
-// 2. Message Handler
-app.message("/chat", async (ws, message) => {
-  // Echo functionality
-  ws.send(`You said: ${message}`);
-  
-  if (message === "close") {
-    ws.close(1000, "Bye!");
-  }
-});
+  new WSRoute(WSMethod.MESSAGE, "/chat", async (c: WSContext) => {
+    c.ws.send(`You said: ${c.message}`);
+    if (c.message === "close") c.ws.close(1000, "Bye!");
+  }).use(logger),
 
-// 3. Close Handler
-app.close("/chat", async (ws, code, reason) => {
-  console.log(`Closed: ${code} - ${reason}`);
-});
+  new WSRoute(WSMethod.CLOSE, "/chat", async (c: WSContext) => {
+    console.log(`Closed: ${c.code} - ${c.reason}`);
+  }),
+);
 
 console.log("Connect via ws://localhost:8080/chat");
 await app.listen(8080);

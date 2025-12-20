@@ -1,118 +1,118 @@
-import type {
-  WSCloseFunc,
-  WSDrainFunc,
-  WSMessageFunc,
-  WSOpenFunc,
-} from "./WSHandlerFuncs";
-import { Middleware } from "./Middleware";
-import { HTTPContext } from "./HTTPContext";
+// PATH: /home/jacex/src/xerus/src/WSHandler.ts
+
 import type { ServerWebSocket } from "bun";
+import { Middleware } from "./Middleware";
+import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
+import type { HTTPContext } from "./HTTPContext";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
-import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
+import { WSContext } from "./WSContext";
+import type { WSCloseFunc, WSDrainFunc, WSMessageFunc, WSOpenFunc } from "./WSHandlerFuncs";
+
+type EventType = "OPEN" | "MESSAGE" | "CLOSE" | "DRAIN";
 
 export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
-  public compiledMessage?: (
-    ws: ServerWebSocket<HTTPContext>,
-    message: string | Buffer, // UPDATED: Allow Buffer
-  ) => Promise<void>;
+  public compiledMessage?: (ws: ServerWebSocket<HTTPContext>, message: string | Buffer) => Promise<void>;
   public compiledDrain?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
-  public compiledClose?: (
-    ws: ServerWebSocket<HTTPContext>,
-    code: number,
-    reason: string,
-  ) => Promise<void>;
+  public compiledClose?: (ws: ServerWebSocket<HTTPContext>, code: number, reason: string) => Promise<void>;
 
-  // Store granular error handlers for each lifecycle event
-  private openErrHandler?: HTTPErrorHandlerFunc;
-  private messageErrHandler?: HTTPErrorHandlerFunc;
-  private drainErrHandler?: HTTPErrorHandlerFunc;
-  private closeErrHandler?: HTTPErrorHandlerFunc;
-
-  public createChain(
-    handler: Function,
+  private createChain(
+    event: EventType,
+    handler: (c: WSContext, data: HTTPContext["validated"]) => Promise<void>,
     middlewares: Middleware<HTTPContext>[],
-    errHandler?: HTTPErrorHandlerFunc
-  ): any {
-    // Base handler execution
-    let base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
+    errHandler?: HTTPErrorHandlerFunc,
+  ) {
+    let chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
+      const http = ws.data;
+
+      let c: WSContext;
+      if (event === "MESSAGE") {
+        const msg = (args[0] ?? null) as string | Buffer | null;
+        http._wsMessage = msg;
+        c = new WSContext(ws, http, { message: msg });
+      } else if (event === "CLOSE") {
+        const code = (args[0] ?? 0) as number;
+        const reason = (args[1] ?? "") as string;
+        http.setStore("_wsCloseArgs", { code, reason });
+        c = new WSContext(ws, http, { code, reason });
+      } else {
+        c = new WSContext(ws, http);
+      }
+
       try {
-        await handler(ws, ...args);
+        await handler(c, c.data);
       } catch (e: any) {
-         if (errHandler) {
-             const context = ws.data;
-             context.setErr(e);
-             await errHandler(context, e);
-         } else {
-             throw e; // Bubble to global
-         }
+        if (errHandler) {
+          http.setErr(e);
+          await errHandler(http, e);
+          return;
+        }
+        throw e;
       }
     };
 
-    // Wrap middlewares
     for (let i = middlewares.length - 1; i >= 0; i--) {
-      const middleware = middlewares[i];
-      const nextChain = base;
+      const mw = middlewares[i];
+      const nextChain = chain;
 
-      base = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
-        const context = ws.data;
+      chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
+        const http = ws.data;
 
-        // INJECTION: If this is a message event (args[0] exists), inject it into context
-        if (args.length > 0) {
-            context._wsMessage = args[0];
+        if (event === "MESSAGE") {
+          http._wsMessage = (args[0] ?? null) as any;
+        } else if (event === "CLOSE") {
+          const code = (args[0] ?? 0) as number;
+          const reason = (args[1] ?? "") as string;
+          http.setStore("_wsCloseArgs", { code, reason });
         }
 
         let nextPending = false;
-
         const safeNext = async () => {
           nextPending = true;
           try {
-             await nextChain(ws, ...args);
+            await nextChain(ws, ...args);
           } finally {
-             nextPending = false;
+            nextPending = false;
           }
         };
 
         try {
-            await middleware.execute(context, safeNext);
+          await mw.execute(http, safeNext);
         } catch (e: any) {
-             if (errHandler) {
-                 context.setErr(e);
-                 await errHandler(context, e);
-             } else {
-                 throw e;
-             }
+          if (errHandler) {
+            http.setErr(e);
+            await errHandler(http, e);
+          } else {
+            throw e;
+          }
         }
 
         if (nextPending) {
-           throw new SystemErr(
-             SystemErrCode.MIDDLEWARE_ERROR, 
-             "A WebSocket Middleware called next() but did not await it."
-           );
+          throw new SystemErr(
+            SystemErrCode.MIDDLEWARE_ERROR,
+            "A WebSocket Middleware called next() but did not await it.",
+          );
         }
       };
     }
-    return base;
+
+    return chain;
   }
 
   setOpen(handler: WSOpenFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
-    this.openErrHandler = errHandler;
-    this.compiledOpen = this.createChain(handler, middlewares, errHandler);
+    this.compiledOpen = this.createChain("OPEN", handler, middlewares, errHandler);
   }
 
   setMessage(handler: WSMessageFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
-    this.messageErrHandler = errHandler;
-    this.compiledMessage = this.createChain(handler, middlewares, errHandler);
+    this.compiledMessage = this.createChain("MESSAGE", handler, middlewares, errHandler);
   }
 
   setDrain(handler: WSDrainFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
-    this.drainErrHandler = errHandler;
-    this.compiledDrain = this.createChain(handler, middlewares, errHandler);
+    this.compiledDrain = this.createChain("DRAIN", handler, middlewares, errHandler);
   }
 
   setClose(handler: WSCloseFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc) {
-    this.closeErrHandler = errHandler;
-    this.compiledClose = this.createChain(handler, middlewares, errHandler);
+    this.compiledClose = this.createChain("CLOSE", handler, middlewares, errHandler);
   }
 }

@@ -1,26 +1,29 @@
+// PATH: /home/jacex/src/xerus/examples/5_groups.ts
+
 import { Xerus } from "../src/Xerus";
-import { HTTPContext } from "../src/HTTPContext";
+import { Route } from "../src/Route";
 import { Middleware } from "../src/Middleware";
+import type { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
-const apiKeyMiddleware = new Middleware(async (c, next) => {
+const apiKeyMiddleware = new Middleware(async (c: HTTPContext, next) => {
   c.setHeader("X-API-Version", "v1");
   await next();
 });
 
-// Create a group with a prefix and shared middleware
-const api = app.group("/api/v1", apiKeyMiddleware);
+// No grouping: each route is an independent object.
+// If you want a “shared prefix”, just put it in the path.
+// If you want “shared middleware”, apply it per-route (explicit > magic).
 
-// Define routes on the group
-// Final Path: /api/v1/users
-api.get("/users", async (c: HTTPContext) => {
-  return c.json([{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }]);
-});
+app.mount(
+  new Route("GET", "/api/v1/users", async (c) => {
+    c.json([{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }]);
+  }).use(apiKeyMiddleware),
 
-// Final Path: /api/v1/status
-api.get("/status", async (c: HTTPContext) => {
-  return c.json({ healthy: true });
-});
+  new Route("GET", "/api/v1/status", async (c) => {
+    c.json({ healthy: true });
+  }).use(apiKeyMiddleware),
+);
 
 await app.listen(8080);

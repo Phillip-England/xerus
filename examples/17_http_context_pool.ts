@@ -1,13 +1,13 @@
 import { Xerus } from "../src/Xerus";
+import { Route } from "../src/Route";
 
 const app = new Xerus();
-
-// Increase pool size for high-traffic workloads
 app.setHTTPContextPool(500);
 
-app.get("/", async (c) => {
-  c.text("Optimized with HTTPContext pooling 🚀");
-});
+app.mount(
+  new Route("GET", "/", async (c) => {
+    c.text("Optimized with HTTPContext pooling 🚀");
+  }),
+);
 
-console.log("Context pool demo running");
 await app.listen(8080);

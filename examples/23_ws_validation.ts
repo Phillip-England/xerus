@@ -1,17 +1,17 @@
+// PATH: /home/jacex/src/xerus/examples/23_ws_validation.ts
+
 import { Xerus } from "../src/Xerus";
-import { Validator } from "../src/Validator";
+import { WSRoute, WSMethod } from "../src/WSRoute";
 import { Source } from "../src/ValidationSource";
 import { z } from "zod";
+import type { TypeValidator } from "../src/TypeValidator";
+import type { WSContext } from "../src/WSContext";
 
-const app = new Xerus();
-const ws = app.group("/ws");
-
-// 1. Define your Message Structure
-class ChatMessage {
+class ChatMessage implements TypeValidator {
   static schema = z.object({
     type: z.literal("chat"),
     text: z.string().min(1),
-    timestamp: z.number().optional()
+    timestamp: z.number().optional(),
   });
 
   public text: string;
@@ -27,20 +27,15 @@ class ChatMessage {
   }
 }
 
-// 2. Register with Source.WS_MESSAGE
-ws.message(
-  "/channel", 
-  async (ws, raw) => {
-    // 3. Ergonomic Retrieval
-    // No parsing needed here, Validator handled it.
-    // 'msg' is fully typed as ChatMessage
-    const msg = ws.data.getValid(ChatMessage);
-    
+const app = new Xerus();
+
+app.mount(
+  new WSRoute(WSMethod.MESSAGE, "/ws/channel", async (c: WSContext, data) => {
+    const msg = data.get(ChatMessage); // ✅ from data object
     console.log(`Received: ${msg.text} at ${msg.timestamp}`);
-    ws.send(`Echo: ${msg.text}`);
-  },
-  Validator(ChatMessage, Source.WS_MESSAGE)
+    c.ws.send(`Echo: ${msg.text}`);
+  }).validate(ChatMessage, Source.WS_MESSAGE),
 );
 
-console.log("Connect to ws://localhost:8080/ws/channel and send JSON: { \"type\": \"chat\", \"text\": \"Hello\" }");
+console.log('Connect to ws://localhost:8080/ws/channel and send JSON: { "type":"chat","text":"Hello" }');
 await app.listen(8080);

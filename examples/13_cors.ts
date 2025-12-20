@@ -1,27 +1,25 @@
 import { Xerus } from "../src/Xerus";
+import { Route } from "../src/Route";
 import { cors } from "../src/Middleware";
 
 const app = new Xerus();
 
-// Allow all origins (default)
 app.use(cors());
 
-app.get("/public", async (c) => {
-  c.json({ message: "CORS enabled for everyone 🌍" });
-});
-
-// Restricted CORS
-app.get(
-  "/restricted",
-  async (c) => {
-    c.json({ secure: true });
-  },
-  cors({
-    origin: "https://example.com",
-    methods: ["GET"],
-    credentials: true,
+app.mount(
+  new Route("GET", "/public", async (c) => {
+    c.json({ message: "CORS enabled for everyone 🌍" });
   }),
+
+  new Route("GET", "/restricted", async (c) => {
+    c.json({ secure: true });
+  }).use(
+    cors({
+      origin: "https://example.com",
+      methods: ["GET"],
+      credentials: true,
+    }),
+  ),
 );
 
-console.log("CORS demo running on http://localhost:8080");
 await app.listen(8080);

@@ -24,12 +24,8 @@ export class RouteGroup {
 
     // 2. Apply Group Middlewares (HTTP Routes only)
     if (route instanceof Route) {
-      // Prepend group middlewares to the route's middleware stack
       route.use(...this.middlewares);
-    } 
-    // Note: For WSRoute, we usually don't apply HTTP middlewares blindly 
-    // because they are specific to Open/Message events. 
-    // Users should attach specific WS middleware manually or we'd need more complex logic here.
+    }
 
     // 3. Mount to App
     this.app.mount(route);

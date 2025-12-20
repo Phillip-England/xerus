@@ -1,72 +1,89 @@
+// PATH: /home/jacex/src/xerus/src/HTTPContext.ts
+
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
+import { ValidatedData } from "./ValidatedData";
 
 // Helper type for Class Constructors
 export type Constructable<T> = new (...args: any[]) => T;
+
+type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
 export class HTTPContext {
   // @ts-ignore: Initialized in reset()
   req: Request;
   res: MutResponse;
+
   private _url: URL | null = null;
   path: string = "/";
   method: string = "GET";
   route: string = "";
-  
+
   // Lazy Segment Store
   private _segments: string[] | null = null;
-  
+
   params: Record<string, string> = {};
+
   private _body?: string | Record<string, any> | FormData;
+  private _rawBody: string | null = null;
+
+  // Tracks how the body has been consumed/parsed to prevent unsafe re-parses
+  private _parsedBodyMode: ParsedBodyMode = "NONE";
 
   public _wsMessage: string | Buffer | null = null;
-  
+
   // General Data Store (User middleware data)
   data: Record<string, any> = {};
 
-  // Validated Data Store
-  // We now support both Class constructors AND string keys (json, query, form)
-  private _validatorStore = new Map<Function | string, any>();
+  // ✅ Validated Data Store (separate object, passed into handlers)
+  validated: ValidatedData;
 
   private err: Error | undefined | string;
-    
+
   private _state: ContextState = ContextState.OPEN;
-  private _rawBody: string | null = null;
+
+  // Used by Xerus WS pooling
+  public _isWS: boolean = false;
 
   constructor() {
     this.res = new MutResponse();
+    this.validated = new ValidatedData();
   }
 
   reset(req: Request, params: Record<string, string> = {}) {
     this.req = req;
-    this.res.reset(); 
+    this.res.reset();
 
     this._state = ContextState.OPEN;
     this._url = null;
+    this._segments = null;
+
     this._body = undefined;
-    this._rawBody = null; 
+    this._rawBody = null;
+    this._parsedBodyMode = "NONE";
+
     this.err = undefined;
-    this._wsMessage = null; 
-    
-    this.data = {}; 
-    this._validatorStore.clear();
+    this._wsMessage = null;
+
+    this.data = {};
+    this.validated.clear();
+
+    this._isWS = false;
 
     const urlIndex = req.url.indexOf("/", 8);
     const queryIndex = req.url.indexOf("?", urlIndex);
-    
-    const pathStr = queryIndex === -1 
-        ? req.url.substring(urlIndex) 
-        : req.url.substring(urlIndex, queryIndex);
-        
+
+    const pathStr =
+      queryIndex === -1 ? req.url.substring(urlIndex) : req.url.substring(urlIndex, queryIndex);
+
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
-    
-    this._segments = null;
+
     this.params = params;
   }
 
@@ -76,47 +93,14 @@ export class HTTPContext {
   }
 
   get url(): URL {
-    if (!this._url) {
-      this._url = new URL(this.req.url);
-    }
+    if (!this._url) this._url = new URL(this.req.url);
     return this._url;
   }
 
   get segments(): string[] {
-    if (!this._segments) {
-        this._segments = this.path.split("/").filter(Boolean);
-    }
+    if (!this._segments) this._segments = this.path.split("/").filter(Boolean);
     return this._segments;
   }
-
-  // --- Validation Storage ---
-
-  /**
-   * Store validated data.
-   * @param key A Class Constructor OR a string key (e.g., "json", "query")
-   * @param instance The validated data
-   */
-  setValid<T>(key: Constructable<T> | string, instance: T): void {
-    this._validatorStore.set(key, instance);
-  }
-
-  /**
-   * Retrieve validated data.
-   * @param key A Class Constructor OR a string key (e.g., "json", "query")
-   */
-  getValid<T>(key: Constructable<T> | string): T {
-    const validData = this._validatorStore.get(key);
-    // If not found, return empty object (safe default) or undefined
-    // For string keys, usually implies optional if missing, but let's be safe.
-    return (validData || {}) as T;
-  }
-
-  // --- Legacy / Helper Accessors for standard Route validation ---
-  
-  get validJSON(): any { return this.getValid("json"); }
-  get validForm(): any { return this.getValid("form"); }
-  get validQuery(): any { return this.getValid("query"); }
-  get validParams(): any { return this.getValid("param"); }
 
   // -------------------------
 
@@ -127,16 +111,14 @@ export class HTTPContext {
   private ensureConfigurable() {
     if (this._state === ContextState.STREAMING || this._state === ContextState.SENT) {
       throw new SystemErr(
-        SystemErrCode.HEADERS_ALREADY_SENT, 
-        "Cannot modify headers or status after response has started streaming."
+        SystemErrCode.HEADERS_ALREADY_SENT,
+        "Cannot modify headers or status after response has started streaming.",
       );
     }
   }
 
   finalize() {
-    if (this._state === ContextState.OPEN) {
-      this._state = ContextState.WRITTEN;
-    }
+    if (this._state === ContextState.OPEN) this._state = ContextState.WRITTEN;
   }
 
   setErr(err: Error | undefined | string) {
@@ -152,13 +134,37 @@ export class HTTPContext {
   }
 
   private ensureBodyModifiable() {
-    this.ensureConfigurable(); 
+    this.ensureConfigurable();
     if (this._state === ContextState.WRITTEN) {
-       throw new SystemErr(
-         SystemErrCode.INTERNAL_SERVER_ERR, 
-         "Double Response: Attempted to write body after response was finalized (e.g. after redirect)."
-       );
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "Double Response: Attempted to write body after response was finalized (e.g. after redirect).",
+      );
     }
+  }
+
+  // -------------------------
+  // Unified error envelope helper
+  // -------------------------
+
+  /**
+   * Standard JSON error response shape for the framework.
+   * This is what SystemErrRecord uses.
+   */
+  errorJSON(
+    status: number,
+    code: string,
+    message: string,
+    extra?: Record<string, any>,
+  ): void {
+    this.ensureBodyModifiable();
+    this.setStatus(status).json({
+      error: {
+        code,
+        message,
+        ...(extra ?? {}),
+      },
+    });
   }
 
   redirect(path: string, status?: number): void;
@@ -172,15 +178,13 @@ export class HTTPContext {
     if (typeof arg2 === "number") {
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
-      if (typeof arg3 === "number") {
-        status = arg3;
-      }
-      
+      if (typeof arg3 === "number") status = arg3;
+
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(arg2)) {
         params.append(key, String(value));
       }
-      
+
       const queryString = params.toString();
       if (queryString.length > 0) {
         const separator = finalLocation.includes("?") ? "&" : "?";
@@ -189,63 +193,131 @@ export class HTTPContext {
     }
 
     if (/[\r\n]/.test(finalLocation)) {
-       throw new SystemErr(
-         SystemErrCode.INTERNAL_SERVER_ERR,
-         "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?"
-       );
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?",
+      );
     }
 
     this.res.setStatus(status);
     this.res.setHeader("Location", finalLocation);
-    this.finalize(); 
+    this.finalize();
+  }
+
+  // -------------------------
+  // Body parsing w/ consumption rules
+  // -------------------------
+
+  private assertReparseAllowed(nextMode: ParsedBodyMode) {
+    // MULTIPART is a hard terminal parse: cannot safely re-parse
+    if (this._parsedBodyMode === "MULTIPART" && nextMode !== "MULTIPART") {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already consumed as MULTIPART; it cannot be re-parsed.",
+      );
+    }
+    if (nextMode === "MULTIPART" && this._parsedBodyMode !== "NONE" && this._parsedBodyMode !== "MULTIPART") {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already consumed as TEXT/JSON/FORM; it cannot be re-parsed as MULTIPART.",
+      );
+    }
+
+    // Allow TEXT<->JSON as long as we have raw text cached.
+    // Allow TEXT<->FORM similarly.
+    // But prevent JSON<->FORM direct "semantic" switching after it has been parsed,
+    // unless raw is available (we will handle via _rawBody).
+    // Practically: if _rawBody exists, we can parse to JSON/FORM from it.
+    // If _rawBody doesn't exist and we've parsed JSON/FORM already, disallow switching.
+    if (!this._rawBody) {
+      if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Body already parsed as JSON; re-parsing as FORM is not allowed without raw text.",
+        );
+      }
+      if (this._parsedBodyMode === "FORM" && nextMode === "JSON") {
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Body already parsed as FORM; re-parsing as JSON is not allowed without raw text.",
+        );
+      }
+    }
   }
 
   async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    if (this._body !== undefined && expectedType === BodyType.JSON) {
-      return this._body;
-    }
-    if (this._rawBody !== null && expectedType === BodyType.TEXT) {
+    // Fast cache returns
+    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") return this._body;
+    if (expectedType === BodyType.TEXT && this._rawBody !== null && (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")) {
       return this._rawBody;
     }
 
+    // If raw text exists, we can parse JSON/FORM from it safely
     if (this._rawBody !== null) {
       if (expectedType === BodyType.JSON) {
+        this.assertReparseAllowed("JSON");
         try {
           const parsed = JSON.parse(this._rawBody);
           this._body = parsed;
+          this._parsedBodyMode = "JSON";
           return parsed;
         } catch (err: any) {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
+
       if (expectedType === BodyType.FORM) {
-        return Object.fromEntries(new URLSearchParams(this._rawBody));
+        this.assertReparseAllowed("FORM");
+        const obj = Object.fromEntries(new URLSearchParams(this._rawBody));
+        this._body = obj;
+        this._parsedBodyMode = "FORM";
+        return obj;
+      }
+
+      if (expectedType === BodyType.TEXT) {
+        this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
+        return this._rawBody;
       }
     }
 
+    // Content-Type checks
     const contentType = this.req.headers.get("Content-Type") || "";
 
     if (contentType.includes("application/json")) {
-       if (expectedType !== BodyType.JSON && expectedType !== BodyType.TEXT) {
-           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
-       }
+      if (expectedType !== BodyType.JSON && expectedType !== BodyType.TEXT) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
+      }
+    } else if (contentType.includes("application/x-www-form-urlencoded")) {
+      if (expectedType !== BodyType.FORM && expectedType !== BodyType.TEXT) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+      }
+    } else if (contentType.includes("multipart/form-data")) {
+      if (expectedType !== BodyType.MULTIPART_FORM) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+      }
+      this.assertReparseAllowed("MULTIPART");
+      const fd = await this.req.formData();
+      this._body = fd;
+      this._parsedBodyMode = "MULTIPART";
+      return fd;
     }
-    else if (contentType.includes("application/x-www-form-urlencoded")) {
-       if (expectedType !== BodyType.FORM && expectedType !== BodyType.TEXT) {
-           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
-       }
-    }
-    else if (contentType.includes("multipart/form-data")) {
-       if (expectedType !== BodyType.MULTIPART_FORM) {
-           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
-       }
-       return await this.req.formData();
-    }
+
+    // Read raw text ONCE
+    this.assertReparseAllowed(
+      expectedType === BodyType.TEXT
+        ? "TEXT"
+        : expectedType === BodyType.JSON
+          ? "JSON"
+          : expectedType === BodyType.FORM
+            ? "FORM"
+            : "TEXT",
+    );
 
     const text = await this.req.text();
     this._rawBody = text;
 
     if (expectedType === BodyType.TEXT) {
+      this._parsedBodyMode = "TEXT";
       return text;
     }
 
@@ -253,6 +325,7 @@ export class HTTPContext {
       try {
         const parsed = JSON.parse(text);
         this._body = parsed;
+        this._parsedBodyMode = "JSON";
         return parsed;
       } catch (err: any) {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
@@ -260,9 +333,14 @@ export class HTTPContext {
     }
 
     if (expectedType === BodyType.FORM) {
-      return Object.fromEntries(new URLSearchParams(text));
+      const obj = Object.fromEntries(new URLSearchParams(text));
+      this._body = obj;
+      this._parsedBodyMode = "FORM";
+      return obj;
     }
 
+    // Fallback
+    this._parsedBodyMode = "TEXT";
     return text;
   }
 
@@ -289,7 +367,7 @@ export class HTTPContext {
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
-        `Attempted to set invalid header "${name}". Values cannot contain newlines.`
+        `Attempted to set invalid header "${name}". Values cannot contain newlines.`,
       );
     }
     this.res.setHeader(name, value);
@@ -301,21 +379,21 @@ export class HTTPContext {
   }
 
   html(content: string): void {
-    this.ensureBodyModifiable(); 
+    this.ensureBodyModifiable();
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
     this.finalize();
   }
 
   text(content: string): void {
-    this.ensureBodyModifiable(); 
+    this.ensureBodyModifiable();
     if (!this.res.getHeader("Content-Type")) this.setHeader("Content-Type", "text/plain");
     this.res.body(content);
     this.finalize();
   }
 
   json(data: any): void {
-    this.ensureBodyModifiable(); 
+    this.ensureBodyModifiable();
     this.setHeader("Content-Type", "application/json");
     this.res.body(JSON.stringify(data));
     this.finalize();
@@ -331,7 +409,7 @@ export class HTTPContext {
   async file(path: string): Promise<void> {
     this.ensureBodyModifiable();
     this.ensureConfigurable();
-    let file = Bun.file(path);
+    const file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
     }
@@ -351,7 +429,8 @@ export class HTTPContext {
   getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
-    return cookies.split("; ")
+    return cookies
+      .split("; ")
       .map((c) => c.split(/=(.*)/s, 2))
       .reduce<Record<string, string>>((acc, [key, val]) => {
         acc[key] = val;
@@ -361,20 +440,27 @@ export class HTTPContext {
 
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     this.ensureConfigurable();
+
     let cookieString = `${name}=${encodeURIComponent(value)}`;
+
     options.path ??= "/";
     options.httpOnly ??= true;
-    options.secure ??= true;
     options.sameSite ??= "Lax";
-    if (options.path) cookieString += `; Path=${options.path}`; 
+
+    // ✅ Better default: secure only when https:
+    if (options.secure === undefined) {
+      options.secure = this.url.protocol === "https:";
+    }
+
+    if (options.path) cookieString += `; Path=${options.path}`;
     if (options.domain) cookieString += `; Domain=${options.domain}`;
     if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
     if (options.expires) cookieString += `; Expires=${options.expires.toUTCString()}`;
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
-    
-    this.setHeader("Set-Cookie", cookieString); 
+
+    this.setHeader("Set-Cookie", cookieString);
   }
 
   clearCookie(name: string, path: string = "/", domain?: string): void {

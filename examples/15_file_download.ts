@@ -1,10 +1,12 @@
 import { Xerus } from "../src/Xerus";
+import { Route } from "../src/Route";
 
 const app = new Xerus();
 
-app.get("/download", async (c) => {
-  await c.file("./README.md");
-});
+app.mount(
+  new Route("GET", "/download", async (c) => {
+    await c.file("./README.md");
+  }),
+);
 
-console.log("Download demo: http://localhost:8080/download");
 await app.listen(8080);

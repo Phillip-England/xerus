@@ -1,26 +1,26 @@
+// PATH: /home/jacex/src/xerus/servers/websocket/0_wsMethods.ts
+
 import { Xerus } from "../../src/Xerus";
-import { WSRoute } from "../../src/WSRoute";
+import { WSRoute, WSMethod } from "../../src/WSRoute";
 import { mwGroupHeader } from "../middleware/mwGroupHeader";
+import type { WSContext } from "../../src/WSContext";
 
 export function wsMethods(app: Xerus) {
-  // Simple Echo Server
-  const echoRoute = new WSRoute("/ws/echo");
-  echoRoute.message(async (ws, message) => {
-      ws.send(`echo: ${message}`);
-  });
-  app.mount(echoRoute);
+  app.mount(
+    new WSRoute(WSMethod.MESSAGE, "/ws/echo", async (c: WSContext) => {
+      c.ws.send(`echo: ${c.message}`);
+    }),
+  );
 
-  // Protected/Middleware Route
-  const chatRoute = new WSRoute("/ws/chat");
+  // Protected/Middleware Route (OPEN + MESSAGE)
+  app.mount(
+    new WSRoute(WSMethod.OPEN, "/ws/chat", async (c: WSContext) => {
+      const auth = c.http.getResHeader("X-Group-Auth");
+      c.ws.send(`auth-${auth}`);
+    }).use(mwGroupHeader),
 
-  // Attach middleware specifically to the open event
-  chatRoute.open(async (ws) => {
-      const auth = ws.data.getResHeader("X-Group-Auth");
-      ws.send(`auth-${auth}`);
-  }, mwGroupHeader);
-
-  chatRoute.message(async (ws, message) => {
-      ws.send(`chat: ${message}`);
-  });
-  app.mount(chatRoute);
+    new WSRoute(WSMethod.MESSAGE, "/ws/chat", async (c: WSContext) => {
+      c.ws.send(`chat: ${c.message}`);
+    }),
+  );
 }

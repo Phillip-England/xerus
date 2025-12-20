@@ -1,17 +1,9 @@
-import { HTTPContext } from "./HTTPContext";
-import type { ServerWebSocket } from "bun";
+// PATH: /home/jacex/src/xerus/src/WSHandlerFuncs.ts
 
-export type WSCloseFunc = (
-  ws: ServerWebSocket<HTTPContext>,
-  code: number,
-  message: string,
-) => Promise<void>;
+import type { WSContext } from "./WSContext";
+import type { ValidatedData } from "./ValidatedData";
 
-export type WSMessageFunc = (
-  ws: ServerWebSocket<HTTPContext>,
-  message: string | Buffer, // UPDATED: Allow Buffer for binary data
-) => Promise<void>;
-
-export type WSOpenFunc = (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
-
-export type WSDrainFunc = (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
+export type WSOpenFunc = (c: WSContext, data: ValidatedData) => Promise<void>;
+export type WSMessageFunc = (c: WSContext, data: ValidatedData) => Promise<void>;
+export type WSDrainFunc = (c: WSContext, data: ValidatedData) => Promise<void>;
+export type WSCloseFunc = (c: WSContext, data: ValidatedData) => Promise<void>;

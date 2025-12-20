@@ -1,33 +1,39 @@
 import { Xerus } from "../src/Xerus";
-import { Validator } from "../src/Validator";
+import { Route } from "../src/Route";
+import { Source } from "../src/ValidationSource";
+import type { TypeValidator } from "../src/TypeValidator";
 import { z } from "zod";
 
-class User {
-  static schema = z.object({ name: z.string() });
+class User implements TypeValidator {
   name: string;
-  constructor(d: any) { this.name = d.name; }
-  validate() { User.schema.parse(this); }
+  constructor(d: any) {
+    this.name = d?.name;
+  }
+  validate() {
+    z.object({ name: z.string() }).parse(this);
+  }
 }
 
-class Meta {
-  static schema = z.object({ source: z.string() });
+class Meta implements TypeValidator {
   source: string;
-  constructor(d: any) { this.source = d.source; }
-  validate() { Meta.schema.parse(this); }
+  constructor(d: any) {
+    this.source = d?.source;
+  }
+  validate() {
+    z.object({ source: z.string() }).parse(this);
+  }
 }
 
 const app = new Xerus();
 
-app.post(
-  "/create",
-  async (c) => {
-    const user = c.getValid(User);
-    const meta = c.getValid(Meta);
-
+app.mount(
+  new Route("POST", "/create", async (c, data) => {
+    const user = data.get(User);
+    const meta = data.get(Meta);
     c.json({ user, meta });
-  },
-  Validator(User),
-  Validator(Meta),
+  })
+    .validate(User, Source.JSON)
+    .validate(Meta, Source.QUERY("source")),
 );
 
 await app.listen(8080);

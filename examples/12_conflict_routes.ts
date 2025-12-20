@@ -1,27 +1,12 @@
 import { Xerus } from "../src/Xerus";
+import { Route } from "../src/Route";
 
 const app = new Xerus();
 
-// 1. PARAM MATCH
-app.get("/files/:id", async (c) => {
-  return c.json({ match: "Param ID", id: c.getParam("id") });
-});
-
-// 2. EXACT MATCH
-// Even though :id could match "static", this should take precedence
-app.get("/files/static", async (c) => {
-  return c.json({ match: "Exact Static" });
-});
-
-// 3. WILDCARD MATCH
-// This catches /files/static/old, /files/123/edit, etc.
-app.get("/files/*", async (c) => {
-  return c.json({ match: "Wildcard Catch-All", path: c.path });
-});
-
-console.log("Test Precedence:");
-console.log("1. /files/static  -> Exact Static");
-console.log("2. /files/123     -> Param ID");
-console.log("3. /files/a/b     -> Wildcard");
+app.mount(
+  new Route("GET", "/files/:id", async (c) => c.json({ match: "Param ID", id: c.getParam("id") })),
+  new Route("GET", "/files/static", async (c) => c.json({ match: "Exact Static" })),
+  new Route("GET", "/files/*", async (c) => c.json({ match: "Wildcard Catch-All", path: c.path })),
+);
 
 await app.listen(8080);

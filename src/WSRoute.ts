@@ -1,103 +1,101 @@
+// PATH: /home/jacex/src/xerus/src/WSRoute.ts
+
 import { WSHandler } from "./WSHandler";
 import { Middleware } from "./Middleware";
-import { HTTPContext } from "./HTTPContext";
-import type { 
-    WSOpenFunc, 
-    WSMessageFunc, 
-    WSCloseFunc, 
-    WSDrainFunc 
-} from "./WSHandlerFuncs";
+import type { Constructable } from "./HTTPContext";
+import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
+import { Validator } from "./Validator";
+import type { ValidationConfig } from "./ValidationSource";
+import type { TypeValidator } from "./TypeValidator";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
-import type { ValidationCallback } from "./Route";
+import type { WSOpenFunc, WSMessageFunc, WSCloseFunc, WSDrainFunc } from "./WSHandlerFuncs";
+import type { HTTPContext } from "./HTTPContext";
 
+export enum WSMethod {
+  OPEN = "OPEN",
+  MESSAGE = "MESSAGE",
+  CLOSE = "CLOSE",
+  DRAIN = "DRAIN",
+}
+
+/**
+ * WSRoute: One route == one websocket lifecycle method.
+ * Multiple WSRoute entries can share the same `path` and will be merged at mount-time.
+ */
 export class WSRoute {
-    public path: string;
-    
-    // Handlers
-    private _open?: WSOpenFunc;
-    private _message?: WSMessageFunc;
-    private _close?: WSCloseFunc;
-    private _drain?: WSDrainFunc;
+  public method: WSMethod;
+  public path: string;
 
-    // Middlewares per event
-    private openMiddlewares: Middleware<HTTPContext>[] = [];
-    private messageMiddlewares: Middleware<HTTPContext>[] = [];
-    private closeMiddlewares: Middleware<HTTPContext>[] = [];
-    private drainMiddlewares: Middleware<HTTPContext>[] = [];
+  public handler: WSOpenFunc | WSMessageFunc | WSCloseFunc | WSDrainFunc;
+  public middlewares: Middleware<HTTPContext>[] = [];
+  public errHandler?: HTTPErrorHandlerFunc;
 
-    constructor(path: string) {
-        this.path = path;
+  constructor(
+    method: WSMethod,
+    path: string,
+    handler: WSOpenFunc | WSMessageFunc | WSCloseFunc | WSDrainFunc,
+  ) {
+    this.method = method;
+    this.path = path;
+    this.handler = handler;
+  }
+
+  use(...mw: Middleware<HTTPContext>[]) {
+    this.middlewares.push(...mw);
+    return this;
+  }
+
+  onErr(handler: HTTPErrorHandlerFunc) {
+    this.errHandler = handler;
+    return this;
+  }
+
+  /**
+   * Generic validation hook for WebSockets too:
+   * wsRoute.validate(MyValidator, Source.WS_MESSAGE)
+   */
+  validate<T extends TypeValidator>(Class: Constructable<T>, config: ValidationConfig) {
+    // Enforce correct lifecycle usage
+    if (config.target === "WS_MESSAGE" && this.method !== WSMethod.MESSAGE) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "Source.WS_MESSAGE validation can only be used on WSMethod.MESSAGE routes",
+      );
+    }
+    if (config.target === "WS_CLOSE" && this.method !== WSMethod.CLOSE) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "Source.WS_CLOSE validation can only be used on WSMethod.CLOSE routes",
+      );
     }
 
-    // --- Definition Methods ---
+    this.middlewares.unshift(Validator(Class, config));
+    return this;
+  }
 
-    open(handler: WSOpenFunc, ...mw: Middleware<HTTPContext>[]) {
-        this._open = handler;
-        this.openMiddlewares.push(...mw);
-        return this;
+  // --- Compilation ---
+
+  compile(): WSHandler {
+    const h = new WSHandler();
+
+    switch (this.method) {
+      case WSMethod.OPEN:
+        h.setOpen(this.handler as WSOpenFunc, this.middlewares, this.errHandler);
+        break;
+      case WSMethod.MESSAGE:
+        h.setMessage(this.handler as WSMessageFunc, this.middlewares, this.errHandler);
+        break;
+      case WSMethod.CLOSE:
+        h.setClose(this.handler as WSCloseFunc, this.middlewares, this.errHandler);
+        break;
+      case WSMethod.DRAIN:
+        h.setDrain(this.handler as WSDrainFunc, this.middlewares, this.errHandler);
+        break;
+      default:
+        throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown WSMethod");
     }
 
-    message(handler: WSMessageFunc, ...mw: Middleware<HTTPContext>[]) {
-        this._message = handler;
-        this.messageMiddlewares.push(...mw);
-        return this;
-    }
-
-    close(handler: WSCloseFunc, ...mw: Middleware<HTTPContext>[]) {
-        this._close = handler;
-        this.closeMiddlewares.push(...mw);
-        return this;
-    }
-
-    drain(handler: WSDrainFunc, ...mw: Middleware<HTTPContext>[]) {
-        this._drain = handler;
-        this.drainMiddlewares.push(...mw);
-        return this;
-    }
-
-    // --- Validation (Specific to Message Event) ---
-
-    validateMessage<T = any>(callback: ValidationCallback<T>) {
-        const validatorMw = new Middleware(async (c: HTTPContext, next) => {
-            const raw = c._wsMessage;
-            
-            // Auto-convert buffer for convenience if validating JSON/String
-            let dataToValidate = raw;
-            if (Buffer.isBuffer(raw)) {
-                dataToValidate = raw.toString();
-            }
-            if (typeof dataToValidate === "string") {
-                try { dataToValidate = JSON.parse(dataToValidate); } catch {}
-            }
-
-            try {
-                const valid = await callback(dataToValidate);
-                // Store in valid store under "ws_message" or just replace _wsMessage?
-                // Replacing _wsMessage might break binary handlers.
-                // Let's use the valid store.
-                c.setValid("ws_message", valid ?? dataToValidate);
-            } catch (e: any) {
-                 // For WS, throwing here triggers the error handler or closes the socket
-                 throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, e.message || "WS Message Validation Failed");
-            }
-            await next();
-        });
-
-        this.messageMiddlewares.unshift(validatorMw); // Add to beginning of message chain
-        return this;
-    }
-
-    // --- Compilation ---
-
-    compile(): WSHandler {
-        const handler = new WSHandler();
-        
-        if (this._open) handler.setOpen(this._open, this.openMiddlewares);
-        if (this._message) handler.setMessage(this._message, this.messageMiddlewares);
-        if (this._close) handler.setClose(this._close, this.closeMiddlewares);
-        if (this._drain) handler.setDrain(this._drain, this.drainMiddlewares);
-        
-        return handler;
-    }
+    return h;
+  }
 }
