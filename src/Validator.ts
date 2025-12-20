@@ -83,7 +83,8 @@ export const Validator = <T extends TypeValidator>(
 
     // 3. Run the Class's validation logic
     try {
-      await instance.validate();
+      // UPDATED: Pass the HTTPContext to the validate method
+      await instance.validate(c);
     } catch (e: any) {
       if (e instanceof z.ZodError) {
         const errorMessages = e.issues
