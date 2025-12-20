@@ -48,15 +48,22 @@ export const Validator = <T extends TypeValidator>(
           }
           break;
 
-        case "WS_CLOSE":
-          rawData = c.getStore("_wsCloseArgs") || {};
+        case "WS_CLOSE": {
+          // ✅ Always provide a stable shape so close validators can rely on it.
+          const args = c.getStore("_wsCloseArgs");
+          const code =
+            args && typeof args.code === "number" ? args.code : 0;
+          const reason =
+            args && typeof args.reason === "string" ? args.reason : "";
+
+          rawData = { code, reason };
           break;
+        }
 
         default:
           throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
       }
     } catch (e: any) {
-      // Extraction/parsing problems
       throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `Data Extraction Failed: ${e.message}`);
     }
 
@@ -66,7 +73,6 @@ export const Validator = <T extends TypeValidator>(
     try {
       await instance.validate(c);
     } catch (e: any) {
-      // ✅ Validation problems (semantic)
       if (e instanceof z.ZodError) {
         const msg = e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
         throw new SystemErr(SystemErrCode.VALIDATION_FAILED, `Validation Failed: ${msg}`);
@@ -74,10 +80,8 @@ export const Validator = <T extends TypeValidator>(
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e.message || "Validation failed");
     }
 
-    // ✅ Store typed instance
     c.validated.set(TargetClass, instance);
 
-    // ✅ Store convenience categories + string keys (multi-validator friendly)
     switch (config.target) {
       case "BODY":
         if (config.format === "JSON") {

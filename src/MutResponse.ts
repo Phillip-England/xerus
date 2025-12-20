@@ -52,6 +52,13 @@ export class MutResponse {
     return this.headers[name] || "";
   }
 
+  /**
+   * Safe getter for middleware that needs to inspect the outgoing body.
+   */
+  getBody(): BodyInit | null {
+    return this.bodyContent;
+  }
+
   body(content: any): this {
     this.bodyContent = content;
     return this;

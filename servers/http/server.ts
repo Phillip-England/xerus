@@ -9,15 +9,17 @@ import { errorHandling } from "./6_errorHandling";
 import { routingComplexity } from "./7_routingComplexity";
 import { validation } from "./8_validation";
 import { middlewareErrors } from "./9_middlewareErrors";
-import { safeguard } from "./10_safeguard"; 
+import { safeguard } from "./10_safeguard";
 import { objectPool } from "./11_objectPool";
-import { precedence } from "./12_precedence"; 
-import { flexibleValidation } from "./13_flexibleValidation"; 
+import { precedence } from "./12_precedence";
+import { flexibleValidation } from "./13_flexibleValidation";
+import { commonPatterns } from "./14_commonPatterns";
+import { httpContextEdgeCases } from "./15_httpContextEdgeCases";
 
 const app = new Xerus();
 
 // must be at top
-errorHandling(app); 
+errorHandling(app);
 
 basicMethods(app);
 routeGrouping(app);
@@ -28,9 +30,13 @@ middlewares(app);
 routingComplexity(app);
 validation(app);
 middlewareErrors(app);
-safeguard(app); 
+safeguard(app);
 objectPool(app);
 precedence(app);
 flexibleValidation(app);
+commonPatterns(app);
+
+// ✅ new
+httpContextEdgeCases(app);
 
 app.listen(8080);

@@ -49,10 +49,15 @@ export class HTTPHandler {
 
         await middleware.execute(context, safeNext);
 
+        // Inside precompileChain
         if (nextPending) {
+          // If the timeout won, we don't care if next() wasn't awaited to completion
+          // because we've already sent the 504.
+          if (context.data?.__timeoutSent) return; 
+
           throw new SystemErr(
             SystemErrCode.MIDDLEWARE_ERROR,
-            "A Middleware called next() but did not await it. This breaks the request lifecycle and error handling.",
+            "A Middleware called next() but did not await it..."
           );
         }
       };

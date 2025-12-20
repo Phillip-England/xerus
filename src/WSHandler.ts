@@ -17,6 +17,35 @@ export class WSHandler {
   public compiledDrain?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
   public compiledClose?: (ws: ServerWebSocket<HTTPContext>, code: number, reason: string) => Promise<void>;
 
+  private normalizeEventState(event: EventType, http: HTTPContext, args: any[]) {
+    // ✅ ValidatedData is PER-EVENT in WebSockets
+    // Otherwise "validated" from previous message/close leaks into the next event.
+    http.validated.clear();
+
+    // Keep these consistent so validators always see the right thing.
+    if (event === "MESSAGE") {
+      const msg = (args[0] ?? null) as string | Buffer | null;
+      http._wsMessage = msg;
+      http.setStore("_wsCloseArgs", undefined);
+      return { message: msg, code: 0, reason: "" };
+    }
+
+    if (event === "CLOSE") {
+      const code = (args[0] ?? 0) as number;
+      const reason = (args[1] ?? "") as string;
+
+      http._wsMessage = null;
+      http.setStore("_wsCloseArgs", { code, reason });
+
+      return { message: "", code, reason };
+    }
+
+    // OPEN / DRAIN
+    http._wsMessage = null;
+    http.setStore("_wsCloseArgs", undefined);
+    return { message: "", code: 0, reason: "" };
+  }
+
   private createChain(
     event: EventType,
     handler: (c: WSContext, data: HTTPContext["validated"]) => Promise<void>,
@@ -26,19 +55,14 @@ export class WSHandler {
     let chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       const http = ws.data;
 
-      let c: WSContext;
-      if (event === "MESSAGE") {
-        const msg = (args[0] ?? null) as string | Buffer | null;
-        http._wsMessage = msg;
-        c = new WSContext(ws, http, { message: msg });
-      } else if (event === "CLOSE") {
-        const code = (args[0] ?? 0) as number;
-        const reason = (args[1] ?? "") as string;
-        http.setStore("_wsCloseArgs", { code, reason });
-        c = new WSContext(ws, http, { code, reason });
-      } else {
-        c = new WSContext(ws, http);
-      }
+      // ✅ Normalize + clear validated each WS event
+      const normalized = this.normalizeEventState(event, http, args);
+
+      const c = new WSContext(ws, http, {
+        message: normalized.message as any,
+        code: normalized.code,
+        reason: normalized.reason,
+      });
 
       try {
         await handler(c, c.data);
@@ -59,13 +83,10 @@ export class WSHandler {
       chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
         const http = ws.data;
 
-        if (event === "MESSAGE") {
-          http._wsMessage = (args[0] ?? null) as any;
-        } else if (event === "CLOSE") {
-          const code = (args[0] ?? 0) as number;
-          const reason = (args[1] ?? "") as string;
-          http.setStore("_wsCloseArgs", { code, reason });
-        }
+        // ✅ Ensure state is normalized even when middleware runs before handler
+        // Only normalize ONCE per event invocation: do it here too because this wrapper is the outer chain
+        // and will always run.
+        this.normalizeEventState(event, http, args);
 
         let nextPending = false;
         const safeNext = async () => {

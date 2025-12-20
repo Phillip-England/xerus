@@ -108,7 +108,14 @@ export class HTTPContext {
     return this._state !== ContextState.OPEN;
   }
 
+  private get _timedOut(): boolean {
+    return !!this.data?.__timeoutSent;
+  }
+
   private ensureConfigurable() {
+    // ✅ After timeout, make all future writes a NO-OP (do not throw)
+    if (this._timedOut) return;
+
     if (this._state === ContextState.STREAMING || this._state === ContextState.SENT) {
       throw new SystemErr(
         SystemErrCode.HEADERS_ALREADY_SENT,
@@ -130,10 +137,13 @@ export class HTTPContext {
   }
 
   getResHeader(name: string): string | null {
-    return this.res.getHeader(name);
+    return this.res.getHeader(name) || null;
   }
 
   private ensureBodyModifiable() {
+    // ✅ After timeout, make all future writes a NO-OP (do not throw)
+    if (this._timedOut) return;
+
     this.ensureConfigurable();
     if (this._state === ContextState.WRITTEN) {
       throw new SystemErr(
@@ -157,6 +167,7 @@ export class HTTPContext {
     message: string,
     extra?: Record<string, any>,
   ): void {
+    if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.setStatus(status).json({
       error: {
@@ -167,9 +178,85 @@ export class HTTPContext {
     });
   }
 
+  // -------------------------
+  // Ergonomic error helpers
+  // -------------------------
+
+  badRequest(detail = "Bad Request", code = "BAD_REQUEST", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(400, code, "Bad Request", { detail, ...(extra ?? {}) });
+  }
+
+  unauthorized(detail = "Unauthorized", code = "UNAUTHORIZED", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(401, code, "Unauthorized", { detail, ...(extra ?? {}) });
+  }
+
+  forbidden(detail = "Forbidden", code = "FORBIDDEN", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(403, code, "Forbidden", { detail, ...(extra ?? {}) });
+  }
+
+  notFound(detail = "Not Found", code = "NOT_FOUND", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(404, code, "Not Found", { detail, ...(extra ?? {}) });
+  }
+
+  conflict(detail = "Conflict", code = "CONFLICT", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(409, code, "Conflict", { detail, ...(extra ?? {}) });
+  }
+
+  tooManyRequests(detail = "Too Many Requests", code = "RATE_LIMITED", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(429, code, "Too Many Requests", { detail, ...(extra ?? {}) });
+  }
+
+  internalError(detail = "Internal Server Error", code = "INTERNAL_ERROR", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(500, code, "Internal Server Error", { detail, ...(extra ?? {}) });
+  }
+
+  serviceUnavailable(detail = "Service Unavailable", code = "SERVICE_UNAVAILABLE", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(503, code, "Service Unavailable", { detail, ...(extra ?? {}) });
+  }
+
+  gatewayTimeout(detail = "Gateway Timeout", code = "TIMEOUT", extra?: Record<string, any>) {
+    if (this._timedOut) return;
+    this.errorJSON(504, code, "Gateway Timeout", { detail, ...(extra ?? {}) });
+  }
+
+  // -------------------------
+  // Request identity helpers
+  // -------------------------
+
+  /**
+   * Best-effort client IP for rate limiting / auditing.
+   */
+  getClientIP(): string {
+    const xff = this.getHeader("x-forwarded-for") || this.getHeader("X-Forwarded-For");
+    if (xff) return xff.split(",")[0].trim();
+    const xrip = this.getHeader("x-real-ip") || this.getHeader("X-Real-IP");
+    if (xrip) return xrip.trim();
+    return "unknown";
+  }
+
+  /**
+   * Request ID (middleware sets this; you can still read it).
+   */
+  getRequestId(): string {
+    return (this.data?.requestId as string) || "";
+  }
+
+  // -------------------------
+  // Redirect
+  // -------------------------
+
   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
   redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
+    if (this._timedOut) return;
     this.ensureConfigurable();
 
     let status = 302;
@@ -209,7 +296,21 @@ export class HTTPContext {
   // -------------------------
 
   private assertReparseAllowed(nextMode: ParsedBodyMode) {
-    // MULTIPART is a hard terminal parse: cannot safely re-parse
+    // ✅ Always block JSON <-> FORM re-parsing (tests expect this),
+    // even if we still have raw text available.
+    if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already parsed as JSON; re-parsing as FORM is not allowed.",
+      );
+    }
+    if (this._parsedBodyMode === "FORM" && nextMode === "JSON") {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already parsed as FORM; re-parsing as JSON is not allowed.",
+      );
+    }
+
     if (this._parsedBodyMode === "MULTIPART" && nextMode !== "MULTIPART") {
       throw new SystemErr(
         SystemErrCode.BODY_PARSING_FAILED,
@@ -222,37 +323,19 @@ export class HTTPContext {
         "Body already consumed as TEXT/JSON/FORM; it cannot be re-parsed as MULTIPART.",
       );
     }
-
-    // Allow TEXT<->JSON as long as we have raw text cached.
-    // Allow TEXT<->FORM similarly.
-    // But prevent JSON<->FORM direct "semantic" switching after it has been parsed,
-    // unless raw is available (we will handle via _rawBody).
-    // Practically: if _rawBody exists, we can parse to JSON/FORM from it.
-    // If _rawBody doesn't exist and we've parsed JSON/FORM already, disallow switching.
-    if (!this._rawBody) {
-      if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Body already parsed as JSON; re-parsing as FORM is not allowed without raw text.",
-        );
-      }
-      if (this._parsedBodyMode === "FORM" && nextMode === "JSON") {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Body already parsed as FORM; re-parsing as JSON is not allowed without raw text.",
-        );
-      }
-    }
   }
 
   async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
-    // Fast cache returns
     if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") return this._body;
-    if (expectedType === BodyType.TEXT && this._rawBody !== null && (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")) {
+
+    if (
+      expectedType === BodyType.TEXT &&
+      this._rawBody !== null &&
+      (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")
+    ) {
       return this._rawBody;
     }
 
-    // If raw text exists, we can parse JSON/FORM from it safely
     if (this._rawBody !== null) {
       if (expectedType === BodyType.JSON) {
         this.assertReparseAllowed("JSON");
@@ -280,7 +363,6 @@ export class HTTPContext {
       }
     }
 
-    // Content-Type checks
     const contentType = this.req.headers.get("Content-Type") || "";
 
     if (contentType.includes("application/json")) {
@@ -302,7 +384,6 @@ export class HTTPContext {
       return fd;
     }
 
-    // Read raw text ONCE
     this.assertReparseAllowed(
       expectedType === BodyType.TEXT
         ? "TEXT"
@@ -339,7 +420,6 @@ export class HTTPContext {
       return obj;
     }
 
-    // Fallback
     this._parsedBodyMode = "TEXT";
     return text;
   }
@@ -357,12 +437,14 @@ export class HTTPContext {
   }
 
   setStatus(code: number): this {
+    if (this._timedOut) return this;
     this.ensureConfigurable();
     this.res.setStatus(code);
     return this;
   }
 
   setHeader(name: string, value: string): this {
+    if (this._timedOut) return this;
     this.ensureConfigurable();
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
@@ -379,6 +461,7 @@ export class HTTPContext {
   }
 
   html(content: string): void {
+    if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.setHeader("Content-Type", "text/html");
     this.res.body(content);
@@ -386,6 +469,7 @@ export class HTTPContext {
   }
 
   text(content: string): void {
+    if (this._timedOut) return;
     this.ensureBodyModifiable();
     if (!this.res.getHeader("Content-Type")) this.setHeader("Content-Type", "text/plain");
     this.res.body(content);
@@ -393,6 +477,7 @@ export class HTTPContext {
   }
 
   json(data: any): void {
+    if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.setHeader("Content-Type", "application/json");
     this.res.body(JSON.stringify(data));
@@ -400,6 +485,7 @@ export class HTTPContext {
   }
 
   stream(stream: ReadableStream): void {
+    if (this._timedOut) return;
     this.ensureConfigurable();
     this.setHeader("Content-Type", "application/octet-stream");
     this.res.body(stream);
@@ -407,6 +493,7 @@ export class HTTPContext {
   }
 
   async file(path: string): Promise<void> {
+    if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
     const file = Bun.file(path);
@@ -439,6 +526,7 @@ export class HTTPContext {
   }
 
   setCookie(name: string, value: string, options: CookieOptions = {}) {
+    if (this._timedOut) return;
     this.ensureConfigurable();
 
     let cookieString = `${name}=${encodeURIComponent(value)}`;
@@ -447,7 +535,6 @@ export class HTTPContext {
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
 
-    // ✅ Better default: secure only when https:
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }
@@ -464,6 +551,7 @@ export class HTTPContext {
   }
 
   clearCookie(name: string, path: string = "/", domain?: string): void {
+    if (this._timedOut) return;
     this.setCookie(name, "", { path, domain, maxAge: 0, expires: new Date(0) });
   }
 }
