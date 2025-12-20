@@ -11,7 +11,8 @@ import { validation } from "./8_validation";
 import { middlewareErrors } from "./9_middlewareErrors";
 import { safeguard } from "./10_safeguard"; 
 import { objectPool } from "./11_objectPool";
-import { precedence } from "./12_precedence"; // Import new module
+import { precedence } from "./12_precedence"; 
+import { flexibleValidation } from "./13_flexibleValidation"; // New
 
 const app = new Xerus();
 
@@ -27,6 +28,7 @@ validation(app);
 middlewareErrors(app);
 safeguard(app); 
 objectPool(app);
-precedence(app); // Register precedence routes
+precedence(app);
+flexibleValidation(app); // Register new routes
 
 app.listen(8080);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Validator } from "../../src/Validator";
-import { ValidationSource } from "../../src/ValidationSource"; // New Enum
+import { Source } from "../../src/ValidationSource"; // Updated import name
 import type { TypeValidator } from "../../src/TypeValidator";
 
 // --- VALIDATOR CLASSES ---
@@ -35,6 +35,7 @@ class SearchRequest implements TypeValidator {
   limit: number;
 
   constructor(data: any) {
+    // Expected input: The entire query object (e.g., { q: "...", limit: "..." })
     this.query = data.q || "";
     this.limit = Number(data.limit) || 10;
   }
@@ -84,10 +85,11 @@ export function validation(app: Xerus) {
         }
       });
     },
-    Validator(UserSignupRequest, ValidationSource.JSON)
+    Validator(UserSignupRequest, Source.JSON)
   );
 
   // Query Param Validation
+  // Updated: We call Source.QUERY() without args to get ALL query params
   app.get(
     "/validation/search",
     async (c: HTTPContext) => {
@@ -97,7 +99,7 @@ export function validation(app: Xerus) {
         search: { q: validReq.query, limit: validReq.limit }
       });
     },
-    Validator(SearchRequest, ValidationSource.QUERY)
+    Validator(SearchRequest, Source.QUERY())
   );
 
   // Form Data Validation
@@ -110,6 +112,6 @@ export function validation(app: Xerus) {
         msg: `Welcome ${validReq.user}`
       });
     },
-    Validator(LoginRequest, ValidationSource.FORM)
+    Validator(LoginRequest, Source.FORM)
   );
 }
