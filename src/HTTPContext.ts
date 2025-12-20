@@ -50,7 +50,7 @@ export class HTTPContext {
     this._state = ContextState.OPEN;
     this._url = null;
     this._body = undefined;
-    this._rawBody = null; // <--- ADD THIS
+    this._rawBody = null; 
     this.err = undefined;
     this._wsMessage = null; // Reset WS Message
     
@@ -72,6 +72,17 @@ export class HTTPContext {
     
     this._segments = null;
     this.params = params;
+  }
+
+  /**
+   * SOFT RESET: Clears only the response state and content.
+   * This is used by the framework when an error occurs to ensure the
+   * Error Handler has a clean slate to write to, without losing 
+   * the request context (params, data store, etc.).
+   */
+  clearResponse() {
+    this.res.reset();
+    this._state = ContextState.OPEN;
   }
 
   get url(): URL {
@@ -150,6 +161,15 @@ export class HTTPContext {
 // Update redirect to ensure it finalizes correctly
   redirect(location: string, status: number = 302): void {
     this.ensureConfigurable();
+
+    // SAFEGUARD: Prevent Header Injection or invalid URL crashes
+    if (/[\r\n]/.test(location)) {
+       throw new SystemErr(
+         SystemErrCode.INTERNAL_SERVER_ERR,
+         "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?"
+       );
+    }
+
     this.res.setStatus(status);
     this.res.setHeader("Location", location);
     this.finalize(); 
@@ -255,6 +275,15 @@ async parseBody<T extends BodyType>(expectedType: T): Promise<any> {
 
   setHeader(name: string, value: string): this {
     this.ensureConfigurable();
+    
+    // SAFEGUARD: Prevent Response Header Injection
+    if (/[\r\n]/.test(value)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Attempted to set invalid header "${name}". Values cannot contain newlines.`
+      );
+    }
+
     this.res.setHeader(name, value);
     return this;
   }

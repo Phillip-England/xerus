@@ -208,6 +208,11 @@ export class Xerus {
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
       
+      // CRITICAL FIX: Reset the response state.
+      // If the previous handler crashed halfway through writing a response (e.g., partial headers),
+      // we must wipe it so the error handler can write a clean 500 response.
+      c.clearResponse();
+
       c.setErr(e);
       
       if (e instanceof SystemErr) {
