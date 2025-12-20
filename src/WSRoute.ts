@@ -2,15 +2,13 @@
 
 import { WSHandler } from "./WSHandler";
 import { Middleware } from "./Middleware";
-import type { Constructable } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
-import { Validator } from "./Validator";
-import type { ValidationConfig } from "./ValidationSource";
-import type { TypeValidator } from "./TypeValidator";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { WSOpenFunc, WSMessageFunc, WSCloseFunc, WSDrainFunc } from "./WSHandlerFuncs";
 import type { HTTPContext } from "./HTTPContext";
+import type { WSContext } from "./WSContext";
+import { Source } from "./ValidationSource";
 
 export enum WSMethod {
   OPEN = "OPEN",
@@ -18,6 +16,13 @@ export enum WSMethod {
   CLOSE = "CLOSE",
   DRAIN = "DRAIN",
 }
+
+export type WSValidation = {
+  source: Source;
+  sourceKey: string;
+  outKey: string;
+  fn: (c: WSContext, raw: any) => any | Promise<any>;
+};
 
 /**
  * WSRoute: One route == one websocket lifecycle method.
@@ -30,6 +35,8 @@ export class WSRoute {
   public handler: WSOpenFunc | WSMessageFunc | WSCloseFunc | WSDrainFunc;
   public middlewares: Middleware<HTTPContext>[] = [];
   public errHandler?: HTTPErrorHandlerFunc;
+
+  private validations: WSValidation[] = [];
 
   constructor(
     method: WSMethod,
@@ -52,45 +59,49 @@ export class WSRoute {
   }
 
   /**
-   * Generic validation hook for WebSockets too:
-   * wsRoute.validate(MyValidator, Source.WS_MESSAGE)
+   * validate(source, sourceKey, outKey, fn)
+   * - Runs before handler, inside WSHandler, with a real WSContext.
+   * - Stores validated value at data.get(outKey)
    */
-  validate<T extends TypeValidator>(Class: Constructable<T>, config: ValidationConfig) {
-    // Enforce correct lifecycle usage
-    if (config.target === "WS_MESSAGE" && this.method !== WSMethod.MESSAGE) {
+  validate(
+    source: Source,
+    sourceKey: string,
+    outKey: string,
+    fn: (c: WSContext, raw: any) => any | Promise<any>,
+  ) {
+    // enforce lifecycle correctness for WS_MESSAGE / WS_CLOSE
+    if (source === Source.WS_MESSAGE && this.method !== WSMethod.MESSAGE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         "Source.WS_MESSAGE validation can only be used on WSMethod.MESSAGE routes",
       );
     }
-    if (config.target === "WS_CLOSE" && this.method !== WSMethod.CLOSE) {
+    if (source === Source.WS_CLOSE && this.method !== WSMethod.CLOSE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         "Source.WS_CLOSE validation can only be used on WSMethod.CLOSE routes",
       );
     }
 
-    this.middlewares.unshift(Validator(Class, config));
+    this.validations.push({ source, sourceKey, outKey, fn });
     return this;
   }
-
-  // --- Compilation ---
 
   compile(): WSHandler {
     const h = new WSHandler();
 
     switch (this.method) {
       case WSMethod.OPEN:
-        h.setOpen(this.handler as WSOpenFunc, this.middlewares, this.errHandler);
+        h.setOpen(this.handler as WSOpenFunc, this.middlewares, this.errHandler, this.validations);
         break;
       case WSMethod.MESSAGE:
-        h.setMessage(this.handler as WSMessageFunc, this.middlewares, this.errHandler);
+        h.setMessage(this.handler as WSMessageFunc, this.middlewares, this.errHandler, this.validations);
         break;
       case WSMethod.CLOSE:
-        h.setClose(this.handler as WSCloseFunc, this.middlewares, this.errHandler);
+        h.setClose(this.handler as WSCloseFunc, this.middlewares, this.errHandler, this.validations);
         break;
       case WSMethod.DRAIN:
-        h.setDrain(this.handler as WSDrainFunc, this.middlewares, this.errHandler);
+        h.setDrain(this.handler as WSDrainFunc, this.middlewares, this.errHandler, this.validations);
         break;
       default:
         throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown WSMethod");

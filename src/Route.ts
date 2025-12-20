@@ -1,17 +1,18 @@
+// PATH: /home/jacex/src/xerus/src/Route.ts
+
 import type { HTTPHandlerFunc, HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Middleware } from "./Middleware";
-import { HTTPContext, type Constructable } from "./HTTPContext";
-import { Validator } from "./Validator";
-import { Source, type ValidationConfig } from "./ValidationSource";
-import type { TypeValidator } from "./TypeValidator";
+import { HTTPContext } from "./HTTPContext";
+import { HTTPValidator } from "./Validator";
+import { Source } from "./ValidationSource";
 
 /**
  * Route
  * - HTTP Route with middleware + optional granular error handler
  *
- * New:
- * - route.validate(Class, Source.*) adds validation middleware automatically
- *   (inserted at the FRONT of the middleware list)
+ * Validation:
+ *   route.validate(Source.QUERY, "page", "page", (c, raw) => ...)
+ *   data.get("page") -> validated result
  */
 export class Route {
   public method: string;
@@ -36,49 +37,20 @@ export class Route {
     return this;
   }
 
-  // -----------------------------
-  // Validation
-  // -----------------------------
-
   /**
-   * Generic validation hook.
-   * Adds the validator middleware "behind the scenes" without you needing to pass
-   * Validator(...) into .use(...).
+   * validate(source, sourceKey, outKey, fn)
    *
-   * IMPORTANT: This is inserted at the FRONT of the middleware list, so validation
-   * happens before any other middleware/handler logic by default.
+   * - sourceKey: used for QUERY/PARAM/HEADER (ignored for JSON/FORM/MULTIPART/TEXT unless you want it for QUERY)
+   * - outKey: where the validated value will be stored in ValidatedData
    */
-  validate<T extends TypeValidator>(Class: Constructable<T>, config: ValidationConfig) {
-    this.middlewares.unshift(Validator(Class, config));
+  validate(
+    source: Source,
+    sourceKey: string,
+    outKey: string,
+    fn: (c: HTTPContext, raw: any) => any | Promise<any>,
+  ) {
+    // inserted at the FRONT so it runs before other middleware
+    this.middlewares.unshift(HTTPValidator(source, sourceKey, outKey, fn));
     return this;
-  }
-
-  // --- Convenience helpers (backwards compatible) ---
-
-  validateJSON<T extends TypeValidator>(Class: Constructable<T>) {
-    return this.validate(Class, Source.JSON);
-  }
-
-  validateForm<T extends TypeValidator>(Class: Constructable<T>) {
-    return this.validate(Class, Source.FORM);
-  }
-
-  validateMultipart<T extends TypeValidator>(Class: Constructable<T>) {
-    return this.validate(Class, Source.MULTIPART);
-  }
-
-  validateQuery<T extends TypeValidator>(Class: Constructable<T>) {
-    return this.validate(Class, Source.QUERY());
-  }
-
-  validateParam<T extends TypeValidator>(paramName: string, Class: Constructable<T>) {
-    return this.validate(Class, Source.PARAM(paramName));
-  }
-
-  /**
-   * Optional helper for header validation (symmetry with flexible Source.HEADER)
-   */
-  validateHeader<T extends TypeValidator>(headerName: string, Class: Constructable<T>) {
-    return this.validate(Class, Source.HEADER(headerName));
   }
 }

@@ -1,130 +1,85 @@
+// PATH: /home/jacex/src/xerus/src/Validator.ts
+
 import { Middleware } from "./Middleware";
-import { HTTPContext, type Constructable } from "./HTTPContext";
+import { HTTPContext } from "./HTTPContext";
 import { BodyType } from "./BodyType";
-import { type ValidationConfig } from "./ValidationSource";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
-import type { TypeValidator } from "./TypeValidator";
-import { z } from "zod";
+import { Source } from "./ValidationSource";
 
-export const Validator = <T extends TypeValidator>(
-  TargetClass: Constructable<T>,
-  config: ValidationConfig,
-) => {
+export type ValidateFn<C, Raw, Out> = (c: C, raw: Raw) => Out | Promise<Out>;
+
+function normalizeWsRawMessage(raw: any) {
+  // HTTPContext stores ws message in _wsMessage; WSContext exposes message directly,
+  // but this helper is mainly for parity if you ever call it.
+  if (Buffer.isBuffer(raw)) return raw.toString();
+  return raw;
+}
+
+export function extractHTTPRaw(c: HTTPContext, source: Source, key: string): Promise<any> | any {
+  switch (source) {
+    case Source.JSON:
+      return c.parseBody(BodyType.JSON);
+
+    case Source.FORM:
+      return c.parseBody(BodyType.FORM);
+
+    case Source.MULTIPART:
+      return c.parseBody(BodyType.MULTIPART_FORM);
+
+    case Source.TEXT:
+      return c.parseBody(BodyType.TEXT);
+
+    case Source.QUERY:
+      return key ? c.query(key, "") : c.queries;
+
+    case Source.PARAM:
+      if (!key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.PARAM requires a key");
+      return c.getParam(key, "");
+
+    case Source.HEADER:
+      if (!key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.HEADER requires a key");
+      return c.getHeader(key);
+
+    // WS sources are not supported in HTTP middleware (no ws handle available here)
+    case Source.WS_MESSAGE:
+    case Source.WS_CLOSE:
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `WS validation source "${source}" can only be used on WSRoute.validate(...)`,
+      );
+
+    default:
+      throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
+  }
+}
+
+/**
+ * HTTP validation middleware:
+ *   route.validate(Source.QUERY, "page", (c, raw) => ...)
+ */
+export function HTTPValidator(
+  source: Source,
+  key: string,
+  outKey: string,
+  fn: ValidateFn<HTTPContext, any, any>,
+) {
   return new Middleware(async (c: HTTPContext, next) => {
-    let rawData: any;
-
+    let raw: any;
     try {
-      switch (config.target) {
-        case "BODY":
-          if (config.format === "JSON") rawData = await c.parseBody(BodyType.JSON);
-          else if (config.format === "FORM") rawData = await c.parseBody(BodyType.FORM);
-          else if (config.format === "MULTIPART") rawData = await c.parseBody(BodyType.MULTIPART_FORM);
-          break;
-
-        case "QUERY":
-          rawData = config.key ? { [config.key]: c.query(config.key) } : c.queries;
-          break;
-
-        case "PARAM":
-          if (!config.key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.PARAM requires a key");
-          rawData = { [config.key]: c.getParam(config.key) };
-          break;
-
-        case "HEADER":
-          if (!config.key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.HEADER requires a key");
-          rawData = { [config.key]: c.getHeader(config.key) };
-          break;
-
-        case "WS_MESSAGE":
-          rawData = c._wsMessage;
-          if (Buffer.isBuffer(rawData)) rawData = rawData.toString();
-          if (typeof rawData === "string") {
-            try {
-              rawData = JSON.parse(rawData);
-            } catch {
-              // allow raw string
-            }
-          }
-          break;
-
-        case "WS_CLOSE": {
-          // ✅ Always provide a stable shape so close validators can rely on it.
-          const args = c.getStore("_wsCloseArgs");
-          const code =
-            args && typeof args.code === "number" ? args.code : 0;
-          const reason =
-            args && typeof args.reason === "string" ? args.reason : "";
-
-          rawData = { code, reason };
-          break;
-        }
-
-        default:
-          throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
-      }
+      raw = await extractHTTPRaw(c, source, key);
     } catch (e: any) {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `Data Extraction Failed: ${e.message}`);
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `Data Extraction Failed: ${e?.message ?? String(e)}`);
     }
 
-    const safeData = rawData ?? {};
-    const instance = new TargetClass(safeData);
-
     try {
-      await instance.validate(c);
+      // NOTE: for headers, raw might be null
+      const validated = await fn(c, normalizeWsRawMessage(raw));
+      c.validated.set(outKey, validated);
     } catch (e: any) {
-      if (e instanceof z.ZodError) {
-        const msg = e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
-        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, `Validation Failed: ${msg}`);
-      }
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e.message || "Validation failed");
-    }
-
-    c.validated.set(TargetClass, instance);
-
-    switch (config.target) {
-      case "BODY":
-        if (config.format === "JSON") {
-          c.validated.json = instance;
-          c.validated.set("json", instance);
-        } else if (config.format === "FORM") {
-          c.validated.form = instance;
-          c.validated.set("form", instance);
-        } else if (config.format === "MULTIPART") {
-          c.validated.multipart = instance;
-          c.validated.set("multipart", instance);
-        }
-        break;
-
-      case "QUERY":
-        c.validated.query = instance;
-        c.validated.set(config.key ? `query:${config.key}` : "query", instance);
-        c.validated.set("query", instance);
-        break;
-
-      case "PARAM":
-        c.validated.params = instance;
-        c.validated.set(config.key ? `param:${config.key}` : "param", instance);
-        c.validated.set("param", instance);
-        break;
-
-      case "HEADER":
-        c.validated.headers = instance;
-        c.validated.set(config.key ? `header:${config.key}` : "header", instance);
-        c.validated.set("header", instance);
-        break;
-
-      case "WS_MESSAGE":
-        c.validated.wsMessage = instance;
-        c.validated.set("ws_message", instance);
-        break;
-
-      case "WS_CLOSE":
-        c.validated.wsClose = instance;
-        c.validated.set("ws_close", instance);
-        break;
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e?.message ?? "Validation failed");
     }
 
     await next();
   });
-};
+}
