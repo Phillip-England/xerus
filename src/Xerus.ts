@@ -387,8 +387,10 @@ export class Xerus {
     return this.ws(path, { drain: h }, ...m);
   }
 
-  embed(pathPrefix: string, embeddedFiles: Record<string, { content: string | Buffer | Uint8Array; type: string }>) {
+  // Updated: Accepts number[] in content because Macros return arrays
+  embed(pathPrefix: string, embeddedFiles: Record<string, { content: string | Buffer | Uint8Array | number[]; type: string }>) {
       const prefix = pathPrefix === "/" ? "" : pathPrefix;
+      
       this.get(prefix + "/*", async (c: HTTPContext) => {
         const lookupPath = c.path.substring(prefix.length);
         const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
@@ -396,7 +398,14 @@ export class Xerus {
         if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
         
         c.setHeader("Content-Type", file.type);
-        c.res.body(file.content);
+        
+        // Convert number[] back to Uint8Array for the Response body
+        let bodyData = file.content;
+        if (Array.isArray(bodyData)) {
+            bodyData = new Uint8Array(bodyData);
+        }
+
+        c.res.body(bodyData);
         
         c.finalize(); 
       });
@@ -418,7 +427,7 @@ export class Xerus {
       await c.file(finalPath);
     });
   }
-  
+   
   use(...m: Middleware<HTTPContext>[]) { this.globalMiddlewares.push(...m); }
   group(prefix: string, ...m: Middleware<HTTPContext>[]) { return new RouteGroup(this, prefix, ...m); }
   onErr(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {

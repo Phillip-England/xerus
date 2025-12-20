@@ -2,6 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { resolve } from "path";
 
 // Mocking the output of the embedDir macro
+// NOTE: Macros return plain arrays of numbers for binaries, not Uint8Arrays directly.
 const mockEmbeddedFiles = {
   "/index.html": {
     content: "<html><body><h1>Home</h1></body></html>",
@@ -16,7 +17,8 @@ const mockEmbeddedFiles = {
     type: "application/javascript",
   },
   "/images/logo.png": {
-    content: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    // Simulated Macro Output: Plain array of numbers
+    content: [137, 80, 78, 71, 13, 10, 26, 10], 
     type: "image/png",
   },
 };

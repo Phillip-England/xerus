@@ -11,8 +11,10 @@ const app = new Xerus();
 app.static("/files", resolve(".")); 
 
 // 2. Embedded Serving (Single Binary)
-// Compiles the contents of '../src' into the binary
+// Compiles the contents of '../src' into the binary.
+// embedDir now requires an Absolute Path and returns number[] for binary files.
 const srcFiles = embedDir(resolve("../src"));
+
 app.embed("/source-code", srcFiles);
 
 await app.listen(8080);
