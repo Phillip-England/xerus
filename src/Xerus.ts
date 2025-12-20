@@ -71,8 +71,19 @@ export class Xerus {
     }
 
     if (handlerObj instanceof WSHandler) {
-      node.wsHandler = handlerObj;
+      // WebSocket Logic: MERGE handlers if one already exists
+      if (node.wsHandler) {
+        // We merge the new handler's defined hooks into the existing node's handler.
+        // This allows defining .open() and .message() in separate calls.
+        if (handlerObj.compiledOpen) node.wsHandler.compiledOpen = handlerObj.compiledOpen;
+        if (handlerObj.compiledMessage) node.wsHandler.compiledMessage = handlerObj.compiledMessage;
+        if (handlerObj.compiledClose) node.wsHandler.compiledClose = handlerObj.compiledClose;
+        if (handlerObj.compiledDrain) node.wsHandler.compiledDrain = handlerObj.compiledDrain;
+      } else {
+        node.wsHandler = handlerObj;
+      }
     } else {
+      // HTTP Logic: Strict conflict checking
       if (node.handlers[method]) {
         throw new SystemErr(
           SystemErrCode.ROUTE_ALREADY_REGISTERED,
@@ -84,50 +95,6 @@ export class Xerus {
         this.routes[`${method} ${path}`] = handlerObj;
       }
     }
-  }
-
-  ws(
-    path: string,
-    handlers: {
-      open?: WSOpenFunc | { handler: WSOpenFunc; middlewares: Middleware<HTTPContext>[] };
-      message?: WSMessageFunc | { handler: WSMessageFunc; middlewares: Middleware<HTTPContext>[] };
-      close?: WSCloseFunc | { handler: WSCloseFunc; middlewares: Middleware<HTTPContext>[] };
-      drain?: WSDrainFunc | { handler: WSDrainFunc; middlewares: Middleware<HTTPContext>[] };
-    },
-    ...middlewares: Middleware<HTTPContext>[]
-  ) {
-    const wsHandler = new WSHandler();
-    const sharedMiddlewares = this.globalMiddlewares.concat(middlewares);
-
-    const setupLifecycle = (key: "open" | "message" | "close" | "drain") => {
-      const config = handlers[key];
-      if (!config) return;
-
-      let handlerFunc: any;
-      let specificMiddlewares: Middleware<HTTPContext>[] = [];
-
-      if (typeof config === "function") {
-        handlerFunc = config;
-      } else {
-        handlerFunc = config.handler;
-        specificMiddlewares = config.middlewares;
-      }
-
-      const fullChain = sharedMiddlewares.concat(specificMiddlewares);
-
-      if (key === "open") wsHandler.setOpen(handlerFunc, fullChain);
-      if (key === "message") wsHandler.setMessage(handlerFunc, fullChain);
-      if (key === "close") wsHandler.setClose(handlerFunc, fullChain);
-      if (key === "drain") wsHandler.setDrain(handlerFunc, fullChain);
-    };
-
-    setupLifecycle("open");
-    setupLifecycle("message");
-    setupLifecycle("close");
-    setupLifecycle("drain");
-
-    this.register("WS", path, wsHandler);
-    return this;
   }
 
   /**
@@ -371,20 +338,34 @@ export class Xerus {
     return this;
   }
 
-  open(path: string, h: WSOpenFunc, ...m: Middleware<HTTPContext>[]) {
-    return this.ws(path, { open: h }, ...m);
+  // --- Isolated WebSocket Methods ---
+
+  open(path: string, handler: WSOpenFunc, ...middlewares: Middleware<HTTPContext>[]) {
+    const wsHandler = new WSHandler();
+    wsHandler.setOpen(handler, this.globalMiddlewares.concat(middlewares));
+    this.register("WS", path, wsHandler);
+    return this;
   }
 
-  message(path: string, h: WSMessageFunc, ...m: Middleware<HTTPContext>[]) {
-    return this.ws(path, { message: h }, ...m);
+  message(path: string, handler: WSMessageFunc, ...middlewares: Middleware<HTTPContext>[]) {
+    const wsHandler = new WSHandler();
+    wsHandler.setMessage(handler, this.globalMiddlewares.concat(middlewares));
+    this.register("WS", path, wsHandler);
+    return this;
   }
 
-  close(path: string, h: WSCloseFunc, ...m: Middleware<HTTPContext>[]) {
-    return this.ws(path, { close: h }, ...m);
+  close(path: string, handler: WSCloseFunc, ...middlewares: Middleware<HTTPContext>[]) {
+    const wsHandler = new WSHandler();
+    wsHandler.setClose(handler, this.globalMiddlewares.concat(middlewares));
+    this.register("WS", path, wsHandler);
+    return this;
   }
 
-  drain(path: string, h: WSDrainFunc, ...m: Middleware<HTTPContext>[]) {
-    return this.ws(path, { drain: h }, ...m);
+  drain(path: string, handler: WSDrainFunc, ...middlewares: Middleware<HTTPContext>[]) {
+    const wsHandler = new WSHandler();
+    wsHandler.setDrain(handler, this.globalMiddlewares.concat(middlewares));
+    this.register("WS", path, wsHandler);
+    return this;
   }
 
   // Updated: Accepts number[] in content because Macros return arrays
@@ -427,7 +408,7 @@ export class Xerus {
       await c.file(finalPath);
     });
   }
-   
+    
   use(...m: Middleware<HTTPContext>[]) { this.globalMiddlewares.push(...m); }
   group(prefix: string, ...m: Middleware<HTTPContext>[]) { return new RouteGroup(this, prefix, ...m); }
   onErr(h: HTTPHandlerFunc, ...m: Middleware<HTTPContext>[]) {

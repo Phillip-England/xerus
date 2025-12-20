@@ -68,31 +68,7 @@ export class RouteGroup {
 
   // --- WebSocket Methods ---
 
-  /**
-   * Defines a full WebSocket route with individual lifecycle handlers and middlewares.
-   */
-  ws(
-    path: string,
-    handlers: {
-      open?: WSOpenFunc | { handler: WSOpenFunc; middlewares: Middleware[] };
-      message?: WSMessageFunc | {
-        handler: WSMessageFunc;
-        middlewares: Middleware[];
-      };
-      close?: WSCloseFunc | { handler: WSCloseFunc; middlewares: Middleware[] };
-      drain?: WSDrainFunc | { handler: WSDrainFunc; middlewares: Middleware[] };
-    },
-    ...middlewares: Middleware[]
-  ) {
-    this.app.ws(
-      this.prefixPath + path,
-      handlers,
-      ...this.middlewares.concat(middlewares),
-    );
-    return this;
-  }
-
-  wsOpen(path: string, handler: WSOpenFunc, ...middlewares: Middleware[]) {
+  open(path: string, handler: WSOpenFunc, ...middlewares: Middleware[]) {
     this.app.open(
       this.prefixPath + path,
       handler,
@@ -101,7 +77,7 @@ export class RouteGroup {
     return this;
   }
 
-  wsMessage(
+  message(
     path: string,
     handler: WSMessageFunc,
     ...middlewares: Middleware[]
@@ -114,7 +90,7 @@ export class RouteGroup {
     return this;
   }
 
-  wsClose(path: string, handler: WSCloseFunc, ...middlewares: Middleware[]) {
+  close(path: string, handler: WSCloseFunc, ...middlewares: Middleware[]) {
     this.app.close(
       this.prefixPath + path,
       handler,
@@ -123,7 +99,7 @@ export class RouteGroup {
     return this;
   }
 
-  wsDrain(path: string, handler: WSDrainFunc, ...middlewares: Middleware[]) {
+  drain(path: string, handler: WSDrainFunc, ...middlewares: Middleware[]) {
     this.app.drain(
       this.prefixPath + path,
       handler,

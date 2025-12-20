@@ -1,17 +1,22 @@
 import { Xerus } from "../src/Xerus";
+import { logger } from "../src/Middleware";
 
 const app = new Xerus();
+const ws = app.group("/ws", logger);
 
-app.get("/users/:id", async (c) => {
-  c.json({ route: "param", id: c.getParam("id") });
+// 1. Register Open Handler
+ws.open("/chat", async (ws) => {
+  ws.send("👋 Welcome!");
 });
 
-app.get("/users/me", async (c) => {
-  c.json({ route: "exact" });
+// 2. Register Message Handler (merges into the same route)
+ws.message("/chat", async (ws, msg) => {
+  ws.send(`echo: ${msg}`);
 });
 
-app.get("/users/*", async (c) => {
-  c.json({ route: "wildcard" });
+// 3. Register Close Handler (merges into the same route)
+ws.close("/chat", async () => {
+  console.log("Client left");
 });
 
 await app.listen(8080);
