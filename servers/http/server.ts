@@ -1,3 +1,5 @@
+// PATH: /home/jacex/src/xerus/servers/http/server.ts
+
 import { Xerus } from "../../src/Xerus";
 import { basicMethods } from "./0_basicMethods";
 import { routeGrouping } from "./1_routeGrouping";
@@ -15,6 +17,9 @@ import { precedence } from "./12_precedence";
 import { flexibleValidation } from "./13_flexibleValidation";
 import { commonPatterns } from "./14_commonPatterns";
 import { httpContextEdgeCases } from "./15_httpContextEdgeCases";
+
+// ✅ new
+import { dateValidators } from "./16_dateValidators";
 
 const app = new Xerus();
 
@@ -35,8 +40,9 @@ objectPool(app);
 precedence(app);
 flexibleValidation(app);
 commonPatterns(app);
+httpContextEdgeCases(app);
 
 // ✅ new
-httpContextEdgeCases(app);
+dateValidators(app);
 
 app.listen(8080);

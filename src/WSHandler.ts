@@ -8,7 +8,7 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { WSContext } from "./WSContext";
 import type { WSCloseFunc, WSDrainFunc, WSMessageFunc, WSOpenFunc } from "./WSHandlerFuncs";
-import { Source } from "./ValidationSource";
+import { SourceType, type WSValidationSource } from "./ValidationSource";
 import type { WSValidation } from "./WSRoute";
 
 type EventType = "OPEN" | "MESSAGE" | "CLOSE" | "DRAIN";
@@ -45,36 +45,34 @@ export class WSHandler {
     return { message: "", code: 0, reason: "" };
   }
 
-  private extractWSRaw(c: WSContext, source: Source, key: string) {
-    switch (source) {
-      // HTTP-ish sources still valid in WS, via upgrade request context
-      case Source.JSON:
-      case Source.FORM:
-      case Source.MULTIPART:
-      case Source.TEXT:
-        // Generally not used for WS events; but allow it if someone wants upgrade body.
-        // (Upgrade is GET so usually empty.)
-        throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, `${source} is not supported for WS validation`);
+  private extractWSRaw(c: WSContext, source: WSValidationSource) {
+    switch (source.type) {
+      // HTTP-ish sources (available from upgrade request context)
+      case SourceType.QUERY:
+        return source.key ? c.http.query(source.key, "") : c.http.queries;
 
-      case Source.QUERY:
-        return key ? c.http.query(key, "") : c.http.queries;
+      case SourceType.PARAM:
+        return c.http.getParam(source.key, "");
 
-      case Source.PARAM:
-        if (!key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.PARAM requires a key");
-        return c.http.getParam(key, "");
+      case SourceType.HEADER:
+        return c.http.getHeader(source.key);
 
-      case Source.HEADER:
-        if (!key) throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Source.HEADER requires a key");
-        return c.http.getHeader(key);
-
-      case Source.WS_MESSAGE: {
+      // WS-only
+      case SourceType.WS_MESSAGE: {
         const msg = c.message;
         if (Buffer.isBuffer(msg)) return msg.toString();
         return msg;
       }
 
-      case Source.WS_CLOSE:
+      case SourceType.WS_CLOSE:
         return { code: c.code ?? 0, reason: c.reason ?? "" };
+
+      // Not supported for WS validations (upgrade request body is usually empty anyway)
+      case SourceType.JSON:
+      case SourceType.FORM:
+      case SourceType.MULTIPART:
+      case SourceType.TEXT:
+        throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, `${source.type} is not supported for WS validation`);
 
       default:
         throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
@@ -85,7 +83,7 @@ export class WSHandler {
     if (!validations || validations.length === 0) return;
 
     for (const v of validations) {
-      const raw = this.extractWSRaw(c, v.source, v.sourceKey);
+      const raw = this.extractWSRaw(c, v.source);
       const validated = await v.fn(c, raw);
       c.data.set(v.outKey, validated);
     }
@@ -110,9 +108,7 @@ export class WSHandler {
       });
 
       try {
-        // ✅ validations run BEFORE handler
         await this.runValidations(c, validations);
-
         await handler(c, c.data);
       } catch (e: any) {
         if (errHandler) {

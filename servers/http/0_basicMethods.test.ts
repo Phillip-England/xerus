@@ -1,3 +1,5 @@
+// PATH: /home/jacex/src/xerus/servers/http/0_basicMethods.test.ts
+
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
 
@@ -57,7 +59,7 @@ test("Redirect: Simple redirect should return 302 and Location", async () => {
 test("Redirect: Should merge query params correctly", async () => {
   const res = await fetch(`${BaseURL}/redir/query`, { redirect: "manual" });
   const loc = res.headers.get("Location");
-  
+
   expect(res.status).toBe(302);
   // Expecting /?existing=1&new=2
   expect(loc).toContain("existing=1");
@@ -73,4 +75,96 @@ test("Redirect: Should auto-encode unsafe characters", async () => {
   // The CRLF should be encoded, preventing header injection
   expect(loc).not.toContain("\r\n");
   expect(loc).toContain("Hack%0D%0ALocation%3A+google.com");
+});
+
+// ---------------------------------------------------------------------------
+// NEW: Extra Basic / HTTP semantics tests
+// ---------------------------------------------------------------------------
+
+test("Basics: 404 should return SystemErr text for unknown route", async () => {
+  const res = await fetch(`${BaseURL}/does-not-exist`);
+  const text = await res.text();
+
+  expect(res.status).toBe(404);
+  expect(text).toContain("is not registered");
+});
+
+test("Basics: Unknown method on known path should still 404 (no implicit method fallback)", async () => {
+  // /items exists for POST only; GET should not exist
+  const res = await fetch(`${BaseURL}/items`, { method: "GET" });
+  const text = await res.text();
+
+  expect(res.status).toBe(404);
+  expect(text).toContain("is not registered");
+});
+
+test("Basics: HEAD should return headers but no body", async () => {
+  const res = await fetch(`${BaseURL}/basics/ping`, { method: "HEAD" });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("X-Ping")).toBe("pong");
+
+  // HEAD responses should not include a body (fetch returns empty string)
+  const body = await res.text();
+  expect(body).toBe("");
+});
+
+test("Basics: OPTIONS should return Allow header", async () => {
+  const res = await fetch(`${BaseURL}/basics/ping`, { method: "OPTIONS" });
+  const text = await res.text();
+
+  expect(res.status).toBe(204);
+  const allow = res.headers.get("Allow") ?? "";
+  expect(allow).toContain("GET");
+  expect(allow).toContain("HEAD");
+  expect(allow).toContain("OPTIONS");
+  expect(text).toBe("");
+});
+
+test("Basics: Query echo should return exact values", async () => {
+  const res = await fetch(`${BaseURL}/basics/echo-query?a=hello&b=world`);
+  const j = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(j.a).toBe("hello");
+  expect(j.b).toBe("world");
+});
+
+test("Basics: Missing query key should return null (not undefined) in JSON", async () => {
+  const res = await fetch(`${BaseURL}/basics/echo-query?a=only`);
+  const j = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(j.a).toBe("only");
+  expect(j.b).toBeNull();
+});
+
+test("Basics: Header echo should be case-insensitive and reflected as response header", async () => {
+  const res = await fetch(`${BaseURL}/basics/echo-header`, {
+    headers: { "x-test-header": "abc123" },
+  });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("X-Echo-Test")).toBe("abc123");
+
+  const j = await res.json();
+  expect(j.value).toBe("abc123");
+});
+
+test("Basics: setStatus chaining should work (418)", async () => {
+  const res = await fetch(`${BaseURL}/basics/status`);
+  const text = await res.text();
+
+  expect(res.status).toBe(418);
+  expect(text).toBe("teapot");
+});
+
+test("Basics: JSON should include Content-Type application/json", async () => {
+  const res = await fetch(`${BaseURL}/basics/json`);
+  const j = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("Content-Type") ?? "").toContain("application/json");
+  expect(j.ok).toBe(true);
+  expect(j.msg).toBe("✨ unicode ok");
 });

@@ -3,15 +3,15 @@
 import type { HTTPHandlerFunc, HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
-import { HTTPValidator } from "./Validator";
-import { Source } from "./ValidationSource";
+import { HTTPValidator, type ValidateFn } from "./Validator";
+import type { HTTPValidationSource } from "./ValidationSource";
 
 /**
  * Route
  * - HTTP Route with middleware + optional granular error handler
  *
  * Validation:
- *   route.validate(Source.QUERY, "page", "page", (c, raw) => ...)
+ *   route.validate(Source.QUERY("page"), "page", v.required(), v.asInt(), v.min(1))
  *   data.get("page") -> validated result
  */
 export class Route {
@@ -38,19 +38,23 @@ export class Route {
   }
 
   /**
-   * validate(source, sourceKey, outKey, fn)
+   * validate(source, outKey, ...fns)
    *
-   * - sourceKey: used for QUERY/PARAM/HEADER (ignored for JSON/FORM/MULTIPART/TEXT unless you want it for QUERY)
+   * - source: typed discriminated union (HTTP only)
    * - outKey: where the validated value will be stored in ValidatedData
+   * - fns: one or more validator/transform functions:
+   *        (c, value) => nextValue
+   *
+   * Example:
+   *   route.validate(Source.QUERY("page"), "page", v.required(), v.asInt(), v.min(1))
    */
   validate(
-    source: Source,
-    sourceKey: string,
+    source: HTTPValidationSource,
     outKey: string,
-    fn: (c: HTTPContext, raw: any) => any | Promise<any>,
+    ...fns: ValidateFn<HTTPContext, any, any>[]
   ) {
     // inserted at the FRONT so it runs before other middleware
-    this.middlewares.unshift(HTTPValidator(source, sourceKey, outKey, fn));
+    this.middlewares.unshift(HTTPValidator(source, outKey, ...fns));
     return this;
   }
 }

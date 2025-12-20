@@ -18,16 +18,16 @@ export function commonPatterns(app: Xerus) {
     }).use(rateLimit({ windowMs: 250, max: 2 })),
   );
 
-  // CSRF
+  // CSRF (✅ mount exactly where the tests call)
   const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
 
   app.mount(
-    new Route("GET", "/patterns/csrf-token", async (c: HTTPContext) => {
-      // Middleware ensures cookie exists on safe methods
+    new Route("GET", "/patterns/csrf", async (c: HTTPContext) => {
+      // Middleware sets cookie and stores token on safe methods
       c.json({ token: c.data.csrfToken });
     }).use(csrfMw),
 
-    new Route("POST", "/patterns/protected", async (c: HTTPContext) => {
+    new Route("POST", "/patterns/csrf", async (c: HTTPContext) => {
       c.json({ ok: true });
     }).use(csrfMw),
   );

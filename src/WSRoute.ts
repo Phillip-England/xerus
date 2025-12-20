@@ -8,7 +8,8 @@ import { SystemErrCode } from "./SystemErrCode";
 import type { WSOpenFunc, WSMessageFunc, WSCloseFunc, WSDrainFunc } from "./WSHandlerFuncs";
 import type { HTTPContext } from "./HTTPContext";
 import type { WSContext } from "./WSContext";
-import { Source } from "./ValidationSource";
+import { SourceType, type WSValidationSource } from "./ValidationSource";
+import { pipeValidators, type ValidateFn } from "./Validator";
 
 export enum WSMethod {
   OPEN = "OPEN",
@@ -18,8 +19,7 @@ export enum WSMethod {
 }
 
 export type WSValidation = {
-  source: Source;
-  sourceKey: string;
+  source: WSValidationSource;
   outKey: string;
   fn: (c: WSContext, raw: any) => any | Promise<any>;
 };
@@ -59,31 +59,38 @@ export class WSRoute {
   }
 
   /**
-   * validate(source, sourceKey, outKey, fn)
+   * validate(source, outKey, ...fns)
    * - Runs before handler, inside WSHandler, with a real WSContext.
    * - Stores validated value at data.get(outKey)
+   *
+   * Example:
+   *   wsRoute.validate(Source.WS_MESSAGE(), "msg", v.required(), v.asString(), v.maxLength(1000))
    */
   validate(
-    source: Source,
-    sourceKey: string,
+    source: WSValidationSource,
     outKey: string,
-    fn: (c: WSContext, raw: any) => any | Promise<any>,
+    ...fns: ValidateFn<WSContext, any, any>[]
   ) {
-    // enforce lifecycle correctness for WS_MESSAGE / WS_CLOSE
-    if (source === Source.WS_MESSAGE && this.method !== WSMethod.MESSAGE) {
+    if (fns.length === 0) {
+      throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WSRoute.validate requires at least one function");
+    }
+
+    // enforce lifecycle correctness for WS_MESSAGE / WS_CLOSE (runtime)
+    if (source.type === SourceType.WS_MESSAGE && this.method !== WSMethod.MESSAGE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
-        "Source.WS_MESSAGE validation can only be used on WSMethod.MESSAGE routes",
+        "Source.WS_MESSAGE() validation can only be used on WSMethod.MESSAGE routes",
       );
     }
-    if (source === Source.WS_CLOSE && this.method !== WSMethod.CLOSE) {
+    if (source.type === SourceType.WS_CLOSE && this.method !== WSMethod.CLOSE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
-        "Source.WS_CLOSE validation can only be used on WSMethod.CLOSE routes",
+        "Source.WS_CLOSE() validation can only be used on WSMethod.CLOSE routes",
       );
     }
 
-    this.validations.push({ source, sourceKey, outKey, fn });
+    const composed = pipeValidators<WSContext>(...fns);
+    this.validations.push({ source, outKey, fn: composed });
     return this;
   }
 

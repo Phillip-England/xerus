@@ -191,10 +191,9 @@ export const csrf = (opts?: {
 /**
  * Timeout middleware (soft timeout)
  *
- * - Returns a 504 quickly if downstream takes too long.
- * - Does NOT rely on HTTPContext helpers after marking timed out (those early-return).
- * - Prevents the middleware safeguard from throwing by setting __timeoutSent.
- * - Keeps pooled contexts safe by holding release until downstream finishes.
+ * ✅ Uses a RESOLVING timer promise (no rejection path)
+ * ✅ Marks __timeoutSent so safeguard won't throw
+ * ✅ Holds pool release until downstream finishes
  */
 export const timeout = (ms: number, opts?: { message?: string }) => {
   const detail = opts?.message ?? `Request timed out after ${ms}ms`;
@@ -203,35 +202,27 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
   return new Middleware(async (c: HTTPContext, next) => {
     let timer: any;
 
-    // Start downstream immediately
     const downstream = (async () => {
       await next();
     })();
 
-    // A rejecting promise is easier to race cleanly.
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(TIMEOUT), ms);
+    const timeoutPromise = new Promise<typeof TIMEOUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMEOUT), ms);
     });
 
     try {
-      // If downstream wins, we fully await it (satisfies safeguard).
-      await Promise.race([downstream, timeoutPromise]);
-      return;
-    } catch (e) {
-      if (e !== TIMEOUT) {
-        // Real downstream error: let it bubble
-        throw e;
-      }
+      const winner = await Promise.race([
+        downstream.then(() => "DOWNSTREAM" as const),
+        timeoutPromise,
+      ]);
 
-      // Timeout won:
-      // 1) Mark first so any later writes become NO-OPs.
+      if (winner !== TIMEOUT) return;
+
+      // Timeout won
       c.data.__timeoutSent = true;
 
-      // 2) Only write 504 if nothing has been written yet.
       if (!c.isDone) {
-        // Write directly to MutResponse (HTTPContext helpers early-return once timed out)
-        c.clearResponse();
-
+        // write 504 directly
         c.res.setStatus(504);
         c.res.setHeader("Content-Type", "application/json");
         c.res.body(
@@ -246,7 +237,7 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
         c.finalize();
       }
 
-      // 3) Hold pool release until downstream finishes (prevents reuse races).
+      // hold pool release until downstream finishes
       (c.data as any).__holdRelease = downstream.catch(() => {});
       return;
     } finally {
@@ -255,11 +246,6 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
   });
 };
 
-/**
- * Compression middleware (gzip / br)
- * - Uses CompressionStream when available.
- * - Only compresses string / Uint8Array / ArrayBuffer bodies (not Files/Blobs/Streams).
- */
 export const compress = (opts?: {
   thresholdBytes?: number;
   preferBrotli?: boolean;
@@ -267,11 +253,8 @@ export const compress = (opts?: {
   const threshold = opts?.thresholdBytes ?? 1024;
   const preferBrotli = opts?.preferBrotli ?? true;
 
-  function pickEncoding(accept: string): "br" | "gzip" | null {
-    const a = accept.toLowerCase();
-    if (preferBrotli && a.includes("br")) return "br";
-    if (a.includes("gzip")) return "gzip";
-    return null;
+  function accepts(accept: string, enc: string) {
+    return accept.toLowerCase().includes(enc);
   }
 
   function bodySize(body: any): number {
@@ -279,6 +262,33 @@ export const compress = (opts?: {
     if (body instanceof Uint8Array) return body.byteLength;
     if (body instanceof ArrayBuffer) return body.byteLength;
     return 0;
+  }
+
+  function getBytes(body: any): Uint8Array | null {
+    if (typeof body === "string") return new TextEncoder().encode(body);
+    if (body instanceof ArrayBuffer) return new Uint8Array(body);
+    if (body instanceof Uint8Array) return body;
+    return null;
+  }
+
+  function makeSource(bytes: Uint8Array) {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+  }
+
+  function tryMakeCompressedStream(enc: "br" | "gzip", bytes: Uint8Array): ReadableStream<Uint8Array> | null {
+    const CS = (globalThis as any).CompressionStream;
+    if (!CS) return null;
+    try {
+      const cs = new CS(enc);
+      return makeSource(bytes).pipeThrough(cs);
+    } catch {
+      return null;
+    }
   }
 
   return new Middleware(async (c: HTTPContext, next) => {
@@ -291,11 +301,9 @@ export const compress = (opts?: {
     if (c.res.statusCode === 204 || c.res.statusCode === 304) return;
 
     const accept = c.getHeader("Accept-Encoding") || "";
-    const enc = pickEncoding(accept);
-    if (!enc) return;
-
-    const CS = (globalThis as any).CompressionStream;
-    if (!CS) return;
+    const wantsBr = preferBrotli && accepts(accept, "br");
+    const wantsGzip = accepts(accept, "gzip");
+    if (!wantsBr && !wantsGzip) return;
 
     const body = (c.res as any).getBody?.() ?? (c.res as any).bodyContent;
     if (body == null) return;
@@ -305,24 +313,24 @@ export const compress = (opts?: {
     const size = bodySize(body);
     if (size < threshold) return;
 
-    let bytes: Uint8Array;
-    if (typeof body === "string") bytes = new TextEncoder().encode(body);
-    else if (body instanceof ArrayBuffer) bytes = new Uint8Array(body);
-    else bytes = body;
+    const bytes = getBytes(body);
+    if (!bytes) return;
 
-    const source = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      },
-    });
+    let enc: "br" | "gzip" | null = null;
+    let stream: ReadableStream<Uint8Array> | null = null;
 
-    const cs = new CS(enc);
-    const compressedStream = source.pipeThrough(cs);
+    if (wantsBr) {
+      stream = tryMakeCompressedStream("br", bytes);
+      if (stream) enc = "br";
+    }
+    if (!stream && wantsGzip) {
+      stream = tryMakeCompressedStream("gzip", bytes);
+      if (stream) enc = "gzip";
+    }
+    if (!stream || !enc) return;
 
     c.setHeader("Content-Encoding", enc);
     c.setHeader("Vary", "Accept-Encoding");
-
-    c.res.body(compressedStream);
+    c.res.body(stream);
   });
 };

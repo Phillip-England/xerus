@@ -28,7 +28,7 @@ export function validation(app: Xerus) {
       status: "success",
       user: { name: user.username, email: user.email, age: user.age },
     });
-  }).validate(Source.JSON, "", "signup", async (_c, raw) => {
+  }).validate(Source.JSON(), "signup", async (_c, raw) => {
     return await signupSchema.parseAsync(raw);
   });
 
@@ -38,10 +38,10 @@ export function validation(app: Xerus) {
       status: "success",
       search: { q: query.q, limit: query.limit },
     });
-  }).validate(Source.QUERY, "", "search", async (_c, raw) => {
+  }).validate(Source.QUERY(), "search", async (_c, raw) => {
     // raw is Record<string,string> of all query params
-    const q = String(raw?.q ?? "");
-    const limit = Number(raw?.limit ?? 10);
+    const q = String((raw as any)?.q ?? "");
+    const limit = Number((raw as any)?.limit ?? 10);
     return await searchSchema.parseAsync({ q, limit });
   });
 
@@ -51,8 +51,7 @@ export function validation(app: Xerus) {
       status: "success",
       msg: `Welcome ${form.username}`,
     });
-  }).validate(Source.FORM, "", "login", async (_c, raw) => {
-    // raw is Record<string,string> from urlencoded form
+  }).validate(Source.FORM(), "login", async (_c, raw) => {
     const username = String(raw?.username ?? "");
     const password = String(raw?.password ?? "");
     return await loginSchema.parseAsync({ username, password });

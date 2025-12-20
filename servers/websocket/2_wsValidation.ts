@@ -17,8 +17,7 @@ export function wsValidationMethods(app: Xerus) {
       const msg = data.get<any>("msg");
       if (msg.type === "ping") c.ws.send("pong");
       else c.ws.send(`received: ${msg.content}`);
-    }).validate(Source.WS_MESSAGE, "", "msg", async (_c, raw) => {
-      // raw is message string (or buffer->string)
+    }).validate(Source.WS_MESSAGE(), "msg", async (_c, raw) => {
       let parsed: any;
       try {
         parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
