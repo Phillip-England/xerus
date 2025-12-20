@@ -48,11 +48,9 @@ This README documents the framework as implemented in the `src/` directory you p
 Xerus is written for **Bun** and uses Bun APIs (`Bun.serve`, `Bun.file`, `ServerWebSocket`, etc.).
 
 In your Bun project:
-
-- Put the Xerus source under `src/` (or install/publish it as a package).
-- Import from your project’s entrypoint (you may have an `index.ts` that re-exports types).
-
-> This README assumes you have the files exactly as shown in your `src/` directory.
+```
+bun add github:phillip-england/xerus#v0.0.49
+```
 
 ---
 
