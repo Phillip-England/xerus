@@ -23,4 +23,3 @@ export * from "./src/macros";
 export * from "./src/ValidationSource"
 export * from './src/Route'
 export * from './src/RouteGroup'
-export * from './src/ValidationUtils'
