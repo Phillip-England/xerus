@@ -27,8 +27,8 @@ export class Xerus {
     string,
     { handler?: HTTPHandler; wsHandler?: WSHandler; params: Record<string, string> }
   >();
-  private readonly MAX_CACHE_SIZE = 500;
 
+  private readonly MAX_CACHE_SIZE = 500;
   private contextPool: ObjectPool<HTTPContext>;
 
   constructor() {
@@ -44,10 +44,8 @@ export class Xerus {
       if (r instanceof Route) {
         const localMws = (r as any).middlewares || [];
         const combined = this.globalMiddlewares.concat(localMws);
-
         const handler = new HTTPHandler((r as any).handler, (r as any).errHandler);
         handler.setMiddlewares(combined);
-
         this.register(r.method, r.path, handler);
       } else if (r instanceof WSRoute) {
         const wsHandler = r.compile();
@@ -71,7 +69,6 @@ export class Xerus {
       const err = c.getErr();
       await h(c, err);
     };
-
     const handler = new HTTPHandler(wrapper);
     handler.setMiddlewares(this.globalMiddlewares.concat(m));
     this.errHandler = handler;
@@ -82,41 +79,31 @@ export class Xerus {
     embeddedFiles: Record<string, { content: string | Buffer | Uint8Array | number[]; type: string }>
   ) {
     const prefix = pathPrefix === "/" ? "" : pathPrefix;
-
     const route = new Route("GET", prefix + "/*", async (c: HTTPContext) => {
       const lookupPath = c.path.substring(prefix.length);
       const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
-
       if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
-
       c.setHeader("Content-Type", file.type);
-
       let bodyData = file.content;
       if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
-
       c.res.body(bodyData);
       c.finalize();
     });
-
     this.mount(route);
   }
 
   static(pathPrefix: string, rootDir: string) {
     const prefix = pathPrefix === "/" ? "" : pathPrefix.replace(/\/+$/, "");
     const absRoot = resolve(rootDir);
-
     const route = new Route("GET", prefix + "/*", async (c: HTTPContext) => {
       const urlPath = c.path.substring(prefix.length);
       const relativePath = urlPath.replace(/^\/+/, "");
       const finalPath = resolve(join(absRoot, relativePath));
-
       if (!finalPath.startsWith(absRoot)) {
         throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
       }
-
       await c.file(finalPath);
     });
-
     this.mount(route);
   }
 
@@ -183,7 +170,6 @@ export class Xerus {
     }
 
     const part = parts[index];
-
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
@@ -242,9 +228,6 @@ export class Xerus {
 
     const { handler, wsHandler, params } = this.find(method, path);
 
-    // -----------------------------
-    // WebSocket Upgrade (pooled context)
-    // -----------------------------
     if (method === "GET" && wsHandler && req.headers.get("Upgrade") === "websocket") {
       const context = this.contextPool.acquire();
       try {
@@ -264,9 +247,6 @@ export class Xerus {
       }
     }
 
-    // -----------------------------
-    // Standard HTTP request (pooled context)
-    // -----------------------------
     let context: HTTPContext | undefined;
 
     try {
@@ -274,14 +254,12 @@ export class Xerus {
       context.reset(req, params);
 
       if (handler) return await handler.execute(context);
-
       if (this.notFoundHandler) return await this.notFoundHandler.execute(context);
 
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
     } catch (e: any) {
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
-
       c.clearResponse();
       c.setErr(e);
 
@@ -302,17 +280,15 @@ export class Xerus {
         detail: e?.message ?? "Unknown",
         warning: "No error handling strategy found.",
       });
+
       return c.res.send();
     } finally {
       if (context) {
         const hold = (context.data as any)?.__holdRelease;
         if (hold && typeof (hold as any).then === "function") {
-          // ensure we only schedule this once
           delete (context.data as any).__holdRelease;
-
           const ctx = context;
           (hold as Promise<void>).finally(() => {
-            // minimal cleanup; reset() will do full cleanup on reuse
             ctx.clearResponse();
             ctx.setErr(undefined);
             this.contextPool.release(ctx);
@@ -327,18 +303,30 @@ export class Xerus {
   async listen(port: number = 8080): Promise<void> {
     const app = this;
 
+    function wsCloseForError(e: any): { code: number; reason: string } {
+      // Prefer safe/short reasons; log full error server-side.
+      if (e instanceof SystemErr) {
+        if (e.typeOf === SystemErrCode.VALIDATION_FAILED || e.typeOf === SystemErrCode.BODY_PARSING_FAILED) {
+          return { code: 1008, reason: "Validation failed" };
+        }
+        return { code: 1011, reason: "Internal error" };
+      }
+      // Generic errors: treat as internal
+      return { code: 1011, reason: "Internal error" };
+    }
+
     const server: Server<HTTPContext> = Bun.serve({
       port,
       fetch: (req, server) => app.handleHTTP(req, server),
-
       websocket: {
         async open(ws: ServerWebSocket<any>) {
           try {
             const handler = ws.data._wsHandler as WSHandler;
             if (handler?.compiledOpen) await handler.compiledOpen(ws);
           } catch (e: any) {
-            console.error("[WS ERROR] Open:", e.message);
-            ws.close(1011, "Middleware or Handler Error during Open");
+            console.error("[WS ERROR] Open:", e?.message ?? e);
+            const { code, reason } = wsCloseForError(e);
+            ws.close(code, reason);
           }
         },
 
@@ -347,8 +335,9 @@ export class Xerus {
             const handler = ws.data._wsHandler as WSHandler;
             if (handler?.compiledMessage) await handler.compiledMessage(ws, message);
           } catch (e: any) {
-            console.error("[WS ERROR] Message:", e.message);
-            ws.close(1011, "Validation Failed");
+            console.error("[WS ERROR] Message:", e?.message ?? e);
+            const { code, reason } = wsCloseForError(e);
+            ws.close(code, reason);
           }
         },
 
@@ -357,13 +346,16 @@ export class Xerus {
             const handler = ws.data._wsHandler as WSHandler;
             if (handler?.compiledClose) await handler.compiledClose(ws, code, message);
           } catch (e: any) {
-            console.error("[WS ERROR] Close:", e.message);
+            console.error("[WS ERROR] Close:", e?.message ?? e);
           } finally {
             const ctx = ws.data as HTTPContext;
             if (ctx && ctx._isWS) {
               (ctx as any)._wsHandler = undefined;
               ctx._wsMessage = null;
               ctx.setStore("_wsCloseArgs", undefined);
+              ctx.setStore("__wsSocket", undefined);
+
+              // keep __wsValidated around for reuse; it's event-local and cleared per event
               app.contextPool.release(ctx);
             }
           }
@@ -374,8 +366,9 @@ export class Xerus {
             const handler = ws.data._wsHandler as WSHandler;
             if (handler?.compiledDrain) await handler.compiledDrain(ws);
           } catch (e: any) {
-            console.error("[WS ERROR] Drain:", e.message);
-            ws.close(1011, "Drain Error");
+            console.error("[WS ERROR] Drain:", e?.message ?? e);
+            const { code, reason } = wsCloseForError(e);
+            ws.close(code, reason);
           }
         },
       },

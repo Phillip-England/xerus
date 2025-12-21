@@ -1,3 +1,5 @@
+// PATH: /home/jacex/src/xerus/src/WSHandler.ts
+
 import type { ServerWebSocket } from "bun";
 import { Middleware } from "./Middleware";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
@@ -6,16 +8,9 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { WSContext } from "./WSContext";
 import type { WSCloseFunc, WSDrainFunc, WSMessageFunc, WSOpenFunc } from "./WSHandlerFuncs";
-import { SourceType, type WSValidationSource } from "./ValidationSource";
-import type { Constructable } from "./HTTPContext";
-import type { TypeValidator } from "./TypeValidator";
+import type { ValidatedData } from "./ValidatedData";
 
 type EventType = "OPEN" | "MESSAGE" | "CLOSE" | "DRAIN";
-
-export type WSClassValidation = {
-  source: WSValidationSource;
-  ctor: Constructable<any>;
-};
 
 export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
@@ -24,7 +19,15 @@ export class WSHandler {
   public compiledClose?: (ws: ServerWebSocket<HTTPContext>, code: number, reason: string) => Promise<void>;
 
   private normalizeEventState(event: EventType, http: HTTPContext, args: any[]) {
-    http.validated.clear();
+    // ✅ Event-local validated store (reused + cleared)
+    let vd = http.getStore("__wsValidated") as ValidatedData | undefined;
+    if (!vd) {
+      // Create lazily; keeps allocation down if no WS used
+      vd = new (http.validated.constructor as any)() as ValidatedData;
+      http.setStore("__wsValidated", vd);
+    } else {
+      vd.clear();
+    }
 
     if (event === "MESSAGE") {
       const msg = (args[0] ?? null) as string | Buffer | null;
@@ -46,76 +49,18 @@ export class WSHandler {
     return { message: "", code: 0, reason: "" };
   }
 
-  private extractWSRaw(c: WSContext, source: WSValidationSource) {
-    switch (source.type) {
-      case SourceType.QUERY:
-        return source.key ? c.http.query(source.key, "") : c.http.queries;
-      case SourceType.PARAM:
-        return c.http.getParam(source.key, "");
-      case SourceType.HEADER:
-        return c.http.getHeader(source.key);
-      case SourceType.WS_MESSAGE: {
-        const msg = c.message;
-        if (Buffer.isBuffer(msg)) return msg.toString();
-        return msg;
-      }
-      case SourceType.WS_CLOSE:
-        return { code: c.code ?? 0, reason: c.reason ?? "" };
-
-      // Not supported for WS validation in this design
-      case SourceType.JSON:
-      case SourceType.FORM:
-      case SourceType.MULTIPART:
-      case SourceType.TEXT:
-        throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, `${source.type} is not supported for WS validation`);
-
-      default:
-        throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "Unknown validation source");
-    }
-  }
-
-  /**
-   * ✅ Single validation style (class-based) for WS:
-   * - instantiate class with extracted raw
-   * - call instance.validate(c) if present
-   * - store under class key so data.get(Class) works
-   */
-  private async runValidations(c: WSContext, validations?: WSClassValidation[]) {
-    if (!validations || validations.length === 0) return;
-
-    for (const v of validations) {
-      let raw: any;
-      try {
-        raw = this.extractWSRaw(c, v.source);
-      } catch (e: any) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          `Data Extraction Failed: ${e?.message ?? String(e)}`,
-        );
-      }
-
-      try {
-        const instance: any = new (v.ctor as any)(raw);
-        const maybeValidate = (instance as TypeValidator<WSContext> | undefined)?.validate;
-        if (typeof maybeValidate === "function") {
-          await maybeValidate.call(instance, c);
-        }
-        c.data.set(v.ctor, instance);
-      } catch (e: any) {
-        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e?.message ?? "Validation failed");
-      }
-    }
-  }
-
   private createChain(
     event: EventType,
-    handler: (c: WSContext, data: HTTPContext["validated"]) => Promise<void>,
+    handler: (c: WSContext, data: ValidatedData) => Promise<void>,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSClassValidation[],
   ) {
-    let chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
+    return async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       const http = ws.data;
+
+      // Make the current socket visible to validation middleware (and any advanced MW)
+      http.setStore("__wsSocket", ws);
+
       const normalized = this.normalizeEventState(event, http, args);
 
       const c = new WSContext(ws, http, {
@@ -124,9 +69,48 @@ export class WSHandler {
         reason: normalized.reason,
       });
 
-      try {
-        await this.runValidations(c, validations);
+      let core = async (): Promise<void> => {
         await handler(c, c.data);
+      };
+
+      // Onion wrap: middleware are HTTPContext middlewares (logger/requestId/etc)
+      for (let i = middlewares.length - 1; i >= 0; i--) {
+        const mw = middlewares[i];
+        const nextCore = core;
+
+        core = async () => {
+          let nextPending = false;
+          const safeNext = async () => {
+            nextPending = true;
+            try {
+              await nextCore();
+            } finally {
+              nextPending = false;
+            }
+          };
+
+          try {
+            await mw.execute(http, safeNext);
+          } catch (e: any) {
+            if (errHandler) {
+              http.setErr(e);
+              await errHandler(http, e);
+              return;
+            }
+            throw e;
+          }
+
+          if (nextPending) {
+            throw new SystemErr(
+              SystemErrCode.MIDDLEWARE_ERROR,
+              "A WebSocket Middleware called next() but did not await it.",
+            );
+          }
+        };
+      }
+
+      try {
+        await core();
       } catch (e: any) {
         if (errHandler) {
           http.setErr(e);
@@ -134,83 +118,42 @@ export class WSHandler {
           return;
         }
         throw e;
+      } finally {
+        // clean per-event socket ref
+        http.setStore("__wsSocket", undefined);
       }
     };
-
-    for (let i = middlewares.length - 1; i >= 0; i--) {
-      const mw = middlewares[i];
-      const nextChain = chain;
-
-      chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
-        const http = ws.data;
-        this.normalizeEventState(event, http, args);
-
-        let nextPending = false;
-        const safeNext = async () => {
-          nextPending = true;
-          try {
-            await nextChain(ws, ...args);
-          } finally {
-            nextPending = false;
-          }
-        };
-
-        try {
-          await mw.execute(http, safeNext);
-        } catch (e: any) {
-          if (errHandler) {
-            http.setErr(e);
-            await errHandler(http, e);
-          } else {
-            throw e;
-          }
-        }
-
-        if (nextPending) {
-          throw new SystemErr(
-            SystemErrCode.MIDDLEWARE_ERROR,
-            "A WebSocket Middleware called next() but did not await it.",
-          );
-        }
-      };
-    }
-
-    return chain;
   }
 
   setOpen(
     handler: WSOpenFunc,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSClassValidation[],
   ) {
-    this.compiledOpen = this.createChain("OPEN", handler, middlewares, errHandler, validations);
+    this.compiledOpen = this.createChain("OPEN", handler, middlewares, errHandler);
   }
 
   setMessage(
     handler: WSMessageFunc,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSClassValidation[],
   ) {
-    this.compiledMessage = this.createChain("MESSAGE", handler, middlewares, errHandler, validations);
+    this.compiledMessage = this.createChain("MESSAGE", handler, middlewares, errHandler);
   }
 
   setDrain(
     handler: WSDrainFunc,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSClassValidation[],
   ) {
-    this.compiledDrain = this.createChain("DRAIN", handler, middlewares, errHandler, validations);
+    this.compiledDrain = this.createChain("DRAIN", handler, middlewares, errHandler);
   }
 
   setClose(
     handler: WSCloseFunc,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSClassValidation[],
   ) {
-    this.compiledClose = this.createChain("CLOSE", handler, middlewares, errHandler, validations);
+    this.compiledClose = this.createChain("CLOSE", handler, middlewares, errHandler);
   }
 }
