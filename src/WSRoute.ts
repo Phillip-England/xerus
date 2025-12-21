@@ -1,5 +1,3 @@
-// PATH: /home/jacex/src/xerus/src/WSRoute.ts
-
 import { WSHandler } from "./WSHandler";
 import { Middleware } from "./Middleware";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
@@ -9,7 +7,7 @@ import type { WSOpenFunc, WSMessageFunc, WSCloseFunc, WSDrainFunc } from "./WSHa
 import type { HTTPContext } from "./HTTPContext";
 import type { WSContext } from "./WSContext";
 import { SourceType, type WSValidationSource } from "./ValidationSource";
-import { pipeValidators, type ValidateFn } from "./Validator";
+import { Validator, type ValidateWithValidatorFn } from "./Validator";
 
 export enum WSMethod {
   OPEN = "OPEN",
@@ -24,18 +22,50 @@ export type WSValidation = {
   fn: (c: WSContext, raw: any) => any | Promise<any>;
 };
 
-/**
- * WSRoute: One route == one websocket lifecycle method.
- * Multiple WSRoute entries can share the same `path` and will be merged at mount-time.
- */
+function inferOutKeyFromWSSource(source: WSValidationSource): string {
+  switch (source.type) {
+    case SourceType.PARAM:
+    case SourceType.HEADER:
+      return source.key;
+    case SourceType.QUERY:
+      return source.key ? source.key : "query";
+    case SourceType.WS_MESSAGE:
+      return "message";
+    case SourceType.WS_CLOSE:
+      return "close";
+    case SourceType.JSON:
+    case SourceType.FORM:
+    case SourceType.MULTIPART:
+    case SourceType.TEXT:
+      return "data";
+    default:
+      return "data";
+  }
+}
+
+function pipeWSValidatorObject(...fns: ValidateWithValidatorFn<WSContext>[]) {
+  if (fns.length === 0) {
+    throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WS validator requires at least one function");
+  }
+  return async (c: WSContext, initial: any) => {
+    let current = initial;
+    for (const fn of fns) {
+      const v = new Validator(current);
+      const ret = await fn(c, v);
+      if (ret instanceof Validator) current = ret.value;
+      else if (ret === undefined) current = v.value;
+      else current = ret;
+    }
+    return current;
+  };
+}
+
 export class WSRoute {
   public method: WSMethod;
   public path: string;
-
   public handler: WSOpenFunc | WSMessageFunc | WSCloseFunc | WSDrainFunc;
   public middlewares: Middleware<HTTPContext>[] = [];
   public errHandler?: HTTPErrorHandlerFunc;
-
   private validations: WSValidation[] = [];
 
   constructor(
@@ -58,24 +88,32 @@ export class WSRoute {
     return this;
   }
 
-  /**
-   * validate(source, outKey, ...fns)
-   * - Runs before handler, inside WSHandler, with a real WSContext.
-   * - Stores validated value at data.get(outKey)
-   *
-   * Example:
-   *   wsRoute.validate(Source.WS_MESSAGE(), "msg", v.required(), v.asString(), v.maxLength(1000))
-   */
   validate(
     source: WSValidationSource,
     outKey: string,
-    ...fns: ValidateFn<WSContext, any, any>[]
-  ) {
+    ...fns: ValidateWithValidatorFn<WSContext>[]
+  ): this;
+  validate(
+    source: WSValidationSource,
+    ...fns: ValidateWithValidatorFn<WSContext>[]
+  ): this;
+
+  validate(source: WSValidationSource, arg2: any, ...rest: any[]) {
+    let outKey: string;
+    let fns: ValidateWithValidatorFn<WSContext>[];
+
+    if (typeof arg2 === "string") {
+      outKey = arg2;
+      fns = rest as ValidateWithValidatorFn<WSContext>[];
+    } else {
+      outKey = inferOutKeyFromWSSource(source);
+      fns = [arg2, ...rest] as ValidateWithValidatorFn<WSContext>[];
+    }
+
     if (fns.length === 0) {
       throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WSRoute.validate requires at least one function");
     }
 
-    // enforce lifecycle correctness for WS_MESSAGE / WS_CLOSE (runtime)
     if (source.type === SourceType.WS_MESSAGE && this.method !== WSMethod.MESSAGE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -89,7 +127,7 @@ export class WSRoute {
       );
     }
 
-    const composed = pipeValidators<WSContext>(...fns);
+    const composed = pipeWSValidatorObject(...fns);
     this.validations.push({ source, outKey, fn: composed });
     return this;
   }

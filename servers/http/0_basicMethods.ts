@@ -1,8 +1,7 @@
-// PATH: /home/jacex/src/xerus/servers/http/0_basicMethods.ts
-
 import { Xerus } from "../../src/Xerus";
 import { Route } from "../../src/Route";
 import type { HTTPContext } from "../../src/HTTPContext";
+import { Source } from "../../src/ValidationSource";
 
 export function basicMethods(app: Xerus) {
   app.mount(
@@ -10,21 +9,25 @@ export function basicMethods(app: Xerus) {
       c.json({ message: "Hello, world!" });
     }),
 
-    new Route("POST", "/items", async (c: HTTPContext) => {
-      const body = await c.req.json();
+    new Route("POST", "/items", async (c: HTTPContext, data) => {
+      const body = data.get<any>("body");
       c.setStatus(201).json({ message: "Item created", data: body });
+    }).validate(Source.JSON(), "body", async (_c, v) => {
+      v.isObject("Expected JSON object body");
+      return v.value;
     }),
 
-    new Route("PUT", "/items/1", async (c: HTTPContext) => {
-      const body = await c.req.json();
+    new Route("PUT", "/items/1", async (c: HTTPContext, data) => {
+      const body = data.get<any>("body");
       c.json({ message: "Item 1 updated", data: body });
+    }).validate(Source.JSON(), "body", async (_c, v) => {
+      v.isObject("Expected JSON object body");
+      return v.value;
     }),
 
     new Route("DELETE", "/items/1", async (c: HTTPContext) => {
       c.json({ message: "Item 1 deleted" });
     }),
-
-    // --- Redirect Tests ---
 
     new Route("GET", "/redir/simple", async (c: HTTPContext) => {
       c.redirect("/");
@@ -38,10 +41,6 @@ export function basicMethods(app: Xerus) {
       const dangerous = "Hack\r\nLocation: google.com";
       c.redirect("/", { msg: dangerous });
     }),
-
-    // -----------------------------------------------------------------------
-    // Extra Basic / HTTP semantics endpoints
-    // -----------------------------------------------------------------------
 
     new Route("GET", "/basics/ping", async (c: HTTPContext) => {
       c.setHeader("X-Ping", "pong");
@@ -58,7 +57,8 @@ export function basicMethods(app: Xerus) {
       c.setStatus(204).text("");
     }),
 
-    // ✅ Echo query params with correct null behavior
+    // NOTE: These echo endpoints intentionally keep the existing behavior
+    // (null for missing values) and do not force validation.
     new Route("GET", "/basics/echo-query", async (c: HTTPContext) => {
       const a = c.url.searchParams.get("a"); // string | null
       const b = c.url.searchParams.get("b"); // string | null
