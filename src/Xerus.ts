@@ -1,5 +1,3 @@
-// PATH: src/Xerus.ts
-
 import type { Server, ServerWebSocket } from "bun";
 import { TrieNode } from "./TrieNode";
 import { Middleware } from "./Middleware";
@@ -33,9 +31,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
   private globalMiddlewares: Middleware<T>[] = [];
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
-
   private resolvedRoutes = new Map<string, { blueprint?: RouteBlueprint; params: Record<string, string> }>();
-
   private readonly MAX_CACHE_SIZE = 500;
   private contextPool: ObjectPool<HTTPContext<T>>;
 
@@ -51,15 +47,11 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     for (const Ctor of routeCtors) {
       const instance = new Ctor();
       instance.onMount();
-
       const blueprint: RouteBlueprint = {
         Ctor,
-        // NOTE: validators are NOT included here because they are instance data,
-        // and we want to compile them per-dispatch (front-loaded).
         middlewares: this.globalMiddlewares.concat(instance._middlewares),
         errHandler: instance._errHandler,
       };
-
       this.register(instance.method, instance.path, blueprint);
     }
   }
@@ -88,10 +80,12 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     class EmbedRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix + "/*";
+
       async handle(c: HTTPContext) {
         const lookupPath = c.path.substring(pathPrefix.length);
         const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
         if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
+
         c.setHeader("Content-Type", file.type);
         let bodyData = file.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -108,17 +102,18 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     class StaticRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
+
       async handle(c: HTTPContext) {
         const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
         const finalPath = resolve(join(absRoot, relativePath));
+
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
         await c.file(finalPath);
       }
     }
-
     this.mount(StaticRoute);
   }
 
@@ -139,6 +134,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     const isWS = [Method.WS_OPEN, Method.WS_MESSAGE, Method.WS_CLOSE, Method.WS_DRAIN].includes(method as Method);
+
     if (isWS) {
       if (!node.wsHandler) {
         (node as any).wsHandler = { open: undefined, message: undefined, close: undefined, drain: undefined };
@@ -164,7 +160,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     if ((node.handlers as any)[method]) {
       throw new SystemErr(SystemErrCode.ROUTE_ALREADY_REGISTERED, `Route ${method} ${path} has already been registered`);
     }
-
     (node.handlers as any)[method] = blueprint;
 
     if (!path.includes(":") && !path.includes("*")) {
@@ -182,7 +177,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     if (index === parts.length) {
       if ((node.handlers as any)[method]) return { blueprint: (node.handlers as any)[method], params };
       if ((node as any).wsHandler) return { blueprint: (node as any).wsHandler, params };
-
       if (node.wildcard) {
         const wcNode = node.wildcard;
         if ((wcNode.handlers as any)[method] || (wcNode as any).wsHandler) {
@@ -193,7 +187,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     const part = parts[index];
-
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
@@ -249,16 +242,13 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     finalHandler: () => Promise<void>,
   ) {
     let index = -1;
-
     const dispatch = async (i: number): Promise<void> => {
       if (i <= index) throw new Error("next() called multiple times");
       index = i;
-
       if (i === middlewares.length) {
         await finalHandler();
         return;
       }
-
       const mw = middlewares[i];
       let nextCalled = false;
       let nextFinished = false;
@@ -275,20 +265,14 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       await mw.execute(context, nextWrapper);
 
       if (nextCalled && !nextFinished && !context.isDone) {
+        // Taint the context so it is NOT returned to the pool
+        (context as any).__tainted = true;
         throw new SystemErr(SystemErrCode.MIDDLEWARE_ERROR, `Middleware at index ${i} did not await next()`);
       }
     };
-
     await dispatch(0);
   }
 
-  /**
-   * Validators are compiled into middleware that runs FIRST,
-   * then route.preHandle(), then the rest of middleware, then handle().
-   *
-   * IMPORTANT: WS routes run middleware on the underlying HTTPContext,
-   * so validators that need WS message use HTTPContext._wsMessage.
-   */
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext<T> | WSContext<T>, isWS: boolean) {
     const httpCtx = isWS ? (context as WSContext<T>).http : (context as HTTPContext<T>);
     const routeInstance = new blueprint.Ctor();
@@ -298,7 +282,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     );
 
     const preHandleMw = new Middleware<any>(async (_c, next) => {
-      // FIX: Call the instance validate method if it exists
       if (typeof (routeInstance as any).validate === "function") {
         await (routeInstance as any).validate(context);
       }
@@ -341,6 +324,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         (context as any)._wsBlueprints = blueprint;
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
+
         context.clearResponse();
         this.contextPool.release(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
@@ -402,27 +386,30 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
 
       console.warn(`[XERUS WARNING] Uncaught error on ${method} ${path}`);
       console.error(e);
-
       c.errorJSON(500, SystemErrCode.INTERNAL_SERVER_ERR, "Internal Server Error", {
         detail: e?.message ?? "Unknown",
       });
-
       const resp = c.res.send();
       c.markSent();
       return resp;
     } finally {
       if (context) {
-        const hold = (context.data as any)?.__holdRelease;
-        if (hold && typeof (hold as any).then === "function") {
-          delete (context.data as any).__holdRelease;
-          const ctx = context;
-          (hold as Promise<void>).finally(() => {
-            ctx.clearResponse();
-            ctx.setErr(undefined);
-            this.contextPool.release(ctx);
-          });
+        // Do NOT release tainted contexts (contexts involved in middleware errors)
+        if ((context as any).__tainted) {
+          // Let GC collect it.
         } else {
-          this.contextPool.release(context);
+          const hold = (context.data as any)?.__holdRelease;
+          if (hold && typeof (hold as any).then === "function") {
+            delete (context.data as any).__holdRelease;
+            const ctx = context;
+            (hold as Promise<void>).finally(() => {
+              ctx.clearResponse();
+              ctx.setErr(undefined);
+              this.contextPool.release(ctx);
+            });
+          } else {
+            this.contextPool.release(context);
+          }
         }
       }
     }
@@ -449,9 +436,9 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       const httpCtx = ws.data as HTTPContext<T>;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
+
       if (!blueprint) return;
 
-      // ✅ Make WS payload available to validators via HTTPContext
       if (eventName === "message") {
         httpCtx._wsMessage = args[0] ?? null;
       } else {
@@ -468,7 +455,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       } catch (e: any) {
         wsCloseOnError(ws, e);
       } finally {
-        // avoid stale message being read later
         httpCtx._wsMessage = null;
       }
     };

@@ -106,7 +106,12 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
   private ensureConfigurable() {
     if (this._timedOut) return;
-    if (this._state === ContextState.STREAMING || this._state === ContextState.SENT) {
+    
+    // If the response is already SENT, we ignore further modifications.
+    // This prevents unhandled exceptions from "ghost" handlers (e.g. Safeguard test).
+    if (this._state === ContextState.SENT) return;
+
+    if (this._state === ContextState.STREAMING) {
       throw new SystemErr(
         SystemErrCode.HEADERS_ALREADY_SENT,
         "Cannot modify headers or status after response has started streaming.",
@@ -133,6 +138,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private ensureBodyModifiable() {
     if (this._timedOut) return;
     this.ensureConfigurable();
+    
+    // If we are SENT, we stop here (ensureConfigurable already checked, but double check to be safe)
+    if (this._state === ContextState.SENT) return;
+
     if (this._state === ContextState.WRITTEN) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,

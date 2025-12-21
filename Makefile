@@ -40,4 +40,4 @@ aic-doc:
 	aic prompt "okay your goal is to look at all the examples I am going to provide you, and document them in plain html which is converatable using pandoc, remember, you just generate the html which I will then pipe into pandoc, this html should clearly document my library using these examples @examples"
 
 soak:
-	aic prompt "this is my webframework code @src these are my tests @servers these are my examples @examples"
+	aic prompt "this is my webframework code @src these are my tests @servers these are my examples @examples and these are my skills @skills"

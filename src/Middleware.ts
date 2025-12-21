@@ -174,24 +174,26 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
   const TIMEOUT = Symbol("XERUS_TIMEOUT");
 
   return new Middleware<any>(async (c, next) => {
-    let timer: any;
+    let timer: any = null;
 
+    // Start downstream, but *always* handle rejection so it never becomes "unhandled"
     const downstream = (async () => {
       await next();
-    })();
+    })().catch(() => {
+      // swallow: timeout responses should not be overwritten by downstream errors
+    });
 
     const timeoutPromise = new Promise<typeof TIMEOUT>((resolve) => {
       timer = setTimeout(() => resolve(TIMEOUT), ms);
     });
 
     try {
-      const winner = await Promise.race([
-        downstream.then(() => "DOWNSTREAM" as const),
-        timeoutPromise,
-      ]);
+      const winner = await Promise.race([downstream.then(() => "DOWNSTREAM" as const), timeoutPromise]);
 
+      // Downstream finished first → normal path
       if (winner !== TIMEOUT) return;
 
+      // Timeout won → lock the context and send response if nothing already wrote
       (c.data as any).__timeoutSent = true;
 
       if (!c.isDone) {
@@ -209,13 +211,16 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
         c.finalize();
       }
 
-      (c.data as any).__holdRelease = downstream.catch(() => {});
+      // IMPORTANT: keep the context from being returned to the pool until downstream settles
+      (c.data as any).__holdRelease = downstream;
       return;
     } finally {
       if (timer) clearTimeout(timer);
     }
   });
 };
+
+
 
 export const compress = (opts?: {
   thresholdBytes?: number;
