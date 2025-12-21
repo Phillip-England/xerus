@@ -3,6 +3,7 @@ import { wsMethods } from "./0_wsMethods";
 import { wsAdvancedMethods } from "./1_wsAdvanced";
 import { wsValidationMethods } from "./2_wsValidation";
 import { wsLifecycleValidation } from "./3_wsLifecycleValidation";
+import { wsValidator } from "./4_wsValidator";
 import type { TestStore } from "../TestStore";
 
 const app = new Xerus<TestStore>();
@@ -11,5 +12,6 @@ wsMethods(app);
 wsAdvancedMethods(app);
 wsValidationMethods(app);
 wsLifecycleValidation(app);
+wsValidator(app);
 
 app.listen(8081);

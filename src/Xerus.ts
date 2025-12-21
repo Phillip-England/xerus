@@ -1,3 +1,5 @@
+// PATH: src/Xerus.ts
+
 import type { Server, ServerWebSocket } from "bun";
 import { TrieNode } from "./TrieNode";
 import { Middleware } from "./Middleware";
@@ -11,6 +13,7 @@ import { ObjectPool } from "./ObjectPool";
 import { XerusRoute } from "./XerusRoute";
 import { Method } from "./Method";
 import { WSContext } from "./WSContext";
+import type { Validator } from "./Validator";
 
 interface RouteBlueprint {
   Ctor: new () => XerusRoute<any, any>;
@@ -31,10 +34,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
 
-  private resolvedRoutes = new Map<
-    string,
-    { blueprint?: RouteBlueprint; params: Record<string, string> }
-  >();
+  private resolvedRoutes = new Map<string, { blueprint?: RouteBlueprint; params: Record<string, string> }>();
 
   private readonly MAX_CACHE_SIZE = 500;
   private contextPool: ObjectPool<HTTPContext<T>>;
@@ -49,16 +49,18 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
 
   mount(...routeCtors: (new () => XerusRoute<T, any>)[] | any[]) {
     for (const Ctor of routeCtors) {
-      const blueprintInstance = new Ctor();
-      blueprintInstance.onMount();
+      const instance = new Ctor();
+      instance.onMount();
 
       const blueprint: RouteBlueprint = {
-        Ctor: Ctor,
-        middlewares: this.globalMiddlewares.concat(blueprintInstance._middlewares),
-        errHandler: blueprintInstance._errHandler,
+        Ctor,
+        // NOTE: validators are NOT included here because they are instance data,
+        // and we want to compile them per-dispatch (front-loaded).
+        middlewares: this.globalMiddlewares.concat(instance._middlewares),
+        errHandler: instance._errHandler,
       };
 
-      this.register(blueprintInstance.method, blueprintInstance.path, blueprint);
+      this.register(instance.method, instance.path, blueprint);
     }
   }
 
@@ -143,10 +145,18 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       }
       const container = (node as any).wsHandler;
       switch (method) {
-        case Method.WS_OPEN: container.open = blueprint; break;
-        case Method.WS_MESSAGE: container.message = blueprint; break;
-        case Method.WS_CLOSE: container.close = blueprint; break;
-        case Method.WS_DRAIN: container.drain = blueprint; break;
+        case Method.WS_OPEN:
+          container.open = blueprint;
+          break;
+        case Method.WS_MESSAGE:
+          container.message = blueprint;
+          break;
+        case Method.WS_CLOSE:
+          container.close = blueprint;
+          break;
+        case Method.WS_DRAIN:
+          container.drain = blueprint;
+          break;
       }
       return;
     }
@@ -273,35 +283,41 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
   }
 
   /**
-   * ✅ FIX: validate() runs BEFORE middleware chain so middleware can rely on validated state.
-   * This applies to BOTH HTTP and WS routes.
+   * Validators are compiled into middleware that runs FIRST,
+   * then route.preHandle(), then the rest of middleware, then handle().
+   *
+   * IMPORTANT: WS routes run middleware on the underlying HTTPContext,
+   * so validators that need WS message use HTTPContext._wsMessage.
    */
-  private async executeRoute(
-    blueprint: RouteBlueprint,
-    context: HTTPContext<T> | WSContext<T>,
-    isWS: boolean,
-  ) {
+  private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext<T> | WSContext<T>, isWS: boolean) {
     const httpCtx = isWS ? (context as WSContext<T>).http : (context as HTTPContext<T>);
-
     const routeInstance = new blueprint.Ctor();
 
-    // ✅ Validate FIRST (outside middleware chain)
-    await routeInstance.validate(context as any);
+    const validatorChain: Middleware<any>[] = (routeInstance.validators ?? []).map((v: Validator<any>) =>
+      v.asMiddleware(),
+    );
+
+    const preHandleMw = new Middleware<any>(async (_c, next) => {
+      // FIX: Call the instance validate method if it exists
+      if (typeof (routeInstance as any).validate === "function") {
+        await (routeInstance as any).validate(context);
+      }
+      await routeInstance.preHandle(context as any);
+      await next();
+    });
 
     const finalHandler = async () => {
       if (httpCtx.isDone && !httpCtx._isWS) return;
       await routeInstance.handle(context as any);
+      await routeInstance.postHandle(context as any);
     };
 
+    const fullChain = validatorChain.concat([preHandleMw]).concat(blueprint.middlewares);
+
     try {
-      await this.runMiddlewareChain(blueprint.middlewares, httpCtx, finalHandler);
-    } catch (e: any) {
-      if (blueprint.errHandler) {
-        httpCtx.setErr(e);
-        await blueprint.errHandler(httpCtx, e);
-      } else {
-        throw e;
-      }
+      await this.runMiddlewareChain(fullChain, httpCtx, finalHandler);
+    } finally {
+      await routeInstance.onFinally(context as any);
     }
   }
 
@@ -343,7 +359,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       if (blueprint) {
         await this.executeRoute(blueprint, context, false);
         const resp = context.res.send();
-        context.markSent(); // ✅ now uses SENT
+        context.markSent();
         return resp;
       }
 
@@ -361,7 +377,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       c.clearResponse();
       c.setErr(e);
 
-      if (e && typeof e === "object" && Array.isArray(e.issues)) {
+      if (e && typeof e === "object" && (e.typeOf === SystemErrCode.VALIDATION_FAILED || Array.isArray(e.issues))) {
         const errHandler = SystemErrRecord[SystemErrCode.VALIDATION_FAILED];
         await errHandler(c, e);
         const resp = c.res.send();
@@ -417,13 +433,12 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
 
     const wsCloseOnError = (ws: ServerWebSocket<any>, err: any) => {
       const reason =
-        (err && typeof err === "object" && typeof err.message === "string" && err.message.length > 0)
+        err && typeof err === "object" && typeof err.message === "string" && err.message.length > 0
           ? err.message.slice(0, 120)
           : "Validation failed";
       try {
         ws.close(1008, reason);
-      } catch {
-      }
+      } catch {}
     };
 
     const runWS = async (
@@ -436,19 +451,25 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       const blueprint = container?.[eventName];
       if (!blueprint) return;
 
-      let wsCtx: WSContext<T>;
+      // ✅ Make WS payload available to validators via HTTPContext
       if (eventName === "message") {
-        wsCtx = new WSContext<T>(ws, httpCtx, { message: args[0] });
-      } else if (eventName === "close") {
-        wsCtx = new WSContext<T>(ws, httpCtx, { code: args[0], reason: args[1] });
+        httpCtx._wsMessage = args[0] ?? null;
       } else {
-        wsCtx = new WSContext<T>(ws, httpCtx);
+        httpCtx._wsMessage = null;
       }
+
+      let wsCtx: WSContext<T>;
+      if (eventName === "message") wsCtx = new WSContext<T>(ws, httpCtx, { message: args[0] });
+      else if (eventName === "close") wsCtx = new WSContext<T>(ws, httpCtx, { code: args[0], reason: args[1] });
+      else wsCtx = new WSContext<T>(ws, httpCtx);
 
       try {
         await app.executeRoute(blueprint, wsCtx, true);
       } catch (e: any) {
         wsCloseOnError(ws, e);
+      } finally {
+        // avoid stale message being read later
+        httpCtx._wsMessage = null;
       }
     };
 

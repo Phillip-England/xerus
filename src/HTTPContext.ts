@@ -17,27 +17,37 @@ export type ParseBodyOptions = {
 export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   req!: Request;
   res: MutResponse;
-
   private _url: URL | null = null;
   path: string = "/";
   method: string = "GET";
   route: string = "";
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
-
   private _body?: unknown;
   private _rawBody: string | null = null;
   private _parsedBodyMode: ParsedBodyMode = "NONE";
-
   public _wsMessage: string | Buffer | null = null;
-  data: T = {} as T;
-  private err: Error | undefined | string;
 
+  data: T = {} as T;
+
+  private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
   public _isWS: boolean = false;
 
   constructor() {
     this.res = new MutResponse();
+  }
+
+  resolve<V>(Type: new (...args: any[]) => V): V {
+    const key = Type.name;
+    const val = (this.data as any)[key];
+    if (val === undefined) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Resolved dependency '${key}' not found in context. Ensure the Validator is registered in the route.`,
+      );
+    }
+    return val as V;
   }
 
   reset(req: Request, params: Record<string, string> = {}) {
@@ -165,7 +175,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
-
     let status = 302;
     let finalLocation = path;
 
@@ -231,19 +240,9 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     return (this.req.headers.get("Content-Type") || "").toLowerCase();
   }
 
-  /**
-   * NEW: Default “known mismatch” guard.
-   * If the request clearly declares JSON/FORM/MULTIPART and the caller expects a different type,
-   * throw BODY_PARSING_FAILED with the “Unexpected X data” wording used by your tests.
-   *
-   * This is *not* full strict mode (unknown content-type still falls back).
-   */
   private enforceKnownTypeMismatch(expectedType: BodyType) {
     if (expectedType === BodyType.TEXT) return;
-
     const ct = this.contentType();
-
-    // MULTIPART is already handled below via formData(); keep symmetry for messages.
     const isJson = ct.includes("application/json");
     const isForm = ct.includes("application/x-www-form-urlencoded");
     const isMultipart = ct.includes("multipart/form-data");
@@ -264,7 +263,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     if (expectedType === BodyType.TEXT) return;
 
     const ct = this.contentType();
-
     if (expectedType === BodyType.JSON) {
       if (!ct.includes("application/json")) {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
@@ -319,20 +317,15 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     opts: ParseBodyOptions & { formMode: "params" },
   ): Promise<URLSearchParams>;
   async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
-
   async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
-
-    // Strict mode checks (explicit opt-in)
     this.enforceStrictContentType(expectedType, strict);
-
-    // Default known-mismatch guard (fixes your failing tests)
     this.enforceKnownTypeMismatch(expectedType);
 
-    // Cache fast paths
     if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
       return this._body;
     }
+
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
@@ -341,7 +334,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       return this._rawBody;
     }
 
-    // If we already have raw text cached, parse from it
     if (this._rawBody !== null) {
       if (expectedType === BodyType.JSON) {
         this.assertReparseAllowed("JSON");
@@ -354,7 +346,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
-
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
@@ -366,7 +357,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         this._parsedBodyMode = "FORM";
         return parsed;
       }
-
       if (expectedType === BodyType.TEXT) {
         this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;
@@ -374,8 +364,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     }
 
     const ct = this.contentType();
-
-    // Multipart path
     if (ct.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
@@ -387,7 +375,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       return fd;
     }
 
-    // Read body as text (shared base)
     this.assertReparseAllowed(
       expectedType === BodyType.TEXT
         ? "TEXT"
@@ -532,7 +519,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     if (this._timedOut) return;
     this.ensureConfigurable();
-
     let cookieString = `${name}=${encodeURIComponent(value)}`;
     options.path ??= "/";
     options.httpOnly ??= true;

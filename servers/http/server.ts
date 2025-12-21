@@ -1,6 +1,5 @@
 import { Xerus } from "../../src/Xerus";
 import type { TestStore } from "../TestStore";
-
 import { basicMethods } from "./0_basicMethods";
 import { routeGrouping } from "./1_routeGrouping";
 import { staticFiles } from "./2_staticFiles";
@@ -17,6 +16,8 @@ import { precedence } from "./12_precedence";
 import { flexibleValidation } from "./13_flexibleValidation";
 import { commonPatterns } from "./14_commonPatterns";
 import { httpContextEdgeCases } from "./15_httpContextEdgeCases";
+import { validatorPattern } from "./16_validatorPattern";
+import { validatorTypes } from "./17_validatorTypes";
 
 const app = new Xerus<TestStore>();
 
@@ -36,5 +37,7 @@ precedence(app);
 flexibleValidation(app);
 commonPatterns(app);
 httpContextEdgeCases(app);
+validatorPattern(app);
+validatorTypes(app);
 
 app.listen(8080);

@@ -10,11 +10,9 @@ const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
 class RequestIdRoute extends XerusRoute<TestStore> {
   method = Method.GET;
   path = "/patterns/request-id";
-
   onMount() {
     this.use(requestId({ storeKey: "requestId" }));
   }
-
   async handle(c: HTTPContext<TestStore>) {
     c.json({ id: c.getRequestId() });
   }
@@ -23,11 +21,9 @@ class RequestIdRoute extends XerusRoute<TestStore> {
 class RateLimitRoute extends XerusRoute<TestStore> {
   method = Method.GET;
   path = "/patterns/limited";
-
   onMount() {
     this.use(rateLimit({ windowMs: 250, max: 2 }));
   }
-
   async handle(c: HTTPContext<TestStore>) {
     c.json({ ok: true });
   }
@@ -36,13 +32,10 @@ class RateLimitRoute extends XerusRoute<TestStore> {
 class CsrfGetRoute extends XerusRoute<TestStore> {
   method = Method.GET;
   path = "/patterns/csrf";
-
   onMount() {
     this.use(csrfMw);
   }
-
   async handle(c: HTTPContext<TestStore>) {
-    // csrf middleware stores it on c.data (via any), but it's still accessible via getStore
     c.json({ token: c.getStore("csrfToken") });
   }
 }
@@ -50,11 +43,9 @@ class CsrfGetRoute extends XerusRoute<TestStore> {
 class CsrfPostRoute extends XerusRoute<TestStore> {
   method = Method.POST;
   path = "/patterns/csrf";
-
   onMount() {
     this.use(csrfMw);
   }
-
   async handle(c: HTTPContext<TestStore>) {
     c.json({ ok: true });
   }
@@ -63,13 +54,12 @@ class CsrfPostRoute extends XerusRoute<TestStore> {
 class TimeoutRoute extends XerusRoute<TestStore> {
   method = Method.GET;
   path = "/patterns/timeout";
-
   onMount() {
     this.use(timeout(50));
   }
-
   async handle(c: HTTPContext<TestStore>) {
-    await new Promise((r) => setTimeout(r, 120));
+    // Increased sleep to 500ms to ensure it loses the race against the 50ms timeout
+    await new Promise((r) => setTimeout(r, 500));
     c.json({ shouldNot: "reach" });
   }
 }
@@ -77,11 +67,9 @@ class TimeoutRoute extends XerusRoute<TestStore> {
 class CompressRoute extends XerusRoute<TestStore> {
   method = Method.GET;
   path = "/patterns/compress";
-
   onMount() {
     this.use(compress());
   }
-
   async handle(c: HTTPContext<TestStore>) {
     c.text("x".repeat(5000));
   }
