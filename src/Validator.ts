@@ -14,10 +14,6 @@ export class ValidationError extends Error {
   }
 }
 
-/**
- * Fluent value helper for use INSIDE class-based validators.
- * (Validation is still done via class.validate(c).)
- */
 export class Validator<T = any> {
   private _value: any;
 
@@ -179,10 +175,12 @@ export class Validator<T = any> {
   isBoolean(message = "Expected a boolean"): this {
     const v = this._value;
     if (typeof v === "boolean") return this;
+
     if (typeof v === "number") {
       this._value = v !== 0;
       return this;
     }
+
     if (typeof v === "string") {
       const s = v.trim().toLowerCase();
       if (["true", "1", "yes", "y", "on"].includes(s)) {
@@ -194,6 +192,7 @@ export class Validator<T = any> {
         return this;
       }
     }
+
     this.err(message);
   }
 
@@ -211,14 +210,17 @@ export class Validator<T = any> {
 
   arrayOf(item: (v: Validator) => any | void, opts?: { min?: number; max?: number }): this {
     if (!Array.isArray(this._value)) this._value = [this._value];
+
     const out: any[] = [];
     for (const x of this._value) {
       const vv = new Validator(x);
       const ret = item(vv);
       out.push(ret instanceof Validator ? ret.value : ret === undefined ? vv.value : ret);
     }
+
     if (opts?.min !== undefined && out.length < opts.min) this.err(`Must have at least ${opts.min} items`);
     if (opts?.max !== undefined && out.length > opts.max) this.err(`Must have at most ${opts.max} items`);
+
     this._value = out;
     return this;
   }
@@ -239,6 +241,7 @@ export class Validator<T = any> {
     this.isObject("Expected an object");
     const obj = this._value as Record<string, any>;
     const out: Record<string, any> = { ...obj };
+
     for (const [k, fn] of Object.entries(schema)) {
       try {
         const vv = new Validator(obj[k]);
@@ -248,6 +251,7 @@ export class Validator<T = any> {
         this.err(`Field "${k}": ${e?.message ?? String(e)}`);
       }
     }
+
     this._value = out;
     return this;
   }
@@ -270,19 +274,23 @@ export class Validator<T = any> {
 
   asDate(message = "Invalid date"): this {
     const v = this._value;
+
     if (v instanceof Date) {
       if (Number.isNaN(v.getTime())) this.err(message);
       return this;
     }
+
     if (typeof v === "number") {
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) this.err(message);
       this._value = d;
       return this;
     }
+
     if (typeof v === "string") {
       const s = v.trim();
       if (s.length === 0) this.err(message);
+
       if (/^\d+$/.test(s)) {
         const n = Number(s);
         if (!Number.isFinite(n)) this.err(message);
@@ -292,11 +300,13 @@ export class Validator<T = any> {
         this._value = d;
         return this;
       }
+
       const d = new Date(s);
       if (Number.isNaN(d.getTime())) this.err(message);
       this._value = d;
       return this;
     }
+
     this.err(message);
   }
 
@@ -342,12 +352,6 @@ export function extractHTTPRaw(c: HTTPContext, source: HTTPValidationSource): Pr
   }
 }
 
-/**
- * ONLY validation mechanism:
- * - instantiate the class with extracted raw input
- * - call instance.validate(c) if present
- * - store the instance under the class key (so data.get(Class) works)
- */
 export function HTTPTypeValidator<T extends object>(
   source: HTTPValidationSource,
   Ctor: Constructable<T>,
@@ -376,4 +380,55 @@ export function HTTPTypeValidator<T extends object>(
 
     await next();
   });
+}
+
+/**
+ * ------------------------------------------------------------
+ * Back-compat helper exports (fixes: "Export named 'asString' not found")
+ * ------------------------------------------------------------
+ *
+ * These are tiny convenience functions some apps import directly from "xerus".
+ * They wrap Validator and return the coerced/validated primitive.
+ */
+
+export function asString(
+  value: any,
+  opts?: { required?: boolean; trim?: boolean; nonEmpty?: boolean; message?: string },
+): string {
+  const v = new Validator(value);
+  if (opts?.required) v.required(opts.message ?? "Value is required");
+  v.isString(opts?.message ?? "Expected a string");
+  if (opts?.trim) v.trim();
+  if (opts?.nonEmpty) v.nonEmpty(opts?.message ?? "Must not be empty");
+  return v.value as any;
+}
+
+export function asNumber(
+  value: any,
+  opts?: { required?: boolean; message?: string },
+): number {
+  const v = new Validator(value);
+  if (opts?.required) v.required(opts.message ?? "Value is required");
+  v.isNumber(opts?.message ?? "Expected a number");
+  return v.value as any;
+}
+
+export function asInt(
+  value: any,
+  opts?: { required?: boolean; message?: string },
+): number {
+  const v = new Validator(value);
+  if (opts?.required) v.required(opts.message ?? "Value is required");
+  v.isInt(opts?.message ?? "Expected an integer");
+  return v.value as any;
+}
+
+export function asBoolean(
+  value: any,
+  opts?: { required?: boolean; message?: string },
+): boolean {
+  const v = new Validator(value);
+  if (opts?.required) v.required(opts.message ?? "Value is required");
+  v.isBoolean(opts?.message ?? "Expected a boolean");
+  return v.value as any;
 }
