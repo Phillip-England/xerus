@@ -1,11 +1,6 @@
-// PATH: /Users/phillipengland/src/xerus/src/TypeValidator.ts
-
 import type { HTTPContext } from "./HTTPContext";
+import type { WSContext } from "./WSContext";
 
-/**
- * Any type can be "validatable" by Xerus by implementing this.
- * It may throw if invalid.
- */
 export interface TypeValidator {
-  validate(c: HTTPContext): Promise<void>;
+  validate(c: HTTPContext | WSContext): Promise<void>;
 }

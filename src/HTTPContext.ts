@@ -6,7 +6,6 @@ import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
-
 export type ParsedFormBodyLast = Record<string, string>;
 export type ParsedFormBodyMulti = Record<string, string | string[]>;
 export type ParseBodyOptions = {
@@ -23,15 +22,18 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   route: string = "";
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
+
   private _body?: unknown;
   private _rawBody: string | null = null;
   private _parsedBodyMode: ParsedBodyMode = "NONE";
+
   public _wsMessage: string | Buffer | null = null;
+  public _wsContext: any = null; // Holds WSContext during WS request lifecycle
 
   data: T = {} as T;
-
   private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
+
   public _isWS: boolean = false;
 
   constructor() {
@@ -61,6 +63,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this._parsedBodyMode = "NONE";
     this.err = undefined;
     this._wsMessage = null;
+    this._wsContext = null;
     this.data = {} as T;
     this._isWS = false;
 
@@ -106,11 +109,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
   private ensureConfigurable() {
     if (this._timedOut) return;
-    
-    // If the response is already SENT, we ignore further modifications.
-    // This prevents unhandled exceptions from "ghost" handlers (e.g. Safeguard test).
     if (this._state === ContextState.SENT) return;
-
     if (this._state === ContextState.STREAMING) {
       throw new SystemErr(
         SystemErrCode.HEADERS_ALREADY_SENT,
@@ -138,10 +137,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private ensureBodyModifiable() {
     if (this._timedOut) return;
     this.ensureConfigurable();
-    
-    // If we are SENT, we stop here (ensureConfigurable already checked, but double check to be safe)
     if (this._state === ContextState.SENT) return;
-
     if (this._state === ContextState.WRITTEN) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -270,8 +266,8 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private enforceStrictContentType(expectedType: BodyType, strict: boolean) {
     if (!strict) return;
     if (expectedType === BodyType.TEXT) return;
-
     const ct = this.contentType();
+
     if (expectedType === BodyType.JSON) {
       if (!ct.includes("application/json")) {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
@@ -355,6 +351,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
+
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
@@ -366,6 +363,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         this._parsedBodyMode = "FORM";
         return parsed;
       }
+
       if (expectedType === BodyType.TEXT) {
         this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;

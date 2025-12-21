@@ -55,7 +55,11 @@ export class Validator<T extends TypeValidator = any> {
             `Type "${this.Type.name}" does not implement validate(c)`,
           );
         }
-        await instance.validate(c);
+
+        // If this is a WS request, allow the validator to access the WSContext
+        const ctxToPass = c._wsContext ?? c;
+        await instance.validate(ctxToPass);
+
         (c.data as any)[this.storeKey] = instance;
         await next();
       } catch (e: any) {

@@ -80,12 +80,10 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     class EmbedRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix + "/*";
-
       async handle(c: HTTPContext) {
         const lookupPath = c.path.substring(pathPrefix.length);
         const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
         if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
-
         c.setHeader("Content-Type", file.type);
         let bodyData = file.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -98,11 +96,9 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
 
   static(pathPrefix: string, rootDir: string) {
     const absRoot = resolve(rootDir);
-
     class StaticRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
-
       async handle(c: HTTPContext) {
         const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
@@ -120,7 +116,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
   private register(method: string, path: string, blueprint: RouteBlueprint) {
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
-
     for (const part of parts) {
       if (part.startsWith(":")) {
         node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
@@ -134,7 +129,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     const isWS = [Method.WS_OPEN, Method.WS_MESSAGE, Method.WS_CLOSE, Method.WS_DRAIN].includes(method as Method);
-
     if (isWS) {
       if (!node.wsHandler) {
         (node as any).wsHandler = { open: undefined, message: undefined, close: undefined, drain: undefined };
@@ -160,8 +154,8 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     if ((node.handlers as any)[method]) {
       throw new SystemErr(SystemErrCode.ROUTE_ALREADY_REGISTERED, `Route ${method} ${path} has already been registered`);
     }
-    (node.handlers as any)[method] = blueprint;
 
+    (node.handlers as any)[method] = blueprint;
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -231,7 +225,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
-
     this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
@@ -265,7 +258,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       await mw.execute(context, nextWrapper);
 
       if (nextCalled && !nextFinished && !context.isDone) {
-        // Taint the context so it is NOT returned to the pool
         (context as any).__tainted = true;
         throw new SystemErr(SystemErrCode.MIDDLEWARE_ERROR, `Middleware at index ${i} did not await next()`);
       }
@@ -276,7 +268,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext<T> | WSContext<T>, isWS: boolean) {
     const httpCtx = isWS ? (context as WSContext<T>).http : (context as HTTPContext<T>);
     const routeInstance = new blueprint.Ctor();
-
     const validatorChain: Middleware<any>[] = (routeInstance.validators ?? []).map((v: Validator<any>) =>
       v.asMiddleware(),
     );
@@ -308,7 +299,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
-
     const { blueprint, params } = this.find(method, path);
 
     if (
@@ -324,7 +314,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         (context as any)._wsBlueprints = blueprint;
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
-
         context.clearResponse();
         this.contextPool.release(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
@@ -335,11 +324,9 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     let context: HTTPContext<T> | undefined;
-
     try {
       context = this.contextPool.acquire();
       context.reset(req, params);
-
       if (blueprint) {
         await this.executeRoute(blueprint, context, false);
         const resp = context.res.send();
@@ -353,7 +340,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         context.markSent();
         return resp;
       }
-
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
     } catch (e: any) {
       const c = context || new HTTPContext<T>();
@@ -394,9 +380,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       return resp;
     } finally {
       if (context) {
-        // Do NOT release tainted contexts (contexts involved in middleware errors)
         if ((context as any).__tainted) {
-          // Let GC collect it.
         } else {
           const hold = (context.data as any)?.__holdRelease;
           if (hold && typeof (hold as any).then === "function") {
@@ -450,12 +434,16 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       else if (eventName === "close") wsCtx = new WSContext<T>(ws, httpCtx, { code: args[0], reason: args[1] });
       else wsCtx = new WSContext<T>(ws, httpCtx);
 
+      // Inject WSContext into HTTPContext for Validators
+      httpCtx._wsContext = wsCtx;
+
       try {
         await app.executeRoute(blueprint, wsCtx, true);
       } catch (e: any) {
         wsCloseOnError(ws, e);
       } finally {
         httpCtx._wsMessage = null;
+        httpCtx._wsContext = null;
       }
     };
 

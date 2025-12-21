@@ -49,7 +49,7 @@ Xerus is written for **Bun** and uses Bun APIs (`Bun.serve`, `Bun.file`, `Server
 
 In your Bun project:
 ```
-bun add github:phillip-england/xerus#v0.0.57
+bun add github:phillip-england/xerus#v0.0.58
 ```
 
 ---
