@@ -1,5 +1,3 @@
-// PATH: /home/jacex/src/xerus/src/WSHandler.ts
-
 import type { ServerWebSocket } from "bun";
 import { Middleware } from "./Middleware";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
@@ -9,9 +7,15 @@ import { SystemErrCode } from "./SystemErrCode";
 import { WSContext } from "./WSContext";
 import type { WSCloseFunc, WSDrainFunc, WSMessageFunc, WSOpenFunc } from "./WSHandlerFuncs";
 import { SourceType, type WSValidationSource } from "./ValidationSource";
-import type { WSValidation } from "./WSRoute";
+import type { Constructable } from "./HTTPContext";
+import type { TypeValidator } from "./TypeValidator";
 
 type EventType = "OPEN" | "MESSAGE" | "CLOSE" | "DRAIN";
+
+export type WSClassValidation = {
+  source: WSValidationSource;
+  ctor: Constructable<any>;
+};
 
 export class WSHandler {
   public compiledOpen?: (ws: ServerWebSocket<HTTPContext>) => Promise<void>;
@@ -20,7 +24,6 @@ export class WSHandler {
   public compiledClose?: (ws: ServerWebSocket<HTTPContext>, code: number, reason: string) => Promise<void>;
 
   private normalizeEventState(event: EventType, http: HTTPContext, args: any[]) {
-    // validated is PER-EVENT
     http.validated.clear();
 
     if (event === "MESSAGE") {
@@ -33,10 +36,8 @@ export class WSHandler {
     if (event === "CLOSE") {
       const code = (args[0] ?? 0) as number;
       const reason = (args[1] ?? "") as string;
-
       http._wsMessage = null;
       http.setStore("_wsCloseArgs", { code, reason });
-
       return { message: "", code, reason };
     }
 
@@ -47,27 +48,21 @@ export class WSHandler {
 
   private extractWSRaw(c: WSContext, source: WSValidationSource) {
     switch (source.type) {
-      // HTTP-ish sources (available from upgrade request context)
       case SourceType.QUERY:
         return source.key ? c.http.query(source.key, "") : c.http.queries;
-
       case SourceType.PARAM:
         return c.http.getParam(source.key, "");
-
       case SourceType.HEADER:
         return c.http.getHeader(source.key);
-
-      // WS-only
       case SourceType.WS_MESSAGE: {
         const msg = c.message;
         if (Buffer.isBuffer(msg)) return msg.toString();
         return msg;
       }
-
       case SourceType.WS_CLOSE:
         return { code: c.code ?? 0, reason: c.reason ?? "" };
 
-      // Not supported for WS validations (upgrade request body is usually empty anyway)
+      // Not supported for WS validation in this design
       case SourceType.JSON:
       case SourceType.FORM:
       case SourceType.MULTIPART:
@@ -79,13 +74,36 @@ export class WSHandler {
     }
   }
 
-  private async runValidations(c: WSContext, validations?: WSValidation[]) {
+  /**
+   * ✅ Single validation style (class-based) for WS:
+   * - instantiate class with extracted raw
+   * - call instance.validate(c) if present
+   * - store under class key so data.get(Class) works
+   */
+  private async runValidations(c: WSContext, validations?: WSClassValidation[]) {
     if (!validations || validations.length === 0) return;
 
     for (const v of validations) {
-      const raw = this.extractWSRaw(c, v.source);
-      const validated = await v.fn(c, raw);
-      c.data.set(v.outKey, validated);
+      let raw: any;
+      try {
+        raw = this.extractWSRaw(c, v.source);
+      } catch (e: any) {
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          `Data Extraction Failed: ${e?.message ?? String(e)}`,
+        );
+      }
+
+      try {
+        const instance: any = new (v.ctor as any)(raw);
+        const maybeValidate = (instance as TypeValidator<WSContext> | undefined)?.validate;
+        if (typeof maybeValidate === "function") {
+          await maybeValidate.call(instance, c);
+        }
+        c.data.set(v.ctor, instance);
+      } catch (e: any) {
+        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e?.message ?? "Validation failed");
+      }
     }
   }
 
@@ -94,11 +112,10 @@ export class WSHandler {
     handler: (c: WSContext, data: HTTPContext["validated"]) => Promise<void>,
     middlewares: Middleware<HTTPContext>[],
     errHandler?: HTTPErrorHandlerFunc,
-    validations?: WSValidation[],
+    validations?: WSClassValidation[],
   ) {
     let chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
       const http = ws.data;
-
       const normalized = this.normalizeEventState(event, http, args);
 
       const c = new WSContext(ws, http, {
@@ -126,7 +143,6 @@ export class WSHandler {
 
       chain = async (ws: ServerWebSocket<HTTPContext>, ...args: any[]) => {
         const http = ws.data;
-
         this.normalizeEventState(event, http, args);
 
         let nextPending = false;
@@ -162,19 +178,39 @@ export class WSHandler {
     return chain;
   }
 
-  setOpen(handler: WSOpenFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc, validations?: WSValidation[]) {
+  setOpen(
+    handler: WSOpenFunc,
+    middlewares: Middleware<HTTPContext>[],
+    errHandler?: HTTPErrorHandlerFunc,
+    validations?: WSClassValidation[],
+  ) {
     this.compiledOpen = this.createChain("OPEN", handler, middlewares, errHandler, validations);
   }
 
-  setMessage(handler: WSMessageFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc, validations?: WSValidation[]) {
+  setMessage(
+    handler: WSMessageFunc,
+    middlewares: Middleware<HTTPContext>[],
+    errHandler?: HTTPErrorHandlerFunc,
+    validations?: WSClassValidation[],
+  ) {
     this.compiledMessage = this.createChain("MESSAGE", handler, middlewares, errHandler, validations);
   }
 
-  setDrain(handler: WSDrainFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc, validations?: WSValidation[]) {
+  setDrain(
+    handler: WSDrainFunc,
+    middlewares: Middleware<HTTPContext>[],
+    errHandler?: HTTPErrorHandlerFunc,
+    validations?: WSClassValidation[],
+  ) {
     this.compiledDrain = this.createChain("DRAIN", handler, middlewares, errHandler, validations);
   }
 
-  setClose(handler: WSCloseFunc, middlewares: Middleware<HTTPContext>[], errHandler?: HTTPErrorHandlerFunc, validations?: WSValidation[]) {
+  setClose(
+    handler: WSCloseFunc,
+    middlewares: Middleware<HTTPContext>[],
+    errHandler?: HTTPErrorHandlerFunc,
+    validations?: WSClassValidation[],
+  ) {
     this.compiledClose = this.createChain("CLOSE", handler, middlewares, errHandler, validations);
   }
 }

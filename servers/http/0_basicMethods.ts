@@ -2,6 +2,17 @@ import { Xerus } from "../../src/Xerus";
 import { Route } from "../../src/Route";
 import type { HTTPContext } from "../../src/HTTPContext";
 import { Source } from "../../src/ValidationSource";
+import { Validator } from "../../src/Validator";
+
+class JsonBody {
+  raw: any;
+  constructor(raw: any) {
+    this.raw = raw;
+  }
+  validate() {
+    new Validator(this.raw).isObject("Expected JSON object body");
+  }
+}
 
 export function basicMethods(app: Xerus) {
   app.mount(
@@ -10,20 +21,14 @@ export function basicMethods(app: Xerus) {
     }),
 
     new Route("POST", "/items", async (c: HTTPContext, data) => {
-      const body = data.get<any>("body");
+      const body = data.get(JsonBody).raw;
       c.setStatus(201).json({ message: "Item created", data: body });
-    }).validate(Source.JSON(), "body", async (_c, v) => {
-      v.isObject("Expected JSON object body");
-      return v.value;
-    }),
+    }).validate(Source.JSON(), JsonBody),
 
     new Route("PUT", "/items/1", async (c: HTTPContext, data) => {
-      const body = data.get<any>("body");
+      const body = data.get(JsonBody).raw;
       c.json({ message: "Item 1 updated", data: body });
-    }).validate(Source.JSON(), "body", async (_c, v) => {
-      v.isObject("Expected JSON object body");
-      return v.value;
-    }),
+    }).validate(Source.JSON(), JsonBody),
 
     new Route("DELETE", "/items/1", async (c: HTTPContext) => {
       c.json({ message: "Item 1 deleted" });
@@ -57,8 +62,6 @@ export function basicMethods(app: Xerus) {
       c.setStatus(204).text("");
     }),
 
-    // NOTE: These echo endpoints intentionally keep the existing behavior
-    // (null for missing values) and do not force validation.
     new Route("GET", "/basics/echo-query", async (c: HTTPContext) => {
       const a = c.url.searchParams.get("a"); // string | null
       const b = c.url.searchParams.get("b"); // string | null

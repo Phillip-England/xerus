@@ -1,13 +1,12 @@
 import { Middleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
+import type { Constructable } from "./HTTPContext";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SourceType, type HTTPValidationSource } from "./ValidationSource";
+import type { TypeValidator } from "./TypeValidator";
 
-/**
- * ValidationError is thrown by Validator methods and is translated to SystemErrCode.VALIDATION_FAILED.
- */
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -16,9 +15,8 @@ export class ValidationError extends Error {
 }
 
 /**
- * Chainable Validator that wraps a value and mutates it through validation/transforms.
- * - Methods throw ValidationError on failure
- * - Methods return `this` for chaining
+ * Fluent value helper for use INSIDE class-based validators.
+ * (Validation is still done via class.validate(c).)
  */
 export class Validator<T = any> {
   private _value: any;
@@ -27,25 +25,18 @@ export class Validator<T = any> {
     this._value = value;
   }
 
-  /** Current value (after transformations). */
   get value(): T {
     return this._value as T;
   }
 
-  /** Set the internal value explicitly. */
   set(value: any): this {
     this._value = value;
     return this;
   }
 
-  /** Alias to read current value (common in fluent chains). */
   unwrap(): T {
     return this.value;
   }
-
-  // -------------------------
-  // helpers
-  // -------------------------
 
   private isEmpty(v: any) {
     return v === undefined || v === null || (typeof v === "string" && v.trim().length === 0);
@@ -65,10 +56,6 @@ export class Validator<T = any> {
     this.err(message);
   }
 
-  // -------------------------
-  // presence / defaults
-  // -------------------------
-
   required(message = "Value is required"): this {
     if (this.isEmpty(this._value)) this.err(message);
     return this;
@@ -82,10 +69,6 @@ export class Validator<T = any> {
     if (this.isEmpty(this._value)) this._value = value;
     return this;
   }
-
-  // -------------------------
-  // string
-  // -------------------------
 
   isString(message = "Expected a string"): this {
     const v = this._value;
@@ -148,10 +131,6 @@ export class Validator<T = any> {
     );
   }
 
-  // -------------------------
-  // number
-  // -------------------------
-
   isNumber(message = "Expected a number"): this {
     const n = this.ensureNumber(message);
     this._value = n;
@@ -189,12 +168,13 @@ export class Validator<T = any> {
     return this;
   }
 
-  gt(n: number, message?: string) { return this.greaterThan(n, message); }
-  lt(n: number, message?: string) { return this.lessThan(n, message); }
+  gt(n: number, message?: string) {
+    return this.greaterThan(n, message);
+  }
 
-  // -------------------------
-  // boolean
-  // -------------------------
+  lt(n: number, message?: string) {
+    return this.lessThan(n, message);
+  }
 
   isBoolean(message = "Expected a boolean"): this {
     const v = this._value;
@@ -217,19 +197,11 @@ export class Validator<T = any> {
     this.err(message);
   }
 
-  // -------------------------
-  // enums
-  // -------------------------
-
   oneOf<TVal extends string | number>(values: readonly TVal[], message?: string): this {
     const ok = values.includes(this._value as any);
     if (!ok) this.err(message ?? `Must be one of: ${values.join(", ")}`);
     return this;
   }
-
-  // -------------------------
-  // arrays
-  // -------------------------
 
   asArray(): this {
     if (Array.isArray(this._value)) return this;
@@ -250,10 +222,6 @@ export class Validator<T = any> {
     this._value = out;
     return this;
   }
-
-  // -------------------------
-  // objects
-  // -------------------------
 
   isObject(message = "Expected an object"): this {
     const v = this._value;
@@ -284,10 +252,6 @@ export class Validator<T = any> {
     return this;
   }
 
-  // -------------------------
-  // json / date
-  // -------------------------
-
   parseJSON<TOut = any>(message = "Invalid JSON"): this {
     if (typeof this._value !== "string") this.err("Expected JSON string");
     try {
@@ -306,23 +270,19 @@ export class Validator<T = any> {
 
   asDate(message = "Invalid date"): this {
     const v = this._value;
-
     if (v instanceof Date) {
       if (Number.isNaN(v.getTime())) this.err(message);
       return this;
     }
-
     if (typeof v === "number") {
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) this.err(message);
       this._value = d;
       return this;
     }
-
     if (typeof v === "string") {
       const s = v.trim();
       if (s.length === 0) this.err(message);
-
       if (/^\d+$/.test(s)) {
         const n = Number(s);
         if (!Number.isFinite(n)) this.err(message);
@@ -332,13 +292,11 @@ export class Validator<T = any> {
         this._value = d;
         return this;
       }
-
       const d = new Date(s);
       if (Number.isNaN(d.getTime())) this.err(message);
       this._value = d;
       return this;
     }
-
     this.err(message);
   }
 
@@ -363,8 +321,6 @@ export class Validator<T = any> {
   }
 }
 
-export type ValidateWithValidatorFn<C> = (c: C, v: Validator) => any | Promise<any>;
-
 export function extractHTTPRaw(c: HTTPContext, source: HTTPValidationSource): Promise<any> | any {
   switch (source.type) {
     case SourceType.JSON:
@@ -387,36 +343,15 @@ export function extractHTTPRaw(c: HTTPContext, source: HTTPValidationSource): Pr
 }
 
 /**
- * ✅ FIX: rest parameter must be an array type
+ * ONLY validation mechanism:
+ * - instantiate the class with extracted raw input
+ * - call instance.validate(c) if present
+ * - store the instance under the class key (so data.get(Class) works)
  */
-export function pipeValidatorObject<C>(...fns: ValidateWithValidatorFn<C>[]) {
-  if (fns.length === 0) {
-    throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "pipeValidatorObject requires at least one function");
-  }
-  return async (c: C, initial: any) => {
-    let current = initial;
-    for (const fn of fns) {
-      const v = new Validator(current);
-      const ret = await fn(c, v);
-      if (ret instanceof Validator) current = ret.value;
-      else if (ret === undefined) current = v.value;
-      else current = ret;
-    }
-    return current;
-  };
-}
-
-export function HTTPValidator(
+export function HTTPTypeValidator<T extends object>(
   source: HTTPValidationSource,
-  outKey: string,
-  ...fns: ValidateWithValidatorFn<HTTPContext>[]
+  Ctor: Constructable<T>,
 ) {
-  if (fns.length === 0) {
-    throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "HTTPValidator requires at least one validation function");
-  }
-
-  const composed = pipeValidatorObject<HTTPContext>(...fns);
-
   return new Middleware(async (c: HTTPContext, next) => {
     let raw: any;
     try {
@@ -429,8 +364,12 @@ export function HTTPValidator(
     }
 
     try {
-      const validated = await composed(c, raw);
-      c.validated.set(outKey, validated);
+      const instance: any = new (Ctor as any)(raw);
+      const maybeValidate = (instance as TypeValidator<HTTPContext> | undefined)?.validate;
+      if (typeof maybeValidate === "function") {
+        await maybeValidate.call(instance, c);
+      }
+      c.validated.set(Ctor, instance);
     } catch (e: any) {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e?.message ?? "Validation failed");
     }

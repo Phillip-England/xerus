@@ -2,44 +2,70 @@ import { Xerus } from "../../src/Xerus";
 import { Route } from "../../src/Route";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Source } from "../../src/ValidationSource";
+import { Validator } from "../../src/Validator";
+
+class JsonBody {
+  raw: any;
+  constructor(raw: any) {
+    this.raw = raw;
+  }
+  validate() {
+    new Validator(this.raw).isObject("Expected JSON object body");
+  }
+}
+
+class TextBody {
+  raw: string;
+  constructor(raw: any) {
+    this.raw = raw;
+  }
+  validate() {
+    new Validator(this.raw).isString("Expected text body");
+  }
+}
+
+class FormBody {
+  raw: Record<string, any>;
+  constructor(raw: any) {
+    this.raw = raw;
+  }
+  validate() {
+    new Validator(this.raw).isObject("Expected FORM object");
+  }
+}
+
+class MultipartBody {
+  fd: FormData;
+  constructor(raw: any) {
+    this.fd = raw as FormData;
+  }
+  // no-op validate (parseBody enforces MULTIPART expectations)
+}
 
 export function parseBody(app: Xerus) {
   app.mount(
     new Route("POST", "/parse/json", async (c: HTTPContext, data) => {
-      const body = data.get<any>("body");
+      const body = data.get(JsonBody).raw;
       c.json({ status: "success", data: body });
-    }).validate(Source.JSON(), "body", async (_c, v) => {
-      v.isObject("Expected JSON object body");
-      return v.value;
-    }),
+    }).validate(Source.JSON(), JsonBody),
 
     new Route("POST", "/parse/text", async (c: HTTPContext, data) => {
-      const body = data.get<string>("body");
+      const body = data.get(TextBody).raw;
       c.json({ status: "success", data: body });
-    }).validate(Source.TEXT(), "body", async (_c, v) => {
-      v.isString("Expected text body");
-      return v.value;
-    }),
+    }).validate(Source.TEXT(), TextBody),
 
     new Route("POST", "/parse/form", async (c: HTTPContext, data) => {
-      const body = data.get<Record<string, any>>("body");
+      const body = data.get(FormBody).raw;
       c.json({ status: "success", data: body });
-    }).validate(Source.FORM(), "body", async (_c, v) => {
-      v.isObject("Expected FORM object");
-      return v.value;
-    }),
+    }).validate(Source.FORM(), FormBody),
 
     new Route("POST", "/parse/multipart", async (c: HTTPContext, data) => {
-      const fd = data.get<FormData>("body");
+      const fd = data.get(MultipartBody).fd;
       const result: Record<string, string> = {};
       fd.forEach((value: FormDataEntryValue, key: string) => {
         if (typeof value === "string") result[key] = value;
       });
       c.json({ status: "success", data: result });
-    }).validate(Source.MULTIPART(), "body", async (_c, v) => {
-      // multipart parsing returns FormData
-      // Validator treats FormData as an object-ish value; just pass it through.
-      return v.value as FormData;
-    }),
+    }).validate(Source.MULTIPART(), MultipartBody),
   );
 }

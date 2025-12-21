@@ -1,27 +1,42 @@
 import { Xerus } from "../../src/Xerus";
 import { Route } from "../../src/Route";
 import { Source } from "../../src/ValidationSource";
+import { Validator } from "../../src/Validator";
+
+class IsoDateQuery {
+  date: string;
+  constructor(raw: any) {
+    this.date = String(raw ?? "");
+  }
+  validate() {
+    new Validator(this.date).isISODateString();
+  }
+}
+
+class AnyDateQuery {
+  value: Date;
+  constructor(raw: any) {
+    // store raw first; validator will coerce to Date
+    this.value = raw as any;
+  }
+  validate() {
+    const v = new Validator(this.value).asDate();
+    this.value = v.value as any as Date;
+  }
+}
 
 export function dateValidators(app: Xerus) {
-  // ISO date validation (YYYY-MM-DD)
   app.mount(
     new Route("GET", "/validators/iso", async (c, data) => {
-      const date = data.get<string>("date");
+      const date = data.get(IsoDateQuery).date;
       c.json({ ok: true, date });
-    }).validate(Source.QUERY("date"), async (_c, v) => {
-      v.isISODateString();
-      // no return needed; v.value is used
-    }),
+    }).validate(Source.QUERY("date"), IsoDateQuery),
   );
 
-  // Date coercion (string | number -> Date)
   app.mount(
     new Route("GET", "/validators/date", async (c, data) => {
-      const d = data.get<Date>("value");
+      const d = data.get(AnyDateQuery).value;
       c.json({ ok: true, iso: d.toISOString(), ms: d.getTime() });
-    }).validate(Source.QUERY("value"), async (_c, v) => {
-      v.asDate();
-      // v.value is now a Date
-    }),
+    }).validate(Source.QUERY("value"), AnyDateQuery),
   );
 }

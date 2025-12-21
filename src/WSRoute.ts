@@ -1,13 +1,12 @@
-import { WSHandler } from "./WSHandler";
+import { WSHandler, type WSClassValidation } from "./WSHandler";
 import { Middleware } from "./Middleware";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import type { WSOpenFunc, WSMessageFunc, WSCloseFunc, WSDrainFunc } from "./WSHandlerFuncs";
 import type { HTTPContext } from "./HTTPContext";
-import type { WSContext } from "./WSContext";
+import type { Constructable } from "./HTTPContext";
 import { SourceType, type WSValidationSource } from "./ValidationSource";
-import { Validator, type ValidateWithValidatorFn } from "./Validator";
 
 export enum WSMethod {
   OPEN = "OPEN",
@@ -16,48 +15,8 @@ export enum WSMethod {
   DRAIN = "DRAIN",
 }
 
-export type WSValidation = {
-  source: WSValidationSource;
-  outKey: string;
-  fn: (c: WSContext, raw: any) => any | Promise<any>;
-};
-
-function inferOutKeyFromWSSource(source: WSValidationSource): string {
-  switch (source.type) {
-    case SourceType.PARAM:
-    case SourceType.HEADER:
-      return source.key;
-    case SourceType.QUERY:
-      return source.key ? source.key : "query";
-    case SourceType.WS_MESSAGE:
-      return "message";
-    case SourceType.WS_CLOSE:
-      return "close";
-    case SourceType.JSON:
-    case SourceType.FORM:
-    case SourceType.MULTIPART:
-    case SourceType.TEXT:
-      return "data";
-    default:
-      return "data";
-  }
-}
-
-function pipeWSValidatorObject(...fns: ValidateWithValidatorFn<WSContext>[]) {
-  if (fns.length === 0) {
-    throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WS validator requires at least one function");
-  }
-  return async (c: WSContext, initial: any) => {
-    let current = initial;
-    for (const fn of fns) {
-      const v = new Validator(current);
-      const ret = await fn(c, v);
-      if (ret instanceof Validator) current = ret.value;
-      else if (ret === undefined) current = v.value;
-      else current = ret;
-    }
-    return current;
-  };
+function isConstructable(v: any): v is Constructable<any> {
+  return typeof v === "function";
 }
 
 export class WSRoute {
@@ -66,7 +25,8 @@ export class WSRoute {
   public handler: WSOpenFunc | WSMessageFunc | WSCloseFunc | WSDrainFunc;
   public middlewares: Middleware<HTTPContext>[] = [];
   public errHandler?: HTTPErrorHandlerFunc;
-  private validations: WSValidation[] = [];
+
+  private validations: WSClassValidation[] = [];
 
   constructor(
     method: WSMethod,
@@ -88,30 +48,14 @@ export class WSRoute {
     return this;
   }
 
-  validate(
-    source: WSValidationSource,
-    outKey: string,
-    ...fns: ValidateWithValidatorFn<WSContext>[]
-  ): this;
-  validate(
-    source: WSValidationSource,
-    ...fns: ValidateWithValidatorFn<WSContext>[]
-  ): this;
-
-  validate(source: WSValidationSource, arg2: any, ...rest: any[]) {
-    let outKey: string;
-    let fns: ValidateWithValidatorFn<WSContext>[];
-
-    if (typeof arg2 === "string") {
-      outKey = arg2;
-      fns = rest as ValidateWithValidatorFn<WSContext>[];
-    } else {
-      outKey = inferOutKeyFromWSSource(source);
-      fns = [arg2, ...rest] as ValidateWithValidatorFn<WSContext>[];
-    }
-
-    if (fns.length === 0) {
-      throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WSRoute.validate requires at least one function");
+  /**
+   * ✅ Single validation style for WS:
+   *   wsRoute.validate(Source.WS_MESSAGE(), MyMessage)
+   *   const msg = data.get(MyMessage)
+   */
+  validate<T extends object>(source: WSValidationSource, ctor: Constructable<T>): this {
+    if (!isConstructable(ctor)) {
+      throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, "WSRoute.validate requires a constructable class");
     }
 
     if (source.type === SourceType.WS_MESSAGE && this.method !== WSMethod.MESSAGE) {
@@ -120,6 +64,7 @@ export class WSRoute {
         "Source.WS_MESSAGE() validation can only be used on WSMethod.MESSAGE routes",
       );
     }
+
     if (source.type === SourceType.WS_CLOSE && this.method !== WSMethod.CLOSE) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -127,8 +72,7 @@ export class WSRoute {
       );
     }
 
-    const composed = pipeWSValidatorObject(...fns);
-    this.validations.push({ source, outKey, fn: composed });
+    this.validations.push({ source, ctor });
     return this;
   }
 

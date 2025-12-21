@@ -3,6 +3,17 @@ import { Route } from "../../src/Route";
 import { HTTPContext } from "../../src/HTTPContext";
 import { mwGroupHeader } from "../middleware/mwGroupHeader";
 import { Source } from "../../src/ValidationSource";
+import { Validator } from "../../src/Validator";
+
+class JsonBody {
+  raw: any;
+  constructor(raw: any) {
+    this.raw = raw;
+  }
+  validate() {
+    new Validator(this.raw).isObject("Expected JSON object body");
+  }
+}
 
 export function routeGrouping(app: Xerus) {
   app.mount(
@@ -11,12 +22,9 @@ export function routeGrouping(app: Xerus) {
     }),
 
     new Route("POST", "/api/echo", async (c: HTTPContext, data) => {
-      const body = data.get<any>("body");
+      const body = data.get(JsonBody).raw;
       c.json({ received: body });
-    }).validate(Source.JSON(), "body", async (_c, v) => {
-      v.isObject("Expected JSON object body");
-      return v.value;
-    }),
+    }).validate(Source.JSON(), JsonBody),
 
     new Route("GET", "/admin/dashboard", async (c: HTTPContext) => {
       c.text("Welcome to the Dashboard");
