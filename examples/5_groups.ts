@@ -1,29 +1,50 @@
-// PATH: /home/jacex/src/xerus/examples/5_groups.ts
-
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
 import { Middleware } from "../src/Middleware";
-import type { HTTPContext } from "../src/HTTPContext";
+import { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
+// 1. Shared Middleware
 const apiKeyMiddleware = new Middleware(async (c: HTTPContext, next) => {
   c.setHeader("X-API-Version", "v1");
   await next();
 });
 
-// No grouping: each route is an independent object.
-// If you want a “shared prefix”, just put it in the path.
-// If you want “shared middleware”, apply it per-route (explicit > magic).
+// 2. Users Route
+class ApiUsersRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/api/v1/users"; // Prefix handled explicitly in path
 
-app.mount(
-  new Route("GET", "/api/v1/users", async (c) => {
-    c.json([{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }]);
-  }).use(apiKeyMiddleware),
+  onMount() {
+    this.use(apiKeyMiddleware); // Middleware applied explicitly per route
+  }
 
-  new Route("GET", "/api/v1/status", async (c) => {
+  async handle(c: HTTPContext) {
+    c.json([
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
+    ]);
+  }
+}
+
+// 3. Status Route
+class ApiStatusRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/api/v1/status";
+
+  onMount() {
+    this.use(apiKeyMiddleware);
+  }
+
+  async handle(c: HTTPContext) {
     c.json({ healthy: true });
-  }).use(apiKeyMiddleware),
-);
+  }
+}
 
+// 4. Mount the classes
+app.mount(ApiUsersRoute, ApiStatusRoute);
+
+console.log("🚀 Explicit Grouping example running on http://localhost:8080");
 await app.listen(8080);

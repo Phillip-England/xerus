@@ -1,21 +1,20 @@
-// PATH: /home/jacex/src/xerus/src/Middleware.ts
-
 import type { MiddlewareFn } from "./MiddlewareFn";
 import { HTTPContext } from "./HTTPContext";
 
-export class Middleware<C = HTTPContext> {
-  private callback: MiddlewareFn<C>;
+// T represents the shape of c.data (the store)
+export class Middleware<T extends Record<string, any> = Record<string, any>> {
+  private callback: MiddlewareFn<HTTPContext<T>>;
 
-  constructor(callback: MiddlewareFn<C>) {
+  constructor(callback: MiddlewareFn<HTTPContext<T>>) {
     this.callback = callback;
   }
 
-  async execute(c: C, next: () => Promise<void>): Promise<void> {
+  async execute(c: HTTPContext<T>, next: () => Promise<void>): Promise<void> {
     return this.callback(c, next);
   }
 }
 
-export const logger = new Middleware(async (c: HTTPContext, next) => {
+export const logger = new Middleware<any>(async (c, next) => {
   const start = performance.now();
   await next();
   const duration = performance.now() - start;
@@ -30,7 +29,7 @@ export interface CORSOptions {
 }
 
 export const cors = (options: CORSOptions = {}) => {
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     let origin = options.origin || "*";
     const methods = options.methods?.join(", ") || "GET, POST, PUT, DELETE, PATCH, OPTIONS";
     const headers = options.headers?.join(", ") || "Content-Type, Authorization";
@@ -69,11 +68,11 @@ export const requestId = (opts?: {
   const storeKey = opts?.storeKey ?? "requestId";
   const gen = opts?.generator ?? (() => crypto.randomUUID());
 
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     const incoming = c.getHeader(headerName) || c.getHeader(headerName.toLowerCase());
     const id = incoming && incoming.length > 0 ? incoming : gen();
 
-    c.data[storeKey] = id;
+    (c.data as any)[storeKey] = id;
     c.setHeader(headerName, id);
 
     await next();
@@ -83,19 +82,20 @@ export const requestId = (opts?: {
 export const rateLimit = (opts: {
   windowMs: number;
   max: number;
-  key?: (c: HTTPContext) => string;
+  key?: (c: HTTPContext<any>) => string;
   message?: string;
 }) => {
   const windowMs = opts.windowMs;
   const max = opts.max;
   const message = opts.message ?? "Rate limit exceeded";
 
-  const keyFn = opts.key ?? ((c: HTTPContext) => (c as any).getClientIP?.() ?? "unknown");
+  // Now valid because HTTPContext has getClientIP()
+  const keyFn = opts.key ?? ((c: HTTPContext<any>) => c.getClientIP() ?? "unknown");
 
   type Bucket = { count: number; resetAt: number };
   const buckets = new Map<string, Bucket>();
 
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     const now = Date.now();
     const key = keyFn(c);
 
@@ -116,13 +116,7 @@ export const rateLimit = (opts: {
 
     if (b.count > max) {
       c.setHeader("Retry-After", String(retryAfterSec));
-
-      const fn = (c as any).tooManyRequests;
-      if (typeof fn === "function") {
-        fn.call(c, message, "RATE_LIMITED", { retryAfterSec });
-      } else {
-        c.errorJSON(429, "RATE_LIMITED", message, { retryAfterSec });
-      }
+      c.errorJSON(429, "RATE_LIMITED", message, { retryAfterSec });
       return;
     }
 
@@ -148,9 +142,8 @@ export const csrf = (opts?: {
 
   const gen = () => crypto.randomUUID().replace(/-/g, "");
 
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     const method = c.method.toUpperCase();
-
     const existing = c.getCookie(cookieName);
 
     if (ignore.has(method)) {
@@ -162,9 +155,9 @@ export const csrf = (opts?: {
           secure: opts?.secureCookie,
           sameSite,
         });
-        c.data.csrfToken = token;
+        (c.data as any).csrfToken = token;
       } else if (existing) {
-        c.data.csrfToken = existing;
+        (c.data as any).csrfToken = existing;
       }
       await next();
       return;
@@ -174,32 +167,20 @@ export const csrf = (opts?: {
     const headerToken = c.getHeader(headerName) || c.getHeader(headerName.toLowerCase());
 
     if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-      const fn = (c as any).forbidden;
-      if (typeof fn === "function") {
-        fn.call(c, "CSRF token missing or invalid", "CSRF_FAILED", { cookieName, headerName });
-      } else {
-        c.errorJSON(403, "CSRF_FAILED", "CSRF token missing or invalid", { cookieName, headerName });
-      }
+      c.errorJSON(403, "CSRF_FAILED", "CSRF token missing or invalid", { cookieName, headerName });
       return;
     }
 
-    c.data.csrfToken = cookieToken;
+    (c.data as any).csrfToken = cookieToken;
     await next();
   });
 };
 
-/**
- * Timeout middleware (soft timeout)
- *
- * ✅ Uses a RESOLVING timer promise (no rejection path)
- * ✅ Marks __timeoutSent so safeguard won't throw
- * ✅ Holds pool release until downstream finishes
- */
 export const timeout = (ms: number, opts?: { message?: string }) => {
   const detail = opts?.message ?? `Request timed out after ${ms}ms`;
   const TIMEOUT = Symbol("XERUS_TIMEOUT");
 
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     let timer: any;
 
     const downstream = (async () => {
@@ -219,10 +200,9 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
       if (winner !== TIMEOUT) return;
 
       // Timeout won
-      c.data.__timeoutSent = true;
+      (c.data as any).__timeoutSent = true;
 
       if (!c.isDone) {
-        // write 504 directly
         c.res.setStatus(504);
         c.res.setHeader("Content-Type", "application/json");
         c.res.body(
@@ -237,7 +217,6 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
         c.finalize();
       }
 
-      // hold pool release until downstream finishes
       (c.data as any).__holdRelease = downstream.catch(() => {});
       return;
     } finally {
@@ -291,7 +270,7 @@ export const compress = (opts?: {
     }
   }
 
-  return new Middleware(async (c: HTTPContext, next) => {
+  return new Middleware<any>(async (c, next) => {
     await next();
 
     const alreadyEncoded = !!c.getResHeader("Content-Encoding");

@@ -1,24 +1,48 @@
-// PATH: /home/jacex/src/xerus/examples/20_ws_grouped_chat.ts
-
 import { Xerus } from "../src/Xerus";
-import { WSRoute, WSMethod } from "../src/WSRoute";
-import { logger } from "../src/Middleware";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
 import type { WSContext } from "../src/WSContext";
 
-const app = new Xerus();
+type Store = Record<string, any>;
 
-app.mount(
-  new WSRoute(WSMethod.OPEN, "/ws/chat", async (c: WSContext) => {
-    c.ws.send("👋 Welcome!");
-  }).use(logger),
+const app = new Xerus<Store>();
 
-  new WSRoute(WSMethod.MESSAGE, "/ws/chat", async (c: WSContext) => {
-    c.ws.send(`echo: ${c.message}`);
-  }).use(logger),
+type ChatMessage = { type: "chat"; text: string };
 
-  new WSRoute(WSMethod.CLOSE, "/ws/chat", async (_c: WSContext) => {
-    console.log("Client left");
-  }).use(logger),
-);
+class ValidatedChat extends XerusRoute<Store, WSContext<Store>> {
+  method = Method.WS_MESSAGE;
+  path = "/ws/channel";
 
+  private msg!: ChatMessage;
+
+  async validate(c: WSContext<Store>) {
+    // 1. Ensure message is text
+    if (typeof c.message !== "string") {
+      throw new Error("Binary messages not supported");
+    }
+
+    // 2. Parse JSON
+    let raw: any;
+    try {
+      raw = JSON.parse(c.message);
+    } catch {
+      throw new Error("Invalid JSON");
+    }
+
+    // 3. Validate schema
+    if (raw.type !== "chat") throw new Error("Invalid type");
+    if (typeof raw.text !== "string" || raw.text.length === 0) throw new Error("Text required");
+
+    this.msg = raw;
+  }
+
+  async handle(c: WSContext<Store>) {
+    console.log(`Received: ${this.msg.text}`);
+    c.ws.send(`Echo: ${this.msg.text}`);
+  }
+}
+
+app.mount(ValidatedChat);
+
+console.log('Connect to ws://localhost:8080/ws/channel and send {"type":"chat","text":"Hello"}');
 await app.listen(8080);

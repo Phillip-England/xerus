@@ -1,37 +1,59 @@
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
+import { BodyType } from "../../src/BodyType";
 import { mwGroupHeader } from "../middleware/mwGroupHeader";
-import { Source } from "../../src/ValidationSource";
-import { Validator } from "../../src/Validator";
+import { SystemErr } from "../../src/SystemErr";
+import { SystemErrCode } from "../../src/SystemErrCode";
 
-class JsonBody {
-  raw: any;
-  constructor(raw: any) {
-    this.raw = raw;
+class ApiV1 extends XerusRoute {
+  method = Method.GET;
+  path = "/api/v1";
+  async handle(c: HTTPContext) {
+    c.json({ version: "v1" });
   }
-  validate() {
-    new Validator(this.raw).isObject("Expected JSON object body");
+}
+
+class ApiEcho extends XerusRoute {
+  method = Method.POST;
+  path = "/api/echo";
+  body: any;
+
+  async validate(c: HTTPContext) {
+    this.body = await c.parseBody(BodyType.JSON);
+    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
+    }
+  }
+
+  async handle(c: HTTPContext) {
+    c.json({ received: this.body });
+  }
+}
+
+class AdminDashboard extends XerusRoute {
+  method = Method.GET;
+  path = "/admin/dashboard";
+  onMount() {
+    this.use(mwGroupHeader);
+  }
+  async handle(c: HTTPContext) {
+    c.text("Welcome to the Dashboard");
+  }
+}
+
+class AdminSettings extends XerusRoute {
+  method = Method.DELETE;
+  path = "/admin/settings";
+  onMount() {
+    this.use(mwGroupHeader);
+  }
+  async handle(c: HTTPContext) {
+    c.json({ deleted: true });
   }
 }
 
 export function routeGrouping(app: Xerus) {
-  app.mount(
-    new Route("GET", "/api/v1", async (c: HTTPContext) => {
-      c.json({ version: "v1" });
-    }),
-
-    new Route("POST", "/api/echo", async (c: HTTPContext, data) => {
-      const body = data.get(JsonBody).raw;
-      c.json({ received: body });
-    }).validate(Source.JSON(), JsonBody),
-
-    new Route("GET", "/admin/dashboard", async (c: HTTPContext) => {
-      c.text("Welcome to the Dashboard");
-    }).use(mwGroupHeader),
-
-    new Route("DELETE", "/admin/settings", async (c: HTTPContext) => {
-      c.json({ deleted: true });
-    }).use(mwGroupHeader),
-  );
+  app.mount(ApiV1, ApiEcho, AdminDashboard, AdminSettings);
 }

@@ -1,6 +1,6 @@
-// PATH: /home/jacex/src/xerus/servers/http/server.ts
-
 import { Xerus } from "../../src/Xerus";
+import type { TestStore } from "../TestStore";
+
 import { basicMethods } from "./0_basicMethods";
 import { routeGrouping } from "./1_routeGrouping";
 import { staticFiles } from "./2_staticFiles";
@@ -18,14 +18,9 @@ import { flexibleValidation } from "./13_flexibleValidation";
 import { commonPatterns } from "./14_commonPatterns";
 import { httpContextEdgeCases } from "./15_httpContextEdgeCases";
 
-// ✅ new
-import { dateValidators } from "./16_dateValidators";
+const app = new Xerus<TestStore>();
 
-const app = new Xerus();
-
-// must be at top
 errorHandling(app);
-
 basicMethods(app);
 routeGrouping(app);
 staticFiles(app);
@@ -41,8 +36,5 @@ precedence(app);
 flexibleValidation(app);
 commonPatterns(app);
 httpContextEdgeCases(app);
-
-// ✅ new
-dateValidators(app);
 
 app.listen(8080);

@@ -1,8 +1,6 @@
 import { Xerus } from "../../src/Xerus";
 import { resolve } from "path";
 
-// Mocking the output of the embedDir macro
-// NOTE: Macros return plain arrays of numbers for binaries, not Uint8Arrays directly.
 const mockEmbeddedFiles = {
   "/index.html": {
     content: "<html><body><h1>Home</h1></body></html>",
@@ -17,21 +15,14 @@ const mockEmbeddedFiles = {
     type: "application/javascript",
   },
   "/images/logo.png": {
-    // Simulated Macro Output: Plain array of numbers
     content: [137, 80, 78, 71, 13, 10, 26, 10], 
     type: "image/png",
   },
 };
 
 export function staticFiles(app: Xerus) {
-  // 1. EMBEDDED (Memory)
-  // Replaced .static with .embed
   app.embed("/static-site", mockEmbeddedFiles);
   app.embed("/assets", mockEmbeddedFiles);
-
-  // 2. DISK (Physical Files)
-  // For testing purposes, we serve the 'src' directory of this project
-  // This allows us to try and fetch 'Xerus.ts' in tests
   const srcPath = resolve("./src");
   app.static("/disk-src", srcPath);
 }

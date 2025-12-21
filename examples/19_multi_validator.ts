@@ -1,52 +1,44 @@
-// PATH: /home/jacex/src/xerus/examples/19_multi_validator.ts
-
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
-import { Source } from "../src/ValidationSource";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
+import { BodyType } from "../src/BodyType";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/TypeValidator";
-import { Validator } from "../src/Validator";
 
 const app = new Xerus();
 
-class CreateUser implements TypeValidator {
-  name: string;
+class CreateWithMeta extends XerusRoute {
+  method = Method.POST;
+  path = "/create";
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    // Expect JSON body object with { name }
-    const out = v.shape({
-      name: (v) => v.isString().nonEmpty().value,
-    }).value as any;
+  private user: { name: string } | null = null;
+  private meta: { source: string } | null = null;
 
-    this.name = out.name;
+  async validate(c: HTTPContext) {
+    // 1. Parse and Validate Body
+    const body = await c.parseBody(BodyType.JSON);
+    if (!body?.name || typeof body.name !== "string") {
+        throw new Error("Body validation failed: 'name' is required");
+    }
+    this.user = { name: body.name };
+
+    // 2. Parse and Validate Query
+    const source = c.query("source");
+    if (!source) {
+        throw new Error("Query validation failed: 'source' param is required");
+    }
+    this.meta = { source };
   }
 
-  async validate(_c: HTTPContext) {
-    // extra rules could go here
+  async handle(c: HTTPContext) {
+    c.json({
+      user: this.user,
+      meta: this.meta,
+      message: "Validated multiple sources manually"
+    });
   }
 }
 
-class CreateMeta implements TypeValidator {
-  source: string;
+app.mount(CreateWithMeta);
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.source = v.isString().nonEmpty().value;
-  }
-
-  async validate(_c: HTTPContext) {}
-}
-
-app.mount(
-  new Route("POST", "/create", async (c, data) => {
-    const user = data.get(CreateUser);
-    const meta = data.get(CreateMeta);
-
-    c.json({ user, meta });
-  })
-    .validate(Source.JSON(), CreateUser)
-    .validate(Source.QUERY("source"), CreateMeta),
-);
-
+console.log("Try: curl -X POST 'http://localhost:8080/create?source=cli' -d '{\"name\":\"Jace\"}'");
 await app.listen(8080);

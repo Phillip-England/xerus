@@ -1,40 +1,57 @@
-// PATH: /home/jacex/src/xerus/examples/10_validation.ts
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
-import { Source } from "../src/ValidationSource";
-import type { TypeValidator } from "../src/TypeValidator";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
+import { BodyType } from "../src/BodyType";
 import type { HTTPContext } from "../src/HTTPContext";
 
 const app = new Xerus();
 
-// Define validation ONCE on the type
-class CreateUser implements TypeValidator {
-  username: string;
-  email: string;
-  age: number;
+// Define a class-based route to utilize the validate() lifecycle hook
+class CreateUser extends XerusRoute {
+  method = Method.POST;
+  path = "/users";
+  
+  // Property to store validated data
+  private payload: { username: string; email: string; age: number } | null = null;
 
-  constructor(raw: any) {
-    this.username = String(raw?.username ?? "");
-    this.email = String(raw?.email ?? "");
-    this.age = typeof raw?.age === "number" ? raw.age : Number(raw?.age ?? NaN);
+  async validate(c: HTTPContext) {
+    const raw = await c.parseBody(BodyType.JSON);
+
+    // 1. Basic type check
+    if (!raw || typeof raw !== "object") {
+      throw new Error("Invalid JSON body");
+    }
+
+    // 2. Extract and Sanitize
+    const username = String(raw.username || "").trim();
+    const email = String(raw.email || "").trim();
+    const age = Number(raw.age);
+
+    // 3. Manual Validation Logic
+    if (username.length < 3) {
+      throw new Error("username must be at least 3 characters");
+    }
+    if (!email.includes("@") || !email.includes(".")) {
+      throw new Error("invalid email format");
+    }
+    if (!Number.isFinite(age) || age < 18) {
+      throw new Error("age must be a number >= 18");
+    }
+
+    // 4. Store for handle()
+    this.payload = { username, email, age };
   }
 
-  async validate(_c: HTTPContext) {
-    if (this.username.trim().length < 3) throw new Error("username must be at least 3 characters");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email)) throw new Error("invalid email");
-    if (!Number.isFinite(this.age) || this.age < 18) throw new Error("age must be >= 18");
+  async handle(c: HTTPContext) {
+    // We can safely use this.payload here because validate() passed
+    c.json({
+      message: "User created successfully",
+      user: this.payload,
+    });
   }
 }
 
-app.mount(
-  new Route("POST", "/users", async (c, data) => {
-    const user = data.get<CreateUser>(CreateUser); // stored under the ctor key
-    c.json({
-      message: "User created",
-      user,
-    });
-  }).validate(Source.JSON(), CreateUser),
-);
+app.mount(CreateUser);
 
 console.log("POST /users with JSON body");
 await app.listen(8080);

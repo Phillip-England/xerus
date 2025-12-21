@@ -1,68 +1,54 @@
-// PATH: /home/jacex/src/xerus/examples/22_flexible_validation.ts
-
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
-import { Source } from "../src/ValidationSource";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/TypeValidator";
-import { Validator } from "../src/Validator";
 
 const app = new Xerus();
 
-class UserIdParam implements TypeValidator {
-  id: number;
+class GetUser extends XerusRoute {
+  method = Method.GET;
+  path = "/users/:id";
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.id = v.isInt().min(1).value;
-  }
+  private userId!: number;
+  private sort!: "asc" | "desc";
+  private apiKey!: string;
 
-  async validate(_c: HTTPContext) {}
-}
-
-class SortQuery implements TypeValidator {
-  sort: "asc" | "desc";
-
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.sort = v.defaultTo("asc").oneOf(["asc", "desc"] as const).value;
-  }
-
-  async validate(_c: HTTPContext) {}
-}
-
-class ApiKeyHeader implements TypeValidator {
-  apiKey: string;
-
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.apiKey = v.isString().nonEmpty().value;
-  }
-
-  async validate(_c: HTTPContext) {
-    if (this.apiKey !== "secret-123") {
-      throw new Error("Invalid API Key");
+  async validate(c: HTTPContext) {
+    // 1. Validate Param (ID)
+    const idRaw = c.getParam("id");
+    const id = Number(idRaw);
+    if (!Number.isInteger(id) || id < 1) {
+        throw new Error("Invalid User ID");
     }
+    this.userId = id;
+
+    // 2. Validate Query (Sort)
+    const sortRaw = c.query("sort", "asc"); // default to asc
+    if (sortRaw !== "asc" && sortRaw !== "desc") {
+        throw new Error("Sort must be 'asc' or 'desc'");
+    }
+    this.sort = sortRaw;
+
+    // 3. Validate Header (Auth)
+    const key = c.getHeader("x-api-key");
+    if (key !== "secret-123") {
+        // We can throw specific errors, or rely on global error handler
+        throw new Error("Invalid or missing API Key");
+    }
+    this.apiKey = key;
   }
-}
 
-app.mount(
-  new Route("GET", "/users/:id", async (c, data) => {
-    const id = data.get(UserIdParam).id;
-    const sort = data.get(SortQuery).sort;
-    const apiKey = data.get(ApiKeyHeader).apiKey;
-
+  async handle(c: HTTPContext) {
     c.json({
       message: "Access Granted",
-      userId: id,
-      sortOrder: sort,
-      apiKey,
+      userId: this.userId,
+      sortOrder: this.sort,
+      apiKey: this.apiKey,
     });
-  })
-    .validate(Source.PARAM("id"), UserIdParam)
-    .validate(Source.QUERY("sort"), SortQuery)
-    .validate(Source.HEADER("x-api-key"), ApiKeyHeader),
-);
+  }
+}
+
+app.mount(GetUser);
 
 console.log("curl http://localhost:8080/users/50?sort=desc -H 'x-api-key: secret-123'");
 await app.listen(8080);

@@ -1,26 +1,42 @@
-// PATH: /home/jacex/src/xerus/servers/websocket/0_wsMethods.ts
-
 import { Xerus } from "../../src/Xerus";
-import { WSRoute, WSMethod } from "../../src/WSRoute";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import { mwGroupHeader } from "../middleware/mwGroupHeader";
 import type { WSContext } from "../../src/WSContext";
+import type { TestStore } from "../TestStore";
 
-export function wsMethods(app: Xerus) {
-  app.mount(
-    new WSRoute(WSMethod.MESSAGE, "/ws/echo", async (c: WSContext) => {
-      c.ws.send(`echo: ${c.message}`);
-    }),
-  );
+class WSEcho extends XerusRoute<TestStore, WSContext<TestStore>> {
+  method = Method.WS_MESSAGE;
+  path = "/ws/echo";
 
-  // Protected/Middleware Route (OPEN + MESSAGE)
-  app.mount(
-    new WSRoute(WSMethod.OPEN, "/ws/chat", async (c: WSContext) => {
-      const auth = c.http.getResHeader("X-Group-Auth");
-      c.ws.send(`auth-${auth}`);
-    }).use(mwGroupHeader),
+  async handle(c: WSContext<TestStore>) {
+    c.ws.send(`echo: ${c.message}`);
+  }
+}
 
-    new WSRoute(WSMethod.MESSAGE, "/ws/chat", async (c: WSContext) => {
-      c.ws.send(`chat: ${c.message}`);
-    }),
-  );
+class WSChatOpen extends XerusRoute<TestStore, WSContext<TestStore>> {
+  method = Method.WS_OPEN;
+  path = "/ws/chat";
+
+  onMount() {
+    this.use(mwGroupHeader);
+  }
+
+  async handle(c: WSContext<TestStore>) {
+    const auth = c.http.getResHeader("X-Group-Auth");
+    c.ws.send(`auth-${auth}`);
+  }
+}
+
+class WSChatMessage extends XerusRoute<TestStore, WSContext<TestStore>> {
+  method = Method.WS_MESSAGE;
+  path = "/ws/chat";
+
+  async handle(c: WSContext<TestStore>) {
+    c.ws.send(`chat: ${c.message}`);
+  }
+}
+
+export function wsMethods(app: Xerus<TestStore>) {
+  app.mount(WSEcho, WSChatOpen, WSChatMessage);
 }

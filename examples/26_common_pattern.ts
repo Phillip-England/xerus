@@ -1,34 +1,94 @@
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
+import { HTTPContext } from "../src/HTTPContext";
 import { requestId, rateLimit, csrf, timeout, compress } from "../src/Middleware";
 
 const app = new Xerus();
 
+// 1. Global Middlewares: Applied to every single request
 app.use(requestId());
 app.use(compress({ thresholdBytes: 512 }));
 
-app.mount(
-  new Route("GET", "/", async (c) => {
-    c.json({ hello: "xerus", requestId: c.getRequestId() });
-  }),
+// 2. Base Route: Demonstrating Request ID retrieval
+class HomeRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/";
 
-  new Route("GET", "/limited", async (c) => {
+  async handle(c: HTTPContext) {
+    c.json({ 
+      hello: "xerus", 
+      requestId: c.getRequestId() // Pulled from context store by requestId middleware
+    });
+  }
+}
+
+// 3. Rate Limited Route
+class LimitedRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/limited";
+
+  onMount() {
+    this.use(rateLimit({ windowMs: 1000, max: 5 }));
+  }
+
+  async handle(c: HTTPContext) {
     c.json({ ok: true });
-  }).use(rateLimit({ windowMs: 1000, max: 5 })),
+  }
+}
 
-  new Route("GET", "/csrf-token", async (c) => {
+// 4. CSRF Token Retrieval Route
+class CsrfTokenRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/csrf-token";
+
+  onMount() {
+    this.use(csrf());
+  }
+
+  async handle(c: HTTPContext) {
+    // csrf middleware stores the token in c.data
     c.json({ token: c.data.csrfToken });
-  }).use(csrf()),
+  }
+}
 
-  new Route("POST", "/protected", async (c) => {
+// 5. CSRF Protected POST Route
+class ProtectedPostRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/protected";
+
+  onMount() {
+    this.use(csrf());
+  }
+
+  async handle(c: HTTPContext) {
     c.json({ ok: true });
-  }).use(csrf()),
+  }
+}
 
-  new Route("GET", "/slow", async (c) => {
+// 6. Timeout Route: Demonstrates safeguard against slow handlers
+class SlowRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/slow";
+
+  onMount() {
+    this.use(timeout(100)); // Will trigger 504 if handle takes > 100ms
+  }
+
+  async handle(c: HTTPContext) {
     await new Promise((r) => setTimeout(r, 200));
     c.text("done");
-  }).use(timeout(100)),
+  }
+}
+
+// 7. Mount all classes
+app.mount(
+  HomeRoute,
+  LimitedRoute,
+  CsrfTokenRoute,
+  ProtectedPostRoute,
+  SlowRoute
 );
 
-console.log("http://localhost:8080");
+console.log("🚀 Common Patterns example running on http://localhost:8080");
 await app.listen(8080);

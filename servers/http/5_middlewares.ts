@@ -1,30 +1,53 @@
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
-import { HTTPContext } from "../../src/HTTPContext";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
+import type { HTTPContext } from "../../src/HTTPContext";
+import type { TestStore } from "../TestStore";
+
 import { mwOrderLogger } from "../middleware/mwOrderLogger";
 import { mwShortCircuit } from "../middleware/mwShortCircuit";
 import { mwTreasure, treasureKey } from "../middleware/mwTreasure";
 
-export function middlewares(app: Xerus) {
-  // Test Order of Execution
-  const orderRoute = new Route("GET", "/mw/order", async (c: HTTPContext) => {
-    return c.json({ message: "Handler reached" });
-  });
-  orderRoute.use(mwOrderLogger("A"), mwOrderLogger("B"));
-  app.mount(orderRoute);
+class OrderRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/mw/order";
 
-  // Test Short-circuiting
-  const shortRoute = new Route("GET", "/mw/short-circuit", async (c: HTTPContext) => {
-    return c.text("This should never be seen");
-  });
-  shortRoute.use(mwShortCircuit);
-  app.mount(shortRoute);
+  onMount() {
+    this.use(mwOrderLogger("A"), mwOrderLogger("B"));
+  }
 
-  // Test Store Persistence
-  const storeRoute = new Route("GET", "/mw/store", async (c: HTTPContext) => {
+  async handle(c: HTTPContext<TestStore>) {
+    c.json({ message: "Handler reached" });
+  }
+}
+
+class ShortRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/mw/short-circuit";
+
+  onMount() {
+    this.use(mwShortCircuit);
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    c.text("This should never be seen");
+  }
+}
+
+class StoreRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/mw/store";
+
+  onMount() {
+    this.use(mwTreasure);
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
     const value = c.getStore(treasureKey);
-    return c.json({ storedValue: value });
-  });
-  storeRoute.use(mwTreasure);
-  app.mount(storeRoute);
+    c.json({ storedValue: value });
+  }
+}
+
+export function middlewares(app: Xerus<TestStore>) {
+  app.mount(OrderRoute, ShortRoute, StoreRoute);
 }

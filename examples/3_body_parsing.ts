@@ -1,29 +1,52 @@
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
+import { HTTPContext } from "../src/HTTPContext";
 import { BodyType } from "../src/BodyType";
 
 const app = new Xerus();
 
-app.mount(
-  new Route("POST", "/api/json", async (c) => {
+class JsonBodyRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/api/json";
+
+  async handle(c: HTTPContext) {
     const data = await c.parseBody(BodyType.JSON);
     c.json({ received: data });
-  }),
+  }
+}
 
-  new Route("POST", "/api/log-then-parse", async (c) => {
+class LogThenParseRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/api/log-then-parse";
+
+  async handle(c: HTTPContext) {
+    // Demonstrating your framework's re-parsing capability:
+    // Parsing as TEXT first to log...
     const rawString = await c.parseBody(BodyType.TEXT);
     console.log("Raw Body:", rawString);
 
+    // ...then parsing as JSON for the response
     const jsonData = await c.parseBody(BodyType.JSON);
     c.json({ was_logged: true, data: jsonData });
-  }),
+  }
+}
 
-  new Route("POST", "/api/form", async (c) => {
+class FormBodyRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/api/form";
+
+  async handle(c: HTTPContext) {
     const data = await c.parseBody(BodyType.FORM);
     c.json({ received: data });
-  }),
+  }
+}
 
-  new Route("POST", "/api/upload", async (c) => {
+class UploadRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/api/upload";
+
+  async handle(c: HTTPContext) {
     const data = (await c.parseBody(BodyType.MULTIPART_FORM)) as FormData;
     const file = data.get("file");
 
@@ -31,7 +54,16 @@ app.mount(
       fileName: file instanceof File ? file.name : "unknown",
       size: file instanceof File ? file.size : 0,
     });
-  }),
+  }
+}
+
+// Mount the class blueprints
+app.mount(
+  JsonBodyRoute, 
+  LogThenParseRoute, 
+  FormBodyRoute, 
+  UploadRoute
 );
 
+console.log("🚀 Body Parsing example running on http://localhost:8080");
 await app.listen(8080);

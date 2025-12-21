@@ -1,54 +1,57 @@
-// PATH: /home/jacex/src/xerus/examples/27_date_validators.ts
-
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
-import { Source } from "../src/ValidationSource";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/TypeValidator";
-import { Validator } from "../src/Validator";
 
 const app = new Xerus();
 
-class ISODateQuery implements TypeValidator {
-  date: string;
+class IsoDateRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/demo/iso";
+  
+  date!: string;
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.date = v.isISODateString().value;
+  async validate(c: HTTPContext) {
+    const raw = c.query("date");
+    // Simple ISO regex check (YYYY-MM-DD)
+    const isoRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!isoRegex.test(raw)) {
+        throw new Error("Expected date format YYYY-MM-DD");
+    }
+    this.date = raw;
   }
 
-  async validate(_c: HTTPContext) {}
+  async handle(c: HTTPContext) {
+    c.json({ ok: true, received: this.date });
+  }
 }
 
-class AnyDateQuery implements TypeValidator {
-  value: Date;
+class ParseDateRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/demo/date";
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    this.value = v.asDate().value;
+  dateObj!: Date;
+
+  async validate(c: HTTPContext) {
+    const raw = c.query("value");
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) {
+        throw new Error("Invalid Date provided");
+    }
+    this.dateObj = d;
   }
 
-  async validate(_c: HTTPContext) {}
-}
-
-app.mount(
-  new Route("GET", "/demo/iso", async (c: HTTPContext, data) => {
-    const date = data.get(ISODateQuery).date;
-    c.json({ ok: true, date });
-  }).validate(Source.QUERY("date"), ISODateQuery),
-);
-
-app.mount(
-  new Route("GET", "/demo/date", async (c: HTTPContext, data) => {
-    const d = data.get(AnyDateQuery).value;
+  async handle(c: HTTPContext) {
     c.json({
       ok: true,
-      iso: d.toISOString(),
-      ms: d.getTime(),
+      iso: this.dateObj.toISOString(),
+      ms: this.dateObj.getTime(),
     });
-  }).validate(Source.QUERY("value"), AnyDateQuery),
-);
+  }
+}
+
+app.mount(IsoDateRoute, ParseDateRoute);
 
 console.log("http://localhost:8080/demo/iso?date=2025-12-20");
-console.log("http://localhost:8080/demo/date?value=2025-12-20");
+console.log("http://localhost:8080/demo/date?value=2025-12-20T10:00:00Z");
 await app.listen(8080);

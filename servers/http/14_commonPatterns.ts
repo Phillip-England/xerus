@@ -1,50 +1,99 @@
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
+import type { TestStore } from "../TestStore";
 import { requestId, rateLimit, csrf, timeout, compress } from "../../src/Middleware";
 
-export function commonPatterns(app: Xerus) {
-  // Request ID
+const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
+
+class RequestIdRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/patterns/request-id";
+
+  onMount() {
+    this.use(requestId({ storeKey: "requestId" }));
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    c.json({ id: c.getRequestId() });
+  }
+}
+
+class RateLimitRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/patterns/limited";
+
+  onMount() {
+    this.use(rateLimit({ windowMs: 250, max: 2 }));
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    c.json({ ok: true });
+  }
+}
+
+class CsrfGetRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/patterns/csrf";
+
+  onMount() {
+    this.use(csrfMw);
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    // csrf middleware stores it on c.data (via any), but it's still accessible via getStore
+    c.json({ token: c.getStore("csrfToken") });
+  }
+}
+
+class CsrfPostRoute extends XerusRoute<TestStore> {
+  method = Method.POST;
+  path = "/patterns/csrf";
+
+  onMount() {
+    this.use(csrfMw);
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    c.json({ ok: true });
+  }
+}
+
+class TimeoutRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/patterns/timeout";
+
+  onMount() {
+    this.use(timeout(50));
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    await new Promise((r) => setTimeout(r, 120));
+    c.json({ shouldNot: "reach" });
+  }
+}
+
+class CompressRoute extends XerusRoute<TestStore> {
+  method = Method.GET;
+  path = "/patterns/compress";
+
+  onMount() {
+    this.use(compress());
+  }
+
+  async handle(c: HTTPContext<TestStore>) {
+    c.text("x".repeat(5000));
+  }
+}
+
+export function commonPatterns(app: Xerus<TestStore>) {
   app.mount(
-    new Route("GET", "/patterns/request-id", async (c: HTTPContext) => {
-      c.json({ id: c.getRequestId() });
-    }).use(requestId()),
-  );
-
-  // Rate limit
-  app.mount(
-    new Route("GET", "/patterns/limited", async (c: HTTPContext) => {
-      c.json({ ok: true });
-    }).use(rateLimit({ windowMs: 250, max: 2 })),
-  );
-
-  // CSRF (✅ mount exactly where the tests call)
-  const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
-
-  app.mount(
-    new Route("GET", "/patterns/csrf", async (c: HTTPContext) => {
-      // Middleware sets cookie and stores token on safe methods
-      c.json({ token: c.data.csrfToken });
-    }).use(csrfMw),
-
-    new Route("POST", "/patterns/csrf", async (c: HTTPContext) => {
-      c.json({ ok: true });
-    }).use(csrfMw),
-  );
-
-  // Timeout (soft)
-  app.mount(
-    new Route("GET", "/patterns/timeout", async (c: HTTPContext) => {
-      await new Promise((r) => setTimeout(r, 120));
-      c.json({ shouldNot: "reach" });
-    }).use(timeout(50)),
-  );
-
-  // Compression
-  app.mount(
-    new Route("GET", "/patterns/compress", async (c: HTTPContext) => {
-      // Large enough to exceed threshold (default 1024)
-      c.text("x".repeat(5000));
-    }).use(compress()),
+    RequestIdRoute,
+    RateLimitRoute,
+    CsrfGetRoute,
+    CsrfPostRoute,
+    TimeoutRoute,
+    CompressRoute,
   );
 }

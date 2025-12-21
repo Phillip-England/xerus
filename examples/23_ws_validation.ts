@@ -1,46 +1,58 @@
-// PATH: /home/jacex/src/xerus/examples/23_ws_validation.ts
-
 import { Xerus } from "../src/Xerus";
-import { WSRoute, WSMethod } from "../src/WSRoute";
-import { Source } from "../src/ValidationSource";
+import { XerusRoute } from "../src/XerusRoute";
+import { Method } from "../src/Method";
+import { logger } from "../src/Middleware";
 import type { WSContext } from "../src/WSContext";
-import type { TypeValidator } from "../src/TypeValidator";
-import { Validator } from "../src/Validator";
 
-const app = new Xerus();
+// Define your store type for this app (add keys as you use them)
+type Store = Record<string, any>;
 
-type ChatMessage = { type: "chat"; text: string; timestamp?: any };
+const app = new Xerus<Store>();
 
-class WSMessagePayload implements TypeValidator {
-  msg: ChatMessage;
+// 1. Connection Open: Send a welcome message
+class ChatOpen extends XerusRoute<Store, WSContext<Store>> {
+  method = Method.WS_OPEN;
+  path = "/ws/chat";
 
-  constructor(raw: any) {
-    const v = new Validator(raw);
-    // WS_MESSAGE gives string/buffer => we validate as JSON string
-    const parsed = v
-      .isString()
-      .nonEmpty()
-      .parseJSON()
-      .shape({
-        type: (v) => v.oneOf(["chat"] as const).value,
-        text: (v) => v.isString().nonEmpty().value,
-        timestamp: (v) => v.optional().value,
-      }).value as ChatMessage;
-
-    this.msg = parsed;
+  onMount() {
+    this.use(logger);
   }
 
-  async validate(_c: WSContext) {}
+  async handle(c: WSContext<Store>) {
+    c.ws.send("👋 Welcome to the grouped chat!");
+  }
 }
 
-app.mount(
-  new WSRoute(WSMethod.MESSAGE, "/ws/channel", async (c: WSContext, data) => {
-    const payload = data.get(WSMessagePayload).msg;
+// 2. Message Received: Echo the message back
+class ChatMessage extends XerusRoute<Store, WSContext<Store>> {
+  method = Method.WS_MESSAGE;
+  path = "/ws/chat";
 
-    console.log(`Received: ${payload.text}`);
-    c.ws.send(`Echo: ${payload.text}`);
-  }).validate(Source.WS_MESSAGE(), WSMessagePayload),
-);
+  onMount() {
+    this.use(logger);
+  }
 
-console.log('Connect to ws://localhost:8080/ws/channel and send {"type":"chat","text":"Hello"}');
+  async handle(c: WSContext<Store>) {
+    c.ws.send(`echo: ${c.message}`);
+  }
+}
+
+// 3. Connection Closed: Log server-side
+class ChatClose extends XerusRoute<Store, WSContext<Store>> {
+  method = Method.WS_CLOSE;
+  path = "/ws/chat";
+
+  onMount() {
+    this.use(logger);
+  }
+
+  async handle(_c: WSContext<Store>) {
+    console.log(">> [Server] Client left the chat");
+  }
+}
+
+// Mount the class blueprints
+app.mount(ChatOpen, ChatMessage, ChatClose);
+
+console.log("🚀 Grouped WebSocket example running on ws://localhost:8080/ws/chat");
 await app.listen(8080);

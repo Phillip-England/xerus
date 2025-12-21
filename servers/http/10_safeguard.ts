@@ -1,5 +1,6 @@
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Middleware } from "../../src/Middleware";
 
@@ -13,17 +14,33 @@ const mwStandard = new Middleware(async (c: HTTPContext, next) => {
   await next();
 });
 
-export function safeguard(app: Xerus) {
-  const failRoute = new Route("GET", "/safeguard/fail", async (c: HTTPContext) => {
+class FailRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/safeguard/fail";
+
+  onMount() {
+    this.use(mwForgotAwait);
+  }
+
+  async handle(c: HTTPContext) {
     await new Promise(r => setTimeout(r, 10)); 
     c.json({ message: "Should not see this" });
-  });
-  failRoute.use(mwForgotAwait);
-  app.mount(failRoute);
+  }
+}
 
-  const okRoute = new Route("GET", "/safeguard/ok", async (c: HTTPContext) => {
+class OkRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/safeguard/ok";
+
+  onMount() {
+    this.use(mwStandard);
+  }
+
+  async handle(c: HTTPContext) {
     c.json({ status: "ok" });
-  });
-  okRoute.use(mwStandard);
-  app.mount(okRoute);
+  }
+}
+
+export function safeguard(app: Xerus) {
+  app.mount(FailRoute, OkRoute);
 }

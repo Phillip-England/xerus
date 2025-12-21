@@ -1,19 +1,39 @@
-// PATH: /home/jacex/src/xerus/servers/http/6_errorHandling.ts
-
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { mwErrorTrigger } from "../middleware/mwErrorTrigger";
 
+class StandardErr extends XerusRoute {
+  method = Method.GET;
+  path = "/err/standard";
+  async handle(_c: HTTPContext) {
+    throw new Error("Standard Route Failure");
+  }
+}
+
+class MwErr extends XerusRoute {
+  method = Method.GET;
+  path = "/err/middleware";
+  onMount() {
+    this.use(mwErrorTrigger);
+  }
+  async handle(_c: HTTPContext) {
+    _c.text("This won't be reached");
+  }
+}
+
+class MissingFile extends XerusRoute {
+  method = Method.GET;
+  path = "/err/file-missing";
+  async handle(c: HTTPContext) {
+    return await c.file("./non/existent/path/file.txt");
+  }
+}
+
 export function errorHandling(app: Xerus) {
-  // Global Error Handler
-  // ✅ Now returns canonical envelope: { error: { code, message, detail } }
-  // ✅ Keeps legacy test expectations:
-  //    data.error === "Custom Global Handler"   -> now data.error.message
-  //    data.detail === "<err message>"          -> now data.error.detail
   app.onErr(async (c: HTTPContext, err: any) => {
     const detail = err instanceof Error ? err.message : String(err ?? "Unknown Error");
-
     c.setStatus(500).json({
       error: {
         code: "GLOBAL_ERROR",
@@ -23,23 +43,5 @@ export function errorHandling(app: Xerus) {
     });
   });
 
-  app.mount(
-    new Route("GET", "/err/standard", async (_c: HTTPContext) => {
-      throw new Error("Standard Route Failure");
-    }),
-  );
-
-  const mwErrorRoute = new Route("GET", "/err/middleware", async (_c: HTTPContext) => {
-    // Should never reach; middleware throws.
-    _c.text("This won't be reached");
-  });
-  mwErrorRoute.use(mwErrorTrigger);
-  app.mount(mwErrorRoute);
-
-  // Added this specifically for 6_errorHandling.test.ts
-  app.mount(
-    new Route("GET", "/err/file-missing", async (c: HTTPContext) => {
-      return await c.file("./non/existent/path/file.txt");
-    }),
-  );
+  app.mount(StandardErr, MwErr, MissingFile);
 }

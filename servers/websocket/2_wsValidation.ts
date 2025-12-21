@@ -1,10 +1,9 @@
-// PATH: /home/jacex/src/xerus/servers/websocket/2_wsValidation.ts
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
-import { WSRoute, WSMethod } from "../../src/WSRoute";
-import { Source } from "../../src/ValidationSource";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
 import type { WSContext } from "../../src/WSContext";
-import type { TypeValidator } from "../../src/TypeValidator";
+import type { TestStore } from "../TestStore";
 
 const schema = z.object({
   type: z.enum(["chat", "ping"]),
@@ -13,37 +12,32 @@ const schema = z.object({
 
 type Msg = z.infer<typeof schema>;
 
-class WSValidatedMsg implements TypeValidator<WSContext> {
-  raw: string;
+class ValidatedChat extends XerusRoute<TestStore, WSContext<TestStore>> {
+  method = Method.WS_MESSAGE;
+  path = "/ws/validate";
   msg!: Msg;
 
-  constructor(raw: any) {
-    // WS_MESSAGE comes in as string (WSHandler converts Buffer -> string)
-    if (typeof raw !== "string") {
+  async validate(c: WSContext<TestStore>) {
+    if (typeof c.message !== "string") {
       throw new Error("Expected text WS message");
     }
-    this.raw = raw;
-  }
 
-  async validate(_c: WSContext) {
-    let parsedJSON: any;
+    let parsedJSON: unknown;
     try {
-      parsedJSON = JSON.parse(this.raw);
+      parsedJSON = JSON.parse(c.message);
     } catch {
       throw new Error("Invalid JSON");
     }
 
     this.msg = await schema.parseAsync(parsedJSON);
   }
+
+  async handle(c: WSContext<TestStore>) {
+    if (this.msg.type === "ping") c.ws.send("pong");
+    else c.ws.send(`received: ${this.msg.content}`);
+  }
 }
 
-export function wsValidationMethods(app: Xerus) {
-  app.mount(
-    new WSRoute(WSMethod.MESSAGE, "/ws/validate", async (c: WSContext, data) => {
-      const msg = data.get(WSValidatedMsg).msg;
-
-      if (msg.type === "ping") c.ws.send("pong");
-      else c.ws.send(`received: ${msg.content}`);
-    }).validate(Source.WS_MESSAGE(), WSValidatedMsg),
-  );
+export function wsValidationMethods(app: Xerus<TestStore>) {
+  app.mount(ValidatedChat);
 }

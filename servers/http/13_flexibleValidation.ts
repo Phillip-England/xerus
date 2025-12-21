@@ -1,59 +1,57 @@
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
-import { Route } from "../../src/Route";
-import { Source } from "../../src/ValidationSource";
-import { Validator } from "../../src/Validator";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
+import { HTTPContext } from "../../src/HTTPContext";
+import { SystemErr } from "../../src/SystemErr"; // Import this
+import { SystemErrCode } from "../../src/SystemErrCode"; // Import this
 
-class SecretHeader {
-  value: string;
-  constructor(raw: any) {
-    this.value = String(raw ?? "");
+class HeaderRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/flex/header";
+  async validate(c: HTTPContext) {
+    const val = c.getHeader("X-Secret");
+    if (val !== "xerus-power") {
+        // Throw specific error to get 400
+        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid Secret");
+    }
   }
-  validate() {
-    if (this.value !== "xerus-power") throw new Error("Invalid Secret");
+  async handle(c: HTTPContext) {
+    c.json({ status: "ok" });
   }
 }
 
-class NumericIdParam {
-  id: number;
-  constructor(raw: any) {
-    this.id = raw as any;
-  }
-  validate() {
-    const n = Number(this.id);
+// ... (Rest of file remains the same)
+class ParamRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/flex/param/:id";
+  id!: number;
+  async validate(c: HTTPContext) {
+    const raw = c.getParam("id");
+    const n = Number(raw);
     z.number().int().parse(n);
     this.id = n;
   }
+  async handle(c: HTTPContext) {
+    c.json({ id: this.id });
+  }
 }
 
-class PageQuery {
-  page: number;
-  constructor(raw: any) {
-    this.page = raw as any;
-  }
-  validate() {
-    // accept string -> number
-    const n = Number(this.page);
+class QueryRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/flex/query";
+  page!: number;
+  async validate(c: HTTPContext) {
+    const raw = c.query("page");
+    const n = Number(raw);
     z.number().min(1).parse(n);
     this.page = n;
+  }
+  async handle(c: HTTPContext) {
+    c.json({ page: this.page });
   }
 }
 
 export function flexibleValidation(app: Xerus) {
-  const headerRoute = new Route("GET", "/flex/header", async (c, data) => {
-    data.get(SecretHeader);
-    c.json({ status: "ok" });
-  }).validate(Source.HEADER("X-Secret"), SecretHeader);
-
-  const paramRoute = new Route("GET", "/flex/param/:id", async (c, data) => {
-    const id = data.get(NumericIdParam).id;
-    c.json({ id });
-  }).validate(Source.PARAM("id"), NumericIdParam);
-
-  const queryRoute = new Route("GET", "/flex/query", async (c, data) => {
-    const page = data.get(PageQuery).page;
-    c.json({ page });
-  }).validate(Source.QUERY("page"), PageQuery);
-
-  app.mount(headerRoute, paramRoute, queryRoute);
+  app.mount(HeaderRoute, ParamRoute, QueryRoute);
 }
