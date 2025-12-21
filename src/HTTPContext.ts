@@ -1,4 +1,3 @@
-// PATH: /home/jacex/src/xerus/src/HTTPContext.ts
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -8,26 +7,32 @@ import type { CookieOptions } from "./CookieOptions";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
+export type ParsedFormBodyLast = Record<string, string>;
+export type ParsedFormBodyMulti = Record<string, string | string[]>;
+export type ParseBodyOptions = {
+  strict?: boolean;
+  formMode?: "last" | "multi" | "params";
+};
+
 export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   req!: Request;
   res: MutResponse;
+
   private _url: URL | null = null;
   path: string = "/";
   method: string = "GET";
   route: string = "";
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
-  
-  // Body state
-  private _body?: string | Record<string, any> | FormData;
+
+  private _body?: unknown;
   private _rawBody: string | null = null;
   private _parsedBodyMode: ParsedBodyMode = "NONE";
-  
-  public _wsMessage: string | Buffer | null = null;
-  
-  data: T = {} as T;
 
+  public _wsMessage: string | Buffer | null = null;
+  data: T = {} as T;
   private err: Error | undefined | string;
+
   private _state: ContextState = ContextState.OPEN;
   public _isWS: boolean = false;
 
@@ -52,7 +57,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     const urlIndex = req.url.indexOf("/", 8);
     const queryIndex = req.url.indexOf("?", urlIndex);
     const pathStr =
-      queryIndex === -1 ? req.url.substring(urlIndex) : req.url.substring(urlIndex, queryIndex);
+      queryIndex === -1
+        ? req.url.substring(urlIndex)
+        : req.url.substring(urlIndex, queryIndex);
+
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
@@ -62,6 +70,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   clearResponse() {
     this.res.reset();
     this._state = ContextState.OPEN;
+  }
+
+  markSent() {
+    this._state = ContextState.SENT;
   }
 
   get url(): URL {
@@ -136,8 +148,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     });
   }
 
-  // ... helper error methods (badRequest, etc) omitted for brevity as they just call errorJSON
-
   getClientIP(): string {
     const xff = this.getHeader("x-forwarded-for") || this.getHeader("X-Forwarded-For");
     if (xff) return xff.split(",")[0].trim();
@@ -155,6 +165,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let status = 302;
     let finalLocation = path;
 
@@ -179,6 +190,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?",
       );
     }
+
     this.res.setStatus(status);
     this.res.setHeader("Location", finalLocation);
     this.finalize();
@@ -186,22 +198,141 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
   private assertReparseAllowed(nextMode: ParsedBodyMode) {
     if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Body already parsed as JSON; re-parsing as FORM is not allowed.");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already parsed as JSON; re-parsing as FORM is not allowed.",
+      );
     }
     if (this._parsedBodyMode === "FORM" && nextMode === "JSON") {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Body already parsed as FORM; re-parsing as JSON is not allowed.");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already parsed as FORM; re-parsing as JSON is not allowed.",
+      );
     }
     if (this._parsedBodyMode === "MULTIPART" && nextMode !== "MULTIPART") {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Body already consumed as MULTIPART; it cannot be re-parsed.");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already consumed as MULTIPART; it cannot be re-parsed.",
+      );
     }
-    if (nextMode === "MULTIPART" && this._parsedBodyMode !== "NONE" && this._parsedBodyMode !== "MULTIPART") {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Body already consumed as TEXT/JSON/FORM; it cannot be re-parsed as MULTIPART.");
+    if (
+      nextMode === "MULTIPART" &&
+      this._parsedBodyMode !== "NONE" &&
+      this._parsedBodyMode !== "MULTIPART"
+    ) {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Body already consumed as TEXT/JSON/FORM; it cannot be re-parsed as MULTIPART.",
+      );
     }
   }
 
-  async parseBody<B extends BodyType>(expectedType: B): Promise<any> {
-    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") return this._body;
-    
+  private contentType(): string {
+    return (this.req.headers.get("Content-Type") || "").toLowerCase();
+  }
+
+  /**
+   * NEW: Default “known mismatch” guard.
+   * If the request clearly declares JSON/FORM/MULTIPART and the caller expects a different type,
+   * throw BODY_PARSING_FAILED with the “Unexpected X data” wording used by your tests.
+   *
+   * This is *not* full strict mode (unknown content-type still falls back).
+   */
+  private enforceKnownTypeMismatch(expectedType: BodyType) {
+    if (expectedType === BodyType.TEXT) return;
+
+    const ct = this.contentType();
+
+    // MULTIPART is already handled below via formData(); keep symmetry for messages.
+    const isJson = ct.includes("application/json");
+    const isForm = ct.includes("application/x-www-form-urlencoded");
+    const isMultipart = ct.includes("multipart/form-data");
+
+    if (isJson && expectedType !== BodyType.JSON) {
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
+    }
+    if (isForm && expectedType !== BodyType.FORM) {
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+    }
+    if (isMultipart && expectedType !== BodyType.MULTIPART_FORM) {
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+    }
+  }
+
+  private enforceStrictContentType(expectedType: BodyType, strict: boolean) {
+    if (!strict) return;
+    if (expectedType === BodyType.TEXT) return;
+
+    const ct = this.contentType();
+
+    if (expectedType === BodyType.JSON) {
+      if (!ct.includes("application/json")) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
+      }
+      return;
+    }
+    if (expectedType === BodyType.FORM) {
+      if (!ct.includes("application/x-www-form-urlencoded")) {
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Expected Content-Type application/x-www-form-urlencoded",
+        );
+      }
+      return;
+    }
+    if (expectedType === BodyType.MULTIPART_FORM) {
+      if (!ct.includes("multipart/form-data")) {
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type multipart/form-data");
+      }
+      return;
+    }
+  }
+
+  private parseFormLast(text: string): ParsedFormBodyLast {
+    return Object.fromEntries(new URLSearchParams(text)) as ParsedFormBodyLast;
+  }
+
+  private parseFormMulti(text: string): ParsedFormBodyMulti {
+    const params = new URLSearchParams(text);
+    const out: ParsedFormBodyMulti = {};
+    for (const [k, v] of params.entries()) {
+      const cur = out[k];
+      if (cur === undefined) out[k] = v;
+      else if (Array.isArray(cur)) cur.push(v);
+      else out[k] = [cur, v];
+    }
+    return out;
+  }
+
+  async parseBody(expectedType: BodyType.TEXT, opts?: ParseBodyOptions): Promise<string>;
+  async parseBody(expectedType: BodyType.MULTIPART_FORM, opts?: ParseBodyOptions): Promise<FormData>;
+  async parseBody(
+    expectedType: BodyType.FORM,
+    opts?: (ParseBodyOptions & { formMode?: "last" | undefined }),
+  ): Promise<ParsedFormBodyLast>;
+  async parseBody(
+    expectedType: BodyType.FORM,
+    opts: ParseBodyOptions & { formMode: "multi" },
+  ): Promise<ParsedFormBodyMulti>;
+  async parseBody(
+    expectedType: BodyType.FORM,
+    opts: ParseBodyOptions & { formMode: "params" },
+  ): Promise<URLSearchParams>;
+  async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
+
+  async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
+    const strict = !!opts.strict;
+
+    // Strict mode checks (explicit opt-in)
+    this.enforceStrictContentType(expectedType, strict);
+
+    // Default known-mismatch guard (fixes your failing tests)
+    this.enforceKnownTypeMismatch(expectedType);
+
+    // Cache fast paths
+    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
+      return this._body;
+    }
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
@@ -210,6 +341,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       return this._rawBody;
     }
 
+    // If we already have raw text cached, parse from it
     if (this._rawBody !== null) {
       if (expectedType === BodyType.JSON) {
         this.assertReparseAllowed("JSON");
@@ -222,30 +354,29 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
+
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
-        const obj = Object.fromEntries(new URLSearchParams(this._rawBody));
-        this._body = obj;
+        const mode = opts.formMode ?? "last";
+        const params = new URLSearchParams(this._rawBody);
+        if (mode === "params") return params;
+        const parsed =
+          mode === "multi" ? this.parseFormMulti(this._rawBody) : this.parseFormLast(this._rawBody);
+        this._body = parsed;
         this._parsedBodyMode = "FORM";
-        return obj;
+        return parsed;
       }
+
       if (expectedType === BodyType.TEXT) {
         this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;
       }
     }
 
-    const contentType = this.req.headers.get("Content-Type") || "";
+    const ct = this.contentType();
 
-    if (contentType.includes("application/json")) {
-      if (expectedType !== BodyType.JSON && expectedType !== BodyType.TEXT) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
-      }
-    } else if (contentType.includes("application/x-www-form-urlencoded")) {
-      if (expectedType !== BodyType.FORM && expectedType !== BodyType.TEXT) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
-      }
-    } else if (contentType.includes("multipart/form-data")) {
+    // Multipart path
+    if (ct.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
       }
@@ -256,10 +387,15 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       return fd;
     }
 
+    // Read body as text (shared base)
     this.assertReparseAllowed(
-      expectedType === BodyType.TEXT ? "TEXT" :
-      expectedType === BodyType.JSON ? "JSON" :
-      expectedType === BodyType.FORM ? "FORM" : "TEXT"
+      expectedType === BodyType.TEXT
+        ? "TEXT"
+        : expectedType === BodyType.JSON
+          ? "JSON"
+          : expectedType === BodyType.FORM
+            ? "FORM"
+            : "TEXT",
     );
 
     const text = await this.req.text();
@@ -269,6 +405,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       this._parsedBodyMode = "TEXT";
       return text;
     }
+
     if (expectedType === BodyType.JSON) {
       try {
         const parsed = JSON.parse(text);
@@ -279,13 +416,17 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
       }
     }
+
     if (expectedType === BodyType.FORM) {
-      const obj = Object.fromEntries(new URLSearchParams(text));
-      this._body = obj;
+      const mode = opts.formMode ?? "last";
+      const params = new URLSearchParams(text);
+      if (mode === "params") return params;
+      const parsed = mode === "multi" ? this.parseFormMulti(text) : this.parseFormLast(text);
+      this._body = parsed;
       this._parsedBodyMode = "FORM";
-      return obj;
+      return parsed;
     }
-    
+
     this._parsedBodyMode = "TEXT";
     return text;
   }
@@ -297,7 +438,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   query(key: string, defaultValue: string = ""): string {
     return this.url.searchParams.get(key) || defaultValue;
   }
-  
+
   get queries(): Record<string, string> {
     return Object.fromEntries(this.url.searchParams);
   }
@@ -391,13 +532,16 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let cookieString = `${name}=${encodeURIComponent(value)}`;
     options.path ??= "/";
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
+
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }
+
     if (options.path) cookieString += `; Path=${options.path}`;
     if (options.domain) cookieString += `; Domain=${options.domain}`;
     if (options.maxAge !== undefined) cookieString += `; Max-Age=${options.maxAge}`;
@@ -405,6 +549,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     if (options.httpOnly) cookieString += `; HttpOnly`;
     if (options.secure) cookieString += `; Secure`;
     if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
+
     this.setHeader("Set-Cookie", cookieString);
   }
 

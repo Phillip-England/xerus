@@ -1,11 +1,10 @@
 import type { MiddlewareFn } from "./MiddlewareFn";
 import { HTTPContext } from "./HTTPContext";
 
-// T represents the shape of c.data (the store)
 export class Middleware<T extends Record<string, any> = Record<string, any>> {
-  private callback: MiddlewareFn<HTTPContext<T>>;
+  private callback: MiddlewareFn<T>;
 
-  constructor(callback: MiddlewareFn<HTTPContext<T>>) {
+  constructor(callback: MiddlewareFn<T>) {
     this.callback = callback;
   }
 
@@ -55,10 +54,6 @@ export const cors = (options: CORSOptions = {}) => {
   });
 };
 
-// ---------------------------------------------------------------------------
-// Common Patterns Middleware
-// ---------------------------------------------------------------------------
-
 export const requestId = (opts?: {
   headerName?: string;
   storeKey?: string;
@@ -88,8 +83,6 @@ export const rateLimit = (opts: {
   const windowMs = opts.windowMs;
   const max = opts.max;
   const message = opts.message ?? "Rate limit exceeded";
-
-  // Now valid because HTTPContext has getClientIP()
   const keyFn = opts.key ?? ((c: HTTPContext<any>) => c.getClientIP() ?? "unknown");
 
   type Bucket = { count: number; resetAt: number };
@@ -199,7 +192,6 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
 
       if (winner !== TIMEOUT) return;
 
-      // Timeout won
       (c.data as any).__timeoutSent = true;
 
       if (!c.isDone) {
@@ -286,7 +278,6 @@ export const compress = (opts?: {
 
     const body = (c.res as any).getBody?.() ?? (c.res as any).bodyContent;
     if (body == null) return;
-
     if (typeof body !== "string" && !(body instanceof Uint8Array) && !(body instanceof ArrayBuffer)) return;
 
     const size = bodySize(body);
@@ -306,6 +297,7 @@ export const compress = (opts?: {
       stream = tryMakeCompressedStream("gzip", bytes);
       if (stream) enc = "gzip";
     }
+
     if (!stream || !enc) return;
 
     c.setHeader("Content-Encoding", enc);

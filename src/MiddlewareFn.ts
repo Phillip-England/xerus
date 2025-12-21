@@ -1,9 +1,7 @@
-// PATH: /home/jacex/src/xerus/src/MiddlewareFn.ts
 import type { MiddlewareNextFn } from "./MiddlewareNextFn";
 import { HTTPContext } from "./HTTPContext";
 
-// C is the specific HTTPContext<T>
-export type MiddlewareFn<C extends HTTPContext<any>> = (
-  c: C,
+export type MiddlewareFn<T extends Record<string, any> = Record<string, any>> = (
+  c: HTTPContext<T>,
   next: MiddlewareNextFn,
 ) => Promise<void>;
