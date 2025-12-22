@@ -144,3 +144,53 @@ export class CookieRef {
     return this;
   }
 }
+
+// Cookies.ts (additions)
+
+export class RequestCookies {
+  constructor(private jar: CookieJar) {}
+  get(name: string): string | undefined {
+    return this.jar.get(name);
+  }
+  ref(name: string): RequestCookieRef {
+    return new RequestCookieRef(this, name);
+  }
+}
+
+export class ResponseCookies {
+  constructor(private jar: CookieJar) {}
+  set(name: string, value: string, options: CookieOptions = {}) {
+    this.jar.set(name, value, options);
+  }
+  clear(name: string, options?: { path?: string; domain?: string }) {
+    this.jar.clear(name, options);
+  }
+  ref(name: string): ResponseCookieRef {
+    return new ResponseCookieRef(this, name);
+  }
+}
+
+export class RequestCookieRef {
+  constructor(private view: RequestCookies, private _name: string) {}
+  get name() {
+    return this._name;
+  }
+  get(): string | undefined {
+    return this.view.get(this._name);
+  }
+}
+
+export class ResponseCookieRef {
+  constructor(private writer: ResponseCookies, private _name: string) {}
+  get name() {
+    return this._name;
+  }
+  set(value: string, options: CookieOptions = {}): this {
+    this.writer.set(this._name, value, options);
+    return this;
+  }
+  clear(options?: { path?: string; domain?: string }): this {
+    this.writer.clear(this._name, options);
+    return this;
+  }
+}

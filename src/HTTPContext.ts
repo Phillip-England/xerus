@@ -6,10 +6,13 @@ import { SystemErrCode } from "./SystemErrCode";
 import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
 import type { WSContext } from "./WSContext";
-import { HeaderRef, RequestHeaders } from "./Headers";
-import type { CookieRef } from "./Cookies";
+import type { CookieRef, RequestCookieRef, ResponseCookieRef } from "./Cookies";
 import { URLQuery, URLQueryRef } from "./URLQuery";
 import { PathParams, PathParamRef } from "./PathParams";
+// HTTPContext.ts
+import { RequestCookies, ResponseCookies } from "./Cookies";
+import { HeaderRef, HeadersBag, RequestHeaders } from "./Headers"; // type-only if you want
+
 
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
@@ -29,6 +32,11 @@ export class HTTPContext {
   private _url: URL | null = null;
   private _urlQuery: URLQuery | null = null;
   private _pathParams: PathParams | null = null;
+
+  // inside HTTPContext class fields
+private _reqCookiesView: RequestCookies | null = null;
+private _resCookiesWriter: ResponseCookies | null = null;
+
 
   path: string = "/";
   method: string = "GET";
@@ -107,9 +115,11 @@ export class HTTPContext {
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
+  this._reqHeaders = new RequestHeaders(req.headers);
+  this.res.cookies.resetRequest(req.headers.get("Cookie"));
 
-    this._reqHeaders = new RequestHeaders(req.headers);
-    this.res.cookies.resetRequest(req.headers.get("Cookie"));
+  this._reqCookiesView = null;
+  this._resCookiesWriter = null;
   }
 
   clearResponse() {
@@ -160,10 +170,6 @@ export class HTTPContext {
 
   getErr(): Error | undefined | string {
     return this.err;
-  }
-
-  getResHeader(name: string): HeaderRef {
-    return new HeaderRef(this.res.headers, name);
   }
 
   private ensureBodyModifiable() {
@@ -636,19 +642,95 @@ getURLQuery(key?: string): any {
   return key ? this.urlQuery.ref(key) : this.urlQuery;
 }
 
-/** Native primitive: Path param ref (or bag) */
+// ===== Naming consistency =====
+getPathParams(): PathParams {
+  return this.pathParams;
+}
+
+getPathParamRef(key: string): PathParamRef {
+  return this.pathParams.ref(key);
+}
+
+// Keep your existing getPathParam(...) overloads as aliases,
+// but internally route them:
 getPathParam(): PathParams;
 getPathParam(key: string): PathParamRef;
 getPathParam(key?: string): any {
-  return key ? this.pathParams.ref(key) : this.pathParams;
+  return key ? this.getPathParamRef(key) : this.getPathParams();
 }
 
-/** Optional aliases if you want the "factory vibe" */
-cookie(name: string) {
-  return this.getCookie(name);
+
+// ===== Cookies symmetry =====
+get reqCookies(): RequestCookies {
+  return this._reqCookiesView ??= new RequestCookies(this.res.cookies);
 }
+
+get resCookies(): ResponseCookies {
+  return this._resCookiesWriter ??= new ResponseCookies(this.res.cookies);
+}
+
+reqCookie(name: string): RequestCookieRef {
+  return this.reqCookies.ref(name);
+}
+
+resCookie(name: string): ResponseCookieRef {
+  return this.resCookies.ref(name);
+}
+
+// Keep existing (combined) cookie access for backwards compatibility:
+cookie(name: string) {
+  return this.getCookie(name); // your existing combined CookieRef
+}
+
 header(name: string) {
   return this.getHeader(name);
+}
+
+// ===== Headers symmetry =====
+get reqHeaders(): RequestHeaders {
+  // _reqHeaders is set on reset; this fallback is just safety.
+  return this._reqHeaders ?? new RequestHeaders(this.req.headers);
+}
+
+get resHeaders(): HeadersBag {
+  return this.res.headers;
+}
+
+getReqHeader(name: string): HeaderRef {
+  return new HeaderRef(this.reqHeaders, name);
+}
+
+getResHeader(name: string): HeaderRef {
+  return new HeaderRef(this.resHeaders, name);
+}
+
+// Keep your existing getHeader/setHeader/appendHeader as-is.
+// If you want, you can internally route getHeader to getReqHeader.
+
+// ===== Native body primitives =====
+textBody(opts?: ParseBodyOptions): Promise<string> {
+  return this.parseBody(BodyType.TEXT, opts);
+}
+
+jsonBody<T = any>(opts?: ParseBodyOptions): Promise<T> {
+  return this.parseBody<T>(BodyType.JSON, opts);
+}
+
+// Form modes
+formBodyLast(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyLast> {
+  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "last" });
+}
+
+formBodyMulti(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyMulti> {
+  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "multi" });
+}
+
+formBodyParams(opts?: Omit<ParseBodyOptions, "formMode">): Promise<URLSearchParams> {
+  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "params" });
+}
+
+multipartBody(opts?: ParseBodyOptions): Promise<FormData> {
+  return this.parseBody(BodyType.MULTIPART_FORM, opts);
 }
 
 
