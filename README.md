@@ -47,7 +47,7 @@ bun add ./src/xerus
 Or if you publish it:
 
 ```bash
-bun add xerus
+bun add github:phillip-england/xerus#v0.0.59
 ```
 
 ---
