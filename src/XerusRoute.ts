@@ -1,10 +1,8 @@
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Method } from "./Method";
-import type { Validator } from "./Validator";
 import type { XerusMiddleware } from "./Middleware";
 
-// REMOVED: <T>
 type MiddlewareInput =
   | XerusMiddleware
   | (new (...args: any[]) => XerusMiddleware);
@@ -14,12 +12,10 @@ function isCtor(x: any): x is new (...args: any[]) => any {
     x.prototype.constructor === x;
 }
 
-// REMOVED: <T>
 export abstract class XerusRoute {
   abstract method: Method;
   abstract path: string;
-
-  validators: Validator<any>[] = [];
+  // Validators removed from property list as they are handled via class fields now
   public _middlewares: XerusMiddleware[] = [];
   public _errHandler?: HTTPErrorHandlerFunc;
 

@@ -3,7 +3,6 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
 import type { HTTPContext } from "../../src/HTTPContext";
@@ -16,17 +15,11 @@ const schema = z.object({
   content: z.string().min(1, "Content cannot be empty"),
 });
 
-// 1. Create a TypeValidator to handle the parsing
 class WSJsonValidator implements TypeValidator {
-  raw: any;
   data!: z.infer<typeof schema>;
-
-  constructor(raw: any) {
-    this.raw = raw;
-  }
-
   async validate(c: HTTPContext) {
-    if (typeof this.raw !== "string") {
+    const raw = c.ws().message;
+    if (typeof raw !== "string") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Expected text WS message",
@@ -34,7 +27,7 @@ class WSJsonValidator implements TypeValidator {
     }
     let parsedJSON: unknown;
     try {
-      parsedJSON = JSON.parse(this.raw);
+      parsedJSON = JSON.parse(raw);
     } catch {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid JSON");
     }
@@ -53,13 +46,10 @@ class ValidatedChat extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/validate";
   store = Inject(TestStore);
-
-  // 2. Inject the validator using the WSMESSAGE source
-  msg = Validator.Param(Source.WSMESSAGE(), WSJsonValidator);
+  msg = Validator.Ctx(WSJsonValidator);
 
   async handle(c: HTTPContext) {
     let ws = c.ws();
-    // 3. Access the parsed data via the injected property
     if (this.msg.data.type === "ping") {
       ws.send("pong");
     } else {

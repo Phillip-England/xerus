@@ -6,7 +6,6 @@ import { HTTPContext } from "../../src/HTTPContext";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 class HeaderValidator implements TypeValidator {
@@ -20,21 +19,17 @@ class HeaderValidator implements TypeValidator {
 }
 
 class IdParamValidator implements TypeValidator {
-  id: number;
-  constructor(raw: any) {
-    this.id = Number(raw);
-  }
+  id!: number;
   async validate(c: HTTPContext) {
+    this.id = Number(c.getParam("id"));
     z.number().int().parse(this.id);
   }
 }
 
 class PageQueryValidator implements TypeValidator {
-  page: number;
-  constructor(raw: any) {
-    this.page = Number(raw);
-  }
+  page!: number;
   async validate(c: HTTPContext) {
+    this.page = Number(c.query("page"));
     z.number().min(1).parse(this.page);
   }
 }
@@ -42,7 +37,6 @@ class PageQueryValidator implements TypeValidator {
 class HeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/header";
-  // Updated to use Ctx
   secret = Validator.Ctx(HeaderValidator);
   async handle(c: HTTPContext) {
     c.json({ status: "ok" });
@@ -52,7 +46,7 @@ class HeaderRoute extends XerusRoute {
 class ParamRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/param/:id";
-  params = Validator.Param(Source.PARAM("id"), IdParamValidator);
+  params = Validator.Ctx(IdParamValidator);
   async handle(c: HTTPContext) {
     c.json({ id: this.params.id });
   }
@@ -61,7 +55,7 @@ class ParamRoute extends XerusRoute {
 class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/query";
-  query = Validator.Param(Source.QUERY("page"), PageQueryValidator);
+  query = Validator.Ctx(PageQueryValidator);
   async handle(c: HTTPContext) {
     c.json({ page: this.query.page });
   }

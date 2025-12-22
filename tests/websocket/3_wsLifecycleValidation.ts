@@ -3,7 +3,6 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { HTTPContext } from "../../src/HTTPContext";
 import type { TestStore } from "../TestStore";
 import type { TypeValidator } from "../../src/TypeValidator";
@@ -44,7 +43,6 @@ class CloseEventValidator implements TypeValidator {
 class LifecycleOpen extends XerusRoute {
   method = Method.WS_OPEN;
   path = "/ws/lifecycle-validate";
-  // Updated to use Ctx
   headers = Validator.Ctx(HeaderClientValidator);
   async handle(c: HTTPContext) {
     let ws = c.ws();
@@ -64,7 +62,6 @@ class LifecycleMessage extends XerusRoute {
 class LifecycleClose extends XerusRoute {
   method = Method.WS_CLOSE;
   path = "/ws/close-validate";
-  // Updated to use Ctx. No source needed for checking WS Close state on context
   closer = Validator.Ctx(CloseEventValidator);
   async handle(c: HTTPContext) {
     let ws = c.ws();

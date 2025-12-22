@@ -5,7 +5,6 @@ import { Method } from "../../src/Method";
 import { BodyType } from "../../src/BodyType";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 const signupSchema = z.object({
@@ -26,20 +25,18 @@ const loginSchema = z.object({
 
 class SignupValidator implements TypeValidator {
   data!: z.infer<typeof signupSchema>;
-  constructor(public raw: any) {}
   async validate(c: HTTPContext) {
-    this.data = await signupSchema.parseAsync(this.raw);
+    const raw = await c.parseBody(BodyType.JSON);
+    this.data = await signupSchema.parseAsync(raw);
   }
 }
 
 class SearchValidator implements TypeValidator {
   data!: z.infer<typeof searchSchema>;
-  constructor(public raw: any) {}
   async validate(c: HTTPContext) {
     const prepared = {
-      // FIX: Default to "" so Zod checks .min(1) instead of throwing "Required"
-      q: this.raw.q || "",
-      limit: Number(this.raw.limit || 10),
+      q: c.query("q") || "",
+      limit: Number(c.query("limit") || "10"),
     };
     this.data = await searchSchema.parseAsync(prepared);
   }
@@ -47,18 +44,16 @@ class SearchValidator implements TypeValidator {
 
 class LoginValidator implements TypeValidator {
   data!: z.infer<typeof loginSchema>;
-  constructor(public raw: any) {}
   async validate(c: HTTPContext) {
-    this.data = await loginSchema.parseAsync(this.raw);
+    const raw = await c.parseBody(BodyType.FORM);
+    this.data = await loginSchema.parseAsync(raw);
   }
 }
 
 class SignupRoute extends XerusRoute {
   method = Method.POST;
   path = "/validation/signup";
-
-  body = Validator.Param(Source.JSON(), SignupValidator);
-
+  body = Validator.Ctx(SignupValidator);
   async handle(c: HTTPContext) {
     const { username, email, age } = this.body.data;
     c.json({
@@ -71,9 +66,7 @@ class SignupRoute extends XerusRoute {
 class SearchRoute extends XerusRoute {
   method = Method.GET;
   path = "/validation/search";
-
-  query = Validator.Param(Source.QUERY(), SearchValidator);
-
+  query = Validator.Ctx(SearchValidator);
   async handle(c: HTTPContext) {
     c.json({
       status: "success",
@@ -85,9 +78,7 @@ class SearchRoute extends XerusRoute {
 class LoginRoute extends XerusRoute {
   method = Method.POST;
   path = "/validation/login";
-
-  form = Validator.Param(Source.FORM(), LoginValidator);
-
+  form = Validator.Ctx(LoginValidator);
   async handle(c: HTTPContext) {
     c.json({
       status: "success",

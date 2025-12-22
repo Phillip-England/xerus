@@ -6,15 +6,12 @@ import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 class JsonBody implements TypeValidator {
   data: any;
-  constructor(raw: any) {
-    this.data = raw;
-  }
   async validate(c: HTTPContext) {
+    this.data = await c.parseBody(BodyType.JSON);
     if (
       !this.data || typeof this.data !== "object" || Array.isArray(this.data)
     ) {
@@ -28,7 +25,6 @@ class JsonBody implements TypeValidator {
 
 class TextBody implements TypeValidator {
   content!: string;
-  // No constructor needed for Ctx validators, or it receives undefined
   async validate(c: HTTPContext) {
     this.content = await c.parseBody(BodyType.TEXT);
     if (typeof this.content !== "string") {
@@ -42,10 +38,8 @@ class TextBody implements TypeValidator {
 
 class FormBody implements TypeValidator {
   data: any;
-  constructor(raw: any) {
-    this.data = raw;
-  }
   async validate(c: HTTPContext) {
+    this.data = await c.parseBody(BodyType.FORM);
     if (!this.data || typeof this.data !== "object") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -65,7 +59,7 @@ class MultipartBody implements TypeValidator {
 class ParseJson extends XerusRoute {
   method = Method.POST;
   path = "/parse/json";
-  body = Validator.Param(Source.JSON(), JsonBody);
+  body = Validator.Ctx(JsonBody);
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.data });
   }
@@ -74,7 +68,6 @@ class ParseJson extends XerusRoute {
 class ParseText extends XerusRoute {
   method = Method.POST;
   path = "/parse/text";
-  // Updated to use Ctx instead of Source.CUSTOM
   body = Validator.Ctx(TextBody);
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.content });
@@ -84,7 +77,7 @@ class ParseText extends XerusRoute {
 class ParseForm extends XerusRoute {
   method = Method.POST;
   path = "/parse/form";
-  body = Validator.Param(Source.FORM(), FormBody);
+  body = Validator.Ctx(FormBody);
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.data });
   }
@@ -93,7 +86,6 @@ class ParseForm extends XerusRoute {
 class ParseMultipart extends XerusRoute {
   method = Method.POST;
   path = "/parse/multipart";
-  // Updated to use Ctx instead of Source.CUSTOM
   body = Validator.Ctx(MultipartBody);
   async handle(c: HTTPContext) {
     const result: Record<string, string> = {};

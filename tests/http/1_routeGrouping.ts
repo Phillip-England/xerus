@@ -6,7 +6,6 @@ import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 import type { XerusMiddleware } from "../../src/Middleware";
 import type { AnyContext } from "../../src/MiddlewareFn";
@@ -21,10 +20,8 @@ export class GroupHeaderMiddleware implements XerusMiddleware {
 
 class AnyJsonBody implements TypeValidator {
   data: any;
-  constructor(raw: any) {
-    this.data = raw;
-  }
   async validate(c: HTTPContext) {
+    this.data = await c.parseBody(BodyType.JSON);
     if (
       !this.data || typeof this.data !== "object" || Array.isArray(this.data)
     ) {
@@ -47,7 +44,7 @@ class ApiV1 extends XerusRoute {
 class ApiEcho extends XerusRoute {
   method = Method.POST;
   path = "/api/echo";
-  body = Validator.Param(Source.JSON(), AnyJsonBody);
+  body = Validator.Ctx(AnyJsonBody);
   async handle(c: HTTPContext) {
     c.json({ received: this.body.data });
   }

@@ -4,17 +4,15 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
+import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 export class QueryFilter implements TypeValidator {
-  status: string;
-  constructor(raw: any) {
-    this.status = raw?.status || "active";
-  }
-  async validate(_c: HTTPContext) {
+  status!: string;
+  async validate(c: HTTPContext) {
+    this.status = c.query("status") || "active";
     if (!["active", "archived"].includes(this.status)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -25,11 +23,9 @@ export class QueryFilter implements TypeValidator {
 }
 
 export class UserIdParam implements TypeValidator {
-  id: number;
-  constructor(raw: any) {
-    this.id = Number(raw);
-  }
-  async validate(_c: HTTPContext) {
+  id!: number;
+  async validate(c: HTTPContext) {
+    this.id = Number(c.getParam("id"));
     if (!Number.isFinite(this.id) || this.id <= 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -58,13 +54,11 @@ const userSchema = z.object({
 });
 
 export class CreateUserJson implements TypeValidator {
-  data: z.infer<typeof userSchema>;
-  constructor(raw: any) {
-    this.data = raw;
-  }
-  async validate(_c: HTTPContext) {
+  data!: z.infer<typeof userSchema>;
+  async validate(c: HTTPContext) {
     try {
-      this.data = await userSchema.parseAsync(this.data);
+      const raw = await c.parseBody(BodyType.JSON);
+      this.data = await userSchema.parseAsync(raw);
     } catch (e: any) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -88,11 +82,9 @@ export class IpValidator implements TypeValidator {
 }
 
 export class WsPingValidator implements TypeValidator {
-  content: string;
-  constructor(raw: any) {
-    this.content = String(raw);
-  }
-  async validate(_c: HTTPContext) {
+  content!: string;
+  async validate(c: HTTPContext) {
+    this.content = String(c.ws().message);
     if (this.content !== "PING") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -105,12 +97,10 @@ export class WsPingValidator implements TypeValidator {
 class AllValidatorsRoute extends XerusRoute {
   method = Method.POST;
   path = "/showcase/all/:id";
-  userId = Validator.Param(Source.PARAM("id"), UserIdParam);
-  query = Validator.Param(Source.QUERY(), QueryFilter);
-  // Updated to Ctx
+  userId = Validator.Ctx(UserIdParam);
+  query = Validator.Ctx(QueryFilter);
   apiKey = Validator.Ctx(ApiKeyHeader);
-  body = Validator.Param(Source.JSON(), CreateUserJson);
-  // Updated to Ctx
+  body = Validator.Ctx(CreateUserJson);
   ip = Validator.Ctx(IpValidator);
 
   async handle(c: HTTPContext) {
@@ -131,7 +121,7 @@ class AllValidatorsRoute extends XerusRoute {
 class WsShowcaseRoute extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/showcase/ws";
-  msg = Validator.Param(Source.WSMESSAGE(), WsPingValidator);
+  msg = Validator.Ctx(WsPingValidator);
   async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send(`PONG-${this.msg.content}`);

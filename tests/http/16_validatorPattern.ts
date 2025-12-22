@@ -3,17 +3,14 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 
 export class QueryPageValidator implements TypeValidator {
-  page: number;
-  constructor(raw: any) {
-    this.page = Number(raw.page || "1");
-  }
+  page!: number;
   async validate(c: HTTPContext) {
+    this.page = Number(c.query("page") || "1");
     if (isNaN(this.page) || this.page < 1) {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Page must be >= 1");
     }
@@ -23,12 +20,8 @@ export class QueryPageValidator implements TypeValidator {
 class ValidatorRoute extends XerusRoute {
   method = Method.GET;
   path = "/validator/pattern";
-
-  // Property Injection
-  query = Validator.Param(Source.QUERY(), QueryPageValidator);
-
+  query = Validator.Ctx(QueryPageValidator);
   async handle(c: HTTPContext) {
-    // Direct access via property
     c.json({ page: this.query.page });
   }
 }

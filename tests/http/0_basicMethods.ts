@@ -3,17 +3,16 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Validator } from "../../src/Validator";
-import { Source } from "../../src/ValidationSource";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
+import { BodyType } from "../../src/BodyType";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 class JsonObjectBody implements TypeValidator {
   body: any;
-  constructor(raw: any) {
-    this.body = raw;
-  }
+  
   async validate(c: HTTPContext) {
+    this.body = await c.parseBody(BodyType.JSON);
     if (
       !this.body || typeof this.body !== "object" || Array.isArray(this.body)
     ) {
@@ -36,9 +35,7 @@ class Root extends XerusRoute {
 class CreateItem extends XerusRoute {
   method = Method.POST;
   path = "/items";
-  // Updated to new pattern
-  jsonObj = Validator.Param(Source.JSON(), JsonObjectBody);
-
+  jsonObj = Validator.Ctx(JsonObjectBody);
   async handle(c: HTTPContext) {
     c.setStatus(201).json({ message: "Item created", data: this.jsonObj.body });
   }
@@ -47,9 +44,7 @@ class CreateItem extends XerusRoute {
 class UpdateItem extends XerusRoute {
   method = Method.PUT;
   path = "/items/1";
-  // Updated to new pattern (removed validators array)
-  jsonObj = Validator.Param(Source.JSON(), JsonObjectBody);
-
+  jsonObj = Validator.Ctx(JsonObjectBody);
   async handle(c: HTTPContext) {
     c.json({ message: "Item 1 updated", data: this.jsonObj.body });
   }
