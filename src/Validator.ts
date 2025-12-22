@@ -12,14 +12,30 @@ async function readSource(c: HTTPContext, source: ValidationSource): Promise<any
   switch (source.kind) {
     case "JSON":
       return await c.parseBody(BodyType.JSON);
-    case "FORM":
-      return await c.parseBody(BodyType.FORM, { formMode: source.formMode ?? "last" });
+
+    case "FORM": {
+      // Narrow formMode so TS can select the correct overload.
+      const mode = source.formMode ?? "last";
+
+      if (mode === "multi") {
+        return await c.parseBody(BodyType.FORM, { formMode: "multi" });
+      }
+      if (mode === "params") {
+        return await c.parseBody(BodyType.FORM, { formMode: "params" });
+      }
+      // "last" (or undefined) matches the "last" overload
+      return await c.parseBody(BodyType.FORM, { formMode: "last" });
+    }
+
     case "QUERY":
       return source.key ? c.query(source.key, "") : c.queries;
+
     case "PARAM":
       return source.key ? c.getParam(source.key, "") : c.params;
+
     case "WSMESSAGE":
       return c._wsMessage;
+
     case "CUSTOM":
       return await source.provider(c);
   }
@@ -48,6 +64,7 @@ export class Validator<T extends TypeValidator = any> {
     return new Middleware<any>(async (c, next) => {
       try {
         const raw = await readSource(c, this.source);
+
         const instance = new this.Type(raw);
         if (typeof (instance as any)?.validate !== "function") {
           throw new SystemErr(

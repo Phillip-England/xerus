@@ -1,7 +1,8 @@
 import { Xerus } from "../src/Xerus";
-import { Route } from "../src/Route";
+import { Method } from "../src/Method";
 import { Middleware, logger } from "../src/Middleware";
 import type { HTTPContext } from "../src/HTTPContext";
+import { XerusRoute } from "../src/XerusRoute";
 
 const app = new Xerus();
 
@@ -17,10 +18,29 @@ const requireAuth = new Middleware(async (c: HTTPContext, next) => {
 // Global middleware
 app.use(logger);
 
-app.mount(
-  new Route("GET", "/", async (c) => c.text("Public Area")),
+// Routes (new style)
+class PublicRoute extends XerusRoute<any, HTTPContext> {
+  override method = Method.GET;
+  override path = "/";
 
-  new Route("GET", "/admin", async (c) => c.text("Welcome, Admin.")).use(requireAuth),
-);
+  override async handle(c: HTTPContext) {
+    c.text("Public Area");
+  }
+}
+
+class AdminRoute extends XerusRoute<any, HTTPContext> {
+  override method = Method.GET;
+  override path = "/admin";
+
+  override async handle(c: HTTPContext) {
+    c.text("Welcome, Admin.");
+  }
+}
+
+// attach per-route middleware
+AdminRoute.prototype.use(requireAuth);
+
+// mount
+app.mount(PublicRoute, AdminRoute);
 
 await app.listen(8080);
