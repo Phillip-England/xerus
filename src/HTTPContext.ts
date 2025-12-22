@@ -221,9 +221,21 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       if (typeof arg3 === "number") status = arg3;
 
       const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(arg2)) {
-        params.append(key, String(value));
-      }
+for (const [key, value] of Object.entries(arg2)) {
+  if (value === undefined || value === null) continue;
+
+  const t = typeof value;
+  if (t === "string" || t === "number" || t === "boolean") {
+    params.append(key, String(value));
+    continue;
+  }
+
+  throw new SystemErr(
+    SystemErrCode.INTERNAL_SERVER_ERR,
+    `Redirect query param "${key}" must be string/number/boolean (got ${t}).`,
+  );
+}
+
       const queryString = params.toString();
       if (queryString.length > 0) {
         const separator = finalLocation.includes("?") ? "&" : "?";
@@ -526,18 +538,21 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     return this;
   }
 
-  setHeader(name: string, value: string): this {
-    if (this._timedOut) return this;
-    this.ensureConfigurable();
-    if (/[\r\n]/.test(value)) {
-      throw new SystemErr(
-        SystemErrCode.INTERNAL_SERVER_ERR,
-        `Attempted to set invalid header "${name}".`,
-      );
-    }
-    this.res.setHeader(name, value);
-    return this;
+setHeader(name: string, value: string): this {
+  if (this._timedOut) return this;
+  this.ensureConfigurable();
+
+  if (/[\r\n]/.test(value)) {
+    throw new SystemErr(
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      `Attempted to set invalid header "${name}".`,
+    );
   }
+
+  // ✅ normalize header name once at boundary
+  this.res.setHeader(name.toLowerCase(), value);
+  return this;
+}
 
   getHeader(name: string): string | null {
     return this.req.headers.get(name);
@@ -664,17 +679,19 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this.setCookie(name, "", { path, domain, maxAge: 0, expires: new Date(0) });
   }
 
-  appendHeader(name: string, value: string): this {
-    if (this._timedOut) return this;
-    this.ensureConfigurable();
-    if (/[\r\n]/.test(value)) {
-      throw new SystemErr(
-        SystemErrCode.INTERNAL_SERVER_ERR,
-        `Attempted to set invalid header "${name}".`,
-      );
-    }
-    // @ts-ignore
-    this.res.appendHeader(name, value);
-    return this;
+appendHeader(name: string, value: string): this {
+  if (this._timedOut) return this;
+  this.ensureConfigurable();
+
+  if (/[\r\n]/.test(value)) {
+    throw new SystemErr(
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      `Attempted to set invalid header "${name}".`,
+    );
   }
+
+  // ✅ normalize header name once at boundary
+  this.res.appendHeader(name.toLowerCase(), value);
+  return this;
+}
 }

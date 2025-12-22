@@ -48,10 +48,6 @@ export class Validator<T extends TypeValidator = any> {
     this.storeKey = storeKey ?? Type.name;
   }
 
-  // FIXED: Return type changed from RouteFieldValidator<T> to T
-  // We cast to 'unknown' then 'T' to trick TypeScript.
-  // At runtime, this is still a RouteFieldValidator, but the framework
-  // swaps it for the real instance of T before handle() is called.
   static Param<T extends TypeValidator>(
     source: ValidationSource,
     Type: Ctor<T>,
@@ -60,29 +56,35 @@ export class Validator<T extends TypeValidator = any> {
     return new RouteFieldValidator(source, Type, storeKey) as unknown as T;
   }
 
-  asMiddleware(): Middleware<any> {
-    return new Middleware<any>(async (c: HTTPContext<any>, next) => {
-      try {
-        const raw = await readSource(c, this.source);
-        const instance = new this.Type(raw);
+  // ✅ New: direct runner (no "middleware in middleware" hop)
+  async run(c: HTTPContext<any>): Promise<T> {
+    try {
+      const raw = await readSource(c, this.source);
+      const instance = new this.Type(raw);
 
-        if (typeof (instance as any)?.validate !== "function") {
-          throw new SystemErr(
-            SystemErrCode.VALIDATION_FAILED,
-            `Type "${this.Type.name}" does not implement validate(c)`,
-          );
-        }
-
-        await instance.validate(c);
-        (c.data as any)[this.storeKey] = instance;
-        await next();
-      } catch (e: any) {
-        if (e instanceof SystemErr) throw e;
+      if (typeof (instance as any)?.validate !== "function") {
         throw new SystemErr(
           SystemErrCode.VALIDATION_FAILED,
-          e?.message ?? "Validation failed",
+          `Type "${this.Type.name}" does not implement validate(c)`,
         );
       }
+
+      await instance.validate(c);
+      (c.data as any)[this.storeKey] = instance;
+      return instance;
+    } catch (e: any) {
+      if (e instanceof SystemErr) throw e;
+      throw new SystemErr(
+        SystemErrCode.VALIDATION_FAILED,
+        e?.message ?? "Validation failed",
+      );
+    }
+  }
+
+  asMiddleware(): Middleware<any> {
+    return new Middleware<any>(async (c: HTTPContext<any>, next) => {
+      await this.run(c);
+      await next();
     });
   }
 }

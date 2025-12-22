@@ -1,14 +1,22 @@
-import { Middleware } from "../../src/Middleware";
-import { HTTPContext } from "../../src/HTTPContext";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
-export const mwOrderLogger = (name: string) =>
-  new Middleware(async (c: HTTPContext, next) => {
+// Class-based middleware that accepts constructor arguments
+export class MwOrderLogger implements XerusMiddleware {
+  private name: string;
+
+  constructor(name: string) {
+    this.name = name;
+  }
+
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
     const existing = c.getResHeader("X-Order") || "";
-    c.setHeader("X-Order", existing ? `${existing}->${name}-In` : `${name}-In`);
-
-    await next(); // This calls the next middleware or the handler
-
-    // LOGIC AFTER NEXT() NOW WORKS:
+    c.setHeader("X-Order", existing ? `${existing}->${this.name}-In` : `${this.name}-In`);
+    
+    await next(); // Pass control
+    
     const after = c.getResHeader("X-Order") || "";
-    c.setHeader("X-Order", `${after}->${name}-Out`);
-  });
+    c.setHeader("X-Order", `${after}->${this.name}-Out`);
+  }
+}

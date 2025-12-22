@@ -3,6 +3,8 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Middleware } from "../../src/Middleware";
+import type { XerusMiddleware } from "../../src/Middleware"; // Import interface
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 import { Inject, type InjectableStore } from "../../src/RouteFields";
 
 class PollutionSet extends XerusRoute {
@@ -38,16 +40,19 @@ class BrokenServiceRoute extends XerusRoute {
   }
 }
 
-const mwDoubleNext = new Middleware(async (c, next) => {
-  await next();
-  await next();
-});
+// Class-based Middleware implementation
+class DoubleNextMiddleware implements XerusMiddleware {
+  async execute(c: HTTPContext, next: MiddlewareNextFn) {
+    await next();
+    await next(); // Illegal second call
+  }
+}
 
 class DoubleNextRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/double-next";
   onMount() {
-    this.use(mwDoubleNext);
+    this.use(DoubleNextMiddleware);
   }
   async handle(c: HTTPContext) {
     c.json({ ok: true });
@@ -59,8 +64,6 @@ class LateHeaderRoute extends XerusRoute {
   path = "/harden/late-header";
   async handle(c: HTTPContext) {
     c.json({ ok: true });
-    // This framework ALLOWS headers in WRITTEN state (Onion model),
-    // so this header SHOULD appear.
     c.setHeader("X-Late", "Too late"); 
   }
 }
@@ -76,13 +79,12 @@ class StreamSafetyRoute extends XerusRoute {
       }
     });
     
-    c.stream(stream); // State becomes STREAMING
+    c.stream(stream);
     
-    // This MUST fail/throw because headers are sent when streaming starts
     try {
       c.setHeader("X-Fail", "True"); 
     } catch (e) {
-      // Swallow error to prevent crash, verifying header wasn't set is the test
+      // Swallow error
     }
   }
 }

@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { mwErrorTrigger } from "../middleware/mwErrorTrigger";
+import { MwErrorTrigger } from "../middleware/mwErrorTrigger";
 
 class StandardErr extends XerusRoute {
   method = Method.GET;
@@ -16,7 +16,7 @@ class MwErr extends XerusRoute {
   method = Method.GET;
   path = "/err/middleware";
   onMount() {
-    this.use(mwErrorTrigger);
+    this.use(MwErrorTrigger);
   }
   async handle(_c: HTTPContext) {
     _c.text("This won't be reached");

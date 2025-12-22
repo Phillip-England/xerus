@@ -26,7 +26,7 @@ test("Hardening: Middleware calling next() twice should be caught", async () => 
 test("Hardening: Headers should be mutable after body written (Onion Pattern support)", async () => {
   const res = await fetch(`${BaseURL}/harden/late-header`);
   expect(res.status).toBe(200);
-  // Framework design allows post-handler header modification
+  // Framework allows headers after body logic (before sending to client)
   expect(res.headers.get("X-Late")).toBe("Too late"); 
 });
 

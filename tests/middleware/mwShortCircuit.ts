@@ -1,8 +1,10 @@
-import { Middleware } from "../../src/Middleware";
-import { HTTPContext } from "../../src/HTTPContext";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
-export const mwShortCircuit = new Middleware(async (c: HTTPContext, next) => {
-  // We don't call next(), and we update the context.
-  // The handler chain in HTTPHandler will stop because _isDone becomes true.
-  c.setStatus(200).text("Intercepted by Middleware");
-});
+export class MwShortCircuit implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    c.setStatus(200).text("Intercepted by Middleware");
+    // Not calling next()
+  }
+}

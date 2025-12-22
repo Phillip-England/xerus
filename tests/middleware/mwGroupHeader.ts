@@ -1,7 +1,10 @@
-import { Middleware } from "../../src/Middleware";
-import { HTTPContext } from "../../src/HTTPContext";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
-export const mwGroupHeader = new Middleware(async (c: HTTPContext, next) => {
-  c.setHeader("X-Group-Auth", "passed");
-  return await next();
-});
+export class GroupHeaderMiddleware implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    c.setHeader("X-Group-Auth", "passed");
+    await next();
+  }
+}

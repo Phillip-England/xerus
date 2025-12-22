@@ -1,13 +1,14 @@
-import { Middleware } from "../../src/Middleware";
-import type { HTTPContext } from "../../src/HTTPContext";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 import type { TestStore } from "../TestStore";
 
 export const treasureKey = "secretKey" as const;
 export const treasureValue = "secretValue";
 
-export const mwTreasure = new Middleware<TestStore>(
-  async (c: HTTPContext<TestStore>, next) => {
+export class MwTreasure implements XerusMiddleware<TestStore> {
+  async execute(c: AnyContext<TestStore>, next: MiddlewareNextFn) {
     c.setStore(treasureKey, treasureValue);
-    await next(); // Must await next!
-  },
-);
+    await next();
+  }
+}

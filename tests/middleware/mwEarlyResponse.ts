@@ -1,11 +1,11 @@
-import { Middleware } from "../../src/Middleware";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext, MiddlewareFn } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
-export const mwEarlyResponse = new Middleware(async (c, next) => {
-  console.log("mwEarlyResponse executing");
-  const response = new Response("hello from middleware");
-  console.log("mwEarlyResponse created response");
-  // Returning a Response object isn't directly supported by the void signature
-  // of MiddlewareFn in your source, but we can write to 'c.res' and not call next().
-  c.text("hello from middleware");
-  // By not calling next(), we short-circuit.
-});
+export class EarlyResponseMiddleware implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    console.log("mwEarlyResponse executing");
+    // We don't call next(), effectively stopping the chain here
+    c.text("hello from middleware");
+  }
+}

@@ -1,6 +1,9 @@
-import { Middleware } from "../../src/Middleware";
-import { HTTPContext } from "../../src/HTTPContext";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
-export const mwErrorTrigger = new Middleware(async (c: HTTPContext, next) => {
-  throw new Error("Failure in Middleware");
-});
+export class MwErrorTrigger implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    throw new Error("Failure in Middleware");
+  }
+}

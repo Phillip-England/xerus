@@ -3,27 +3,21 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
-import { mwGroupHeader } from "../middleware/mwGroupHeader";
+import { GroupHeaderMiddleware } from "../middleware/mwGroupHeader"; // Updated Import
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 
-// Helper for generic JSON bodies
 class AnyJsonBody implements TypeValidator {
   data: any;
   constructor(raw: any) {
     this.data = raw;
   }
   async validate(c: HTTPContext) {
-    if (
-      !this.data || typeof this.data !== "object" || Array.isArray(this.data)
-    ) {
-      throw new SystemErr(
-        SystemErrCode.VALIDATION_FAILED,
-        "Expected JSON object body",
-      );
+    if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
     }
   }
 }
@@ -39,10 +33,7 @@ class ApiV1 extends XerusRoute {
 class ApiEcho extends XerusRoute {
   method = Method.POST;
   path = "/api/echo";
-
-  // FIXED: Use Validator instead of validate() method
   body = Validator.Param(Source.JSON(), AnyJsonBody);
-
   async handle(c: HTTPContext) {
     c.json({ received: this.body.data });
   }
@@ -52,7 +43,8 @@ class AdminDashboard extends XerusRoute {
   method = Method.GET;
   path = "/admin/dashboard";
   onMount() {
-    this.use(mwGroupHeader);
+    // Pass the class definition, Xerus instantiates it
+    this.use(GroupHeaderMiddleware); 
   }
   async handle(c: HTTPContext) {
     c.text("Welcome to the Dashboard");
@@ -63,7 +55,7 @@ class AdminSettings extends XerusRoute {
   method = Method.DELETE;
   path = "/admin/settings";
   onMount() {
-    this.use(mwGroupHeader);
+    this.use(GroupHeaderMiddleware);
   }
   async handle(c: HTTPContext) {
     c.json({ deleted: true });

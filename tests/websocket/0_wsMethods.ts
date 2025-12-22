@@ -1,7 +1,7 @@
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { mwGroupHeader } from "../middleware/mwGroupHeader";
+import { GroupHeaderMiddleware } from "../middleware/mwGroupHeader"; // Updated import
 import type { WSContext } from "../../src/WSContext";
 import type { TestStore } from "../TestStore";
 import type { HTTPContext } from "../../src/HTTPContext";
@@ -9,7 +9,6 @@ import type { HTTPContext } from "../../src/HTTPContext";
 class WSEcho extends XerusRoute<TestStore> {
   method = Method.WS_MESSAGE;
   path = "/ws/echo";
-
   async handle(c: HTTPContext<TestStore>) {
     let ws = c.ws();
     ws.send(`echo: ${ws.message}`);
@@ -19,11 +18,9 @@ class WSEcho extends XerusRoute<TestStore> {
 class WSChatOpen extends XerusRoute<TestStore> {
   method = Method.WS_OPEN;
   path = "/ws/chat";
-
   onMount() {
-    this.use(mwGroupHeader);
+    this.use(GroupHeaderMiddleware);
   }
-
   async handle(c: HTTPContext<TestStore>) {
     let ws = c.ws();
     const auth = c.getResHeader("X-Group-Auth");
@@ -34,7 +31,6 @@ class WSChatOpen extends XerusRoute<TestStore> {
 class WSChatMessage extends XerusRoute<HTTPContext<TestStore>> {
   method = Method.WS_MESSAGE;
   path = "/ws/chat";
-
   async handle(c: HTTPContext<TestStore>) {
     let ws = c.ws();
     ws.send(`chat: ${ws.message}`);

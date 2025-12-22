@@ -1,14 +1,23 @@
-export type RouteBlueprint = {
-  Ctor: new () => any; // XerusRoute ctor (kept loose here to avoid circular imports)
-  middlewares: any[]; // XerusMiddleware<any>[]
-  errHandler?: any; // HTTPErrorHandlerFunc
+import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
+import type { XerusMiddleware } from "./Middleware";
+import type { XerusRoute } from "./XerusRoute";
+
+export interface RouteBlueprint {
+  Ctor: new () => XerusRoute<any>;
+  middlewares: XerusMiddleware<any>[];
+  errHandler?: HTTPErrorHandlerFunc;
+  mounted?: {
+    props: Record<string, any>;
+  };
   wsChain?: {
     open?: RouteBlueprint;
     message?: RouteBlueprint;
     close?: RouteBlueprint;
     drain?: RouteBlueprint;
   };
-};
+}
+
+
 
 export class TrieNode {
   handlers: Record<string, RouteBlueprint> = {};
@@ -24,3 +33,4 @@ export class TrieNode {
   paramKey?: string;
   wildcard?: TrieNode;
 }
+
