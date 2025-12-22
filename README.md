@@ -1,446 +1,474 @@
-# Xerus 🐿️
+# Xerus (minimal guide)
 
-A fast, Bun-native web framework with:
-
-- **HTTP + WebSocket** routing in one place
-- **Onion-style middleware** (with a built-in guard that detects “forgot to `await next()`”)
-- **Typed, class-based validation** via `Validator` + `TypeValidator`
-- **Convenient context helpers** (cookies, redirects, body parsing, static file serving, embedding assets)
-
-> This README documents the API surfaced by the code in `src/` (as shared in this repo snapshot).
-
----
-
-## Table of contents
-
-- [Install](#install)
-- [Hello world](#hello-world)
-- [Routing](#routing)
-- [Middleware](#middleware)
-- [Validation](#validation)
-- [HTTPContext](#httpcontext)
-- [Errors](#errors)
-- [Static files](#static-files)
-- [Embedding assets](#embedding-assets)
-- [WebSockets](#websockets)
-- [Route groups](#route-groups)
-- [Tips & gotchas](#tips--gotchas)
+A tiny HTTP + WebSocket framework for Bun with:
+- trie-based routing (static / params / wildcard)
+- middleware (global + route + groups), with onion semantics
+- dependency injection (app-level + route-field injection)
+- validation for JSON / form / query / params / ws messages (and custom sources)
+- structured error handling
 
 ---
 
 ## Install
 
-### Requirements
-
-- **Bun** (server runtime)
-
-### Add to your project
-
-If this framework lives in your workspace as a package, install it however you normally do (workspace, local path, etc).
-
-Example (workspace / local path):
-
 ```bash
-bun add ./src/xerus
-```
-
-Or if you publish it:
-
-```bash
-bun add github:phillip-england/xerus#v0.0.60
+bun add github:phillip-england/xerus#v0.0.61
 ```
 
 ---
 
-## Hello world
-
-Create a route by extending `XerusRoute` and mounting it into `Xerus`.
+## Hello HTTP
 
 ```ts
-import { Xerus } from "./src/Xerus";
-import { XerusRoute } from "./src/XerusRoute";
-import { Method } from "./src/Method";
-import type { HTTPContext } from "./src/HTTPContext";
+import { Xerus } from "xerus";
+import { Method } from "xerus";
+import { XerusRoute } from "xerus";
 
 class HelloRoute extends XerusRoute {
   method = Method.GET;
   path = "/";
 
-  async handle(c: HTTPContext) {
+  async handle(c) {
     c.json({ message: "Hello, world!" });
   }
 }
 
 const app = new Xerus();
 app.mount(HelloRoute);
-
-console.log("Listening on http://localhost:8080");
 await app.listen(8080);
 ```
 
 ---
 
-## Routing
-
-Routes are matched by:
-
-- exact path segments (`/users`)
-- params (`/users/:id`)
-- wildcard (`/*`)
-
-Param values are available on `c.params` and via `c.getParam("id")`.
+## Routing: static, params, wildcard
 
 ```ts
-class UserRoute extends XerusRoute {
+import { XerusRoute, Method } from "xerus";
+
+export class StaticRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/about";
+  async handle(c) {
+    c.text("about");
+  }
+}
+
+export class ParamRoute extends XerusRoute {
   method = Method.GET;
   path = "/users/:id";
+  async handle(c) {
+    c.json({ id: c.getParam("id") });
+  }
+}
 
-  async handle(c: HTTPContext) {
-    const id = c.getParam("id");
-    c.json({ id });
+export class WildcardRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/assets/*";
+  async handle(c) {
+    c.text(`wildcard hit: ${c.path}`);
   }
 }
 ```
 
 ---
 
-## Middleware
+## Static files + embedded assets
 
-Middleware uses an onion pattern:
-
-- Each middleware receives `(c, next)`
-- You **must** `await next()` if you want downstream code to run
-- Xerus detects the common bug `next()` (not awaited) and throws `SystemErrCode.MIDDLEWARE_ERROR`
+Serve a directory:
 
 ```ts
-import { Middleware } from "./src/Middleware";
-
-const myMiddleware = new Middleware(async (c, next) => {
-  const start = performance.now();
-  await next();
-  const ms = performance.now() - start;
-  console.log("Handled in", ms);
-});
+const app = new Xerus();
+app.static("/static", "./public"); // GET /static/* -> ./public/*
 ```
+
+Embed files at build time (useful for single-binary-ish deploys):
+
+```ts
+import { embedDir } from "xerus/macros";
+
+const embedded = embedDir("/abs/path/to/public"); // compile-time-ish helper
+app.embed("/static", embedded); // GET /static/* from embedded map
+```
+
+---
+
+## Middleware (all layers)
+
+Middleware is `async (c, next) => { ...; await next(); ... }`.
 
 ### Global middleware
 
 ```ts
+import { Middleware, logger, cors, requestId } from "xerus";
+
 const app = new Xerus();
-app.use(myMiddleware);
+
+// Runs FIRST (before route-field Inject/Validator)
+app.usePre(logger);
+
+// Runs after route-field Inject/Validator (but before route handler)
+app.use(cors(), requestId());
 ```
 
-### Per-route middleware
+### Route middleware
 
 ```ts
-class RouteWithMw extends XerusRoute {
+class PrivateRoute extends XerusRoute {
   method = Method.GET;
-  path = "/mw";
+  path = "/private";
 
   constructor() {
     super();
-    this.use(myMiddleware);
+    this.use(new Middleware(async (c, next) => {
+      if (!c.getHeader("authorization")) {
+        c.errorJSON(401, "UNAUTHORIZED", "missing auth");
+        return;
+      }
+      await next();
+    }));
   }
 
-  async handle(c: HTTPContext) {
+  async handle(c) {
     c.text("ok");
   }
 }
 ```
 
-### Built-in middleware helpers
-
-In `src/Middleware.ts`:
-
-- `logger`
-- `cors(options)`
-- `requestId({ headerName, storeKey, generator })`
-- `rateLimit({ windowMs, max, key, message })`
-- `csrf({ cookieName, headerName, secureCookie, sameSite, path, ignoreMethods, ensureCookieOnSafeMethods })`
-- `timeout(ms, { message })`
-- `compress({ thresholdBytes, preferBrotli })`
-
-Example:
+### Group middleware + prefixing
 
 ```ts
-import { logger, cors, requestId, rateLimit } from "./src/Middleware";
+import { RouteGroup } from "xerus";
+
+const api = new RouteGroup(app, "/api", cors(), requestId());
+api.mount(StaticRoute, ParamRoute);
+```
+
+### Middleware execution order (important)
+
+For a matched route, Xerus runs:
+
+1. `app.usePre(...)`
+2. **route-field injection** (via `Inject(...)` on the route instance)
+3. **route-field validation** (via `Validator.Param(...)` on the route instance)
+4. `route.preHandle(c)`
+5. `app.use(...)` (global middlewares)
+6. `route.use(...)` (route middlewares)
+7. `route.handle(c)` then `route.postHandle(c)`
+8. `route.onFinally(c)` (always, even on errors)
+
+**Onion rule:** middleware must `await next()` or you’ll get a developer error
+(`MIDDLEWARE_ERROR: did not await next()`).
+
+---
+
+## Dependency injection
+
+### App-level injection (available on every request)
+
+A store is any class like:
+
+```ts
+class ConfigStore {
+  storeKey = "config";
+  cwd = "/tmp";
+  async init(c) {
+    // optional: compute per-request values
+  }
+}
 
 const app = new Xerus();
-app.use(
-  logger,
-  cors({ origin: "*" }),
-  requestId(),
-  rateLimit({ windowMs: 10_000, max: 100 })
-);
+app.inject(ConfigStore);
+
+// later in a route:
+const cfg = c.getStore<ConfigStore>("config");
+```
+
+### Route-field injection (also writes to `c.store`)
+
+```ts
+import { Inject } from "xerus";
+
+class UserRepo {
+  storeKey = "userRepo";
+  async init(c) {
+    // init per-request if you want
+  }
+}
+
+class NeedsRepo extends XerusRoute {
+  method = Method.GET;
+  path = "/repo";
+
+  // inject + also assigns to `this.repo` for this request
+  repo = Inject(UserRepo);
+
+  async handle(c) {
+    const r1 = this.repo;                 // route field
+    const r2 = c.getStore<UserRepo>("userRepo"); // store
+    c.json({ same: r1 === r2 });
+  }
+}
 ```
 
 ---
 
-## Validation
+## Validation (all sources)
 
-Xerus supports **class-based validation** with:
+Validation uses a **TypeValidator**:
 
-- `Validator` (plugs into the middleware chain)
-- `TypeValidator` interface (`validate(c)` method)
-- `Source.*()` to choose where raw input comes from
-
-Validated instances are stored on `c.data` under the validator’s `storeKey` and can be retrieved with:
-
-- `c.resolve(MyType)` (default store key is the class name)
-- or `c.getStore("customKey")` if you configured `storeKey`
-
-### 1) Define a validator type
-
-A validator type must:
-
-- have a `constructor(raw: any)`
-- implement `validate(c)` (can throw on invalid)
+- constructor accepts raw input
+- `validate(c)` throws on failure
+- the validated instance is stored on `c.data[storeKey]`
+- with route-field validators, it’s also assigned to the route property for the request
 
 ```ts
-import type { TypeValidator } from "./src/TypeValidator";
-import type { HTTPContext } from "./src/HTTPContext";
-import { SystemErr } from "./src/SystemErr";
-import { SystemErrCode } from "./src/SystemErrCode";
+import { TypeValidator, HTTPContext, SystemErr, SystemErrCode } from "xerus";
 
-class CreateUserBody implements TypeValidator {
+export class CreateUserBody implements TypeValidator {
   username: string;
-  email: string;
-
   constructor(raw: any) {
-    this.username = raw?.username ?? "";
-    this.email = raw?.email ?? "";
+    this.username = String(raw?.username ?? "");
   }
-
   async validate(_c: HTTPContext) {
     if (this.username.length < 3) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "username must be at least 3 chars");
-    }
-    if (!this.email.includes("@")) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "email must be valid");
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "username too short");
     }
   }
 }
 ```
 
-### 2) Attach it to a route
-
-Attach validators by pushing them into `this.validators` (a `Validator[]` list) in your route constructor (or `onMount()`).
+### JSON body
 
 ```ts
-import { Validator } from "./src/Validator";
-import { Source } from "./src/ValidationSource";
+import { Validator, Source } from "xerus";
 
 class CreateUserRoute extends XerusRoute {
   method = Method.POST;
   path = "/users";
 
-  constructor() {
-    super();
-    this.validators.push(
-      Validator.from(Source.JSON(), CreateUserBody)
-    );
-  }
+  body = Validator.Param(Source.JSON(), CreateUserBody, "body");
 
-  async handle(c: HTTPContext) {
-    const body = c.resolve(CreateUserBody); // instance of CreateUserBody
-    c.setStatus(201).json({ message: "User created", user: body });
+  async handle(c) {
+    // as a route field:
+    const body = this.body;
+
+    // or via c.data:
+    // const body = (c.data as any).body as CreateUserBody;
+
+    c.json({ ok: true, username: body.username });
   }
 }
 ```
 
-### Validation sources
+### Form body (urlencoded)
 
-- `Source.JSON()` → `await c.parseBody(BodyType.JSON)`
-- `Source.FORM(formMode?)` → `await c.parseBody(BodyType.FORM, { formMode })`
-- `Source.QUERY(key?)` → query param(s)
-- `Source.PARAM(key?)` → route param(s)
-- `Source.WSMESSAGE()` → raw WS message (also mirrored to `c._wsMessage`)
-- `Source.CUSTOM(provider, name?)` → your async provider function
+```ts
+class LoginForm implements TypeValidator {
+  email: string;
+  constructor(raw: any) { this.email = String(raw?.email ?? ""); }
+  async validate() {
+    if (!this.email.includes("@")) throw new Error("bad email");
+  }
+}
+
+class LoginRoute extends XerusRoute {
+  method = Method.POST;
+  path = "/login";
+
+  // FORM() defaults to { formMode: "last" }
+  form = Validator.Param(Source.FORM(), LoginForm, "form");
+
+  async handle(c) {
+    c.json({ email: this.form.email });
+  }
+}
+```
 
 Form modes:
+- `Source.FORM("last")` → `{ key: string }` (last value wins)
+- `Source.FORM("multi")` → `{ key: string | string[] }`
+- `Source.FORM("params")` → `URLSearchParams`
 
-- `"last"` (default) → `{ [k]: lastValue }`
-- `"multi"` → `{ [k]: string | string[] }`
-- `"params"` → `URLSearchParams`
+### Query string
+
+```ts
+class ActiveDirQuery implements TypeValidator {
+  activeDir: string;
+  constructor(raw: any) { this.activeDir = String(raw ?? ""); }
+  async validate() {
+    if (!this.activeDir.startsWith("/")) throw new Error("activeDir must be absolute");
+  }
+}
+
+class QueryRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/";
+
+  // validate a single query key
+  activeDir = Validator.Param(Source.QUERY("activeDir"), ActiveDirQuery, "activeDir");
+
+  async handle(c) {
+    c.json({ activeDir: this.activeDir.activeDir });
+  }
+}
+```
+
+### Path params
+
+```ts
+class UserIdParam implements TypeValidator {
+  id: string;
+  constructor(raw: any) { this.id = String(raw ?? ""); }
+  async validate() {
+    if (!/^[0-9]+$/.test(this.id)) throw new Error("id must be numeric");
+  }
+}
+
+class UserRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/users/:id";
+
+  id = Validator.Param(Source.PARAM("id"), UserIdParam, "id");
+
+  async handle(c) {
+    c.json({ id: this.id.id });
+  }
+}
+```
+
+### WebSocket message validation
+
+The WS message is exposed as `Source.WSMESSAGE()` (raw string/Buffer).
+
+```ts
+class ChatMessage implements TypeValidator {
+  text: string;
+  constructor(raw: any) { this.text = String(raw ?? ""); }
+  async validate() {
+    if (this.text.length === 0) throw new Error("empty message");
+  }
+}
+```
 
 ---
 
-## HTTPContext
+## WebSockets: OPEN / MESSAGE / CLOSE / DRAIN routes
 
-`HTTPContext` is the per-request object for HTTP handlers. It offers:
+Xerus attaches WS routing to the same path (and upgrades on `GET` with `Upgrade: websocket`).
 
-### Request info
-
-- `c.req` (native `Request`)
-- `c.path`, `c.method`, `c.route`
-- `c.params`, `c.getParam(name)`
-- `c.queries`, `c.query(key)`
-
-### Response helpers
-
-- `c.setStatus(code)`
-- `c.setHeader(name, value)`
-- `c.text(str)`
-- `c.html(html)`
-- `c.json(obj)`
-- `c.stream(readableStream)`
-- `await c.file(path)` (Bun file send)
-
-### Redirect
+Define one or more WS routes with the same `path` but different methods:
 
 ```ts
-c.redirect("/login"); // 302 default
-c.redirect("/login", 301);
-c.redirect("/search", { q: "bun", page: 2 }, 302);
+import { Method, XerusRoute, Validator, Source } from "xerus";
+
+class ChatOpen extends XerusRoute {
+  method = Method.WS_OPEN;
+  path = "/ws/chat";
+  async handle(c) {
+    c.ws().send("welcome");
+  }
+}
+
+class ChatMessageRoute extends XerusRoute {
+  method = Method.WS_MESSAGE;
+  path = "/ws/chat";
+
+  msg = Validator.Param(Source.WSMESSAGE(), ChatMessage, "msg");
+
+  async handle(c) {
+    const ws = c.ws();
+    ws.send(`echo: ${this.msg.text}`);
+  }
+}
+
+class ChatClose extends XerusRoute {
+  method = Method.WS_CLOSE;
+  path = "/ws/chat";
+  async handle(c) {
+    // close info is available on c.ws().code / c.ws().reason
+  }
+}
+
+class ChatDrain extends XerusRoute {
+  method = Method.WS_DRAIN;
+  path = "/ws/chat";
+  async handle(c) {
+    // backpressure drained
+  }
+}
+
+const app = new Xerus();
+app.mount(ChatOpen, ChatMessageRoute, ChatClose, ChatDrain);
+await app.listen(8080);
 ```
-
-### Cookies
-
-```ts
-c.setCookie("session", "abc123", { httpOnly: true, sameSite: "Lax" });
-const session = c.getCookie("session");
-c.clearCookie("session");
-```
-
-### Body parsing
-
-```ts
-import { BodyType } from "./src/BodyType";
-
-const text = await c.parseBody(BodyType.TEXT);
-const json = await c.parseBody<{ a: number }>(BodyType.JSON);
-
-const formLast = await c.parseBody(BodyType.FORM); // default last
-const formMulti = await c.parseBody(BodyType.FORM, { formMode: "multi" });
-const formParams = await c.parseBody(BodyType.FORM, { formMode: "params" });
-
-const fd = await c.parseBody(BodyType.MULTIPART_FORM);
-```
-
-Body re-parse rules are enforced to prevent surprising behavior (e.g. JSON → FORM is blocked).
 
 ---
 
-## Errors
+## Errors, error handlers, and 404s
 
-Xerus uses `SystemErr` + `SystemErrCode` for common errors, and maps them to JSON responses via `SystemErrRecord`.
+### Per-route error handler
 
-Common codes:
+```ts
+class Boom extends XerusRoute {
+  method = Method.GET;
+  path = "/boom";
 
-- `FILE_NOT_FOUND` → 404
-- `BODY_PARSING_FAILED` → 400
-- `VALIDATION_FAILED` → 400
-- `ROUTE_ALREADY_REGISTERED` → 409
-- `ROUTE_NOT_FOUND` → 404
-- `INTERNAL_SERVER_ERR` → 500
-- `WEBSOCKET_UPGRADE_FAILURE` → 500
-- `HEADERS_ALREADY_SENT` → logs only
-- `MIDDLEWARE_ERROR` → 500 + helpful hint
+  constructor() {
+    super();
+    this.onErr(async (c, err) => {
+      c.errorJSON(500, "BOOM", "route failed", { detail: err?.message });
+    });
+  }
+
+  async handle(_c) {
+    throw new Error("kaboom");
+  }
+}
+```
 
 ### Global error handler
 
 ```ts
 app.onErr(async (c, err) => {
-  c.errorJSON(500, "UNCAUGHT", "Uncaught error", { detail: err?.message ?? String(err) });
+  c.errorJSON(500, "INTERNAL", "Unhandled error", { detail: err?.message });
 });
 ```
 
-### Per-route error handler
+### 404 / Not Found
 
-Each route can register an error handler via `onErr(...)` (stored on the route instance/blueprint).
-
----
-
-## Static files
-
-Serve a directory:
+Provide a not-found handler:
 
 ```ts
-app.static("/static", "./public");
+app.onNotFound(async (c) => {
+  c.setStatus(404).json({ error: { code: "NOT_FOUND", path: c.path } });
+});
 ```
 
-- Requests to `/static/*` are resolved under `./public`
-- Path traversal is prevented by checking resolved paths stay inside the root
+If you don’t set `onNotFound`, Xerus will throw a `ROUTE_NOT_FOUND` system error.
 
 ---
 
-## Embedding assets
-
-Embed a directory at build time using `embedDir()`:
+## Minimal app structure
 
 ```ts
-import { embedDir } from "./src/macros";
+const app = new Xerus();
 
-const files = embedDir("/absolute/path/to/public");
-app.embed("/assets", files);
+// global middleware
+app.usePre(logger);
+app.use(cors(), requestId());
+
+// routes
+app.mount(
+  HelloRoute,
+  StaticRoute,
+  ParamRoute,
+  WildcardRoute,
+  CreateUserRoute,
+);
+
+// 404 + global error
+app.onNotFound(async (c) => c.setStatus(404).text("not found"));
+app.onErr(async (c, err) => c.errorJSON(500, "INTERNAL", "error", { detail: err?.message }));
+
+await app.listen(8080);
 ```
-
-This registers a GET route that serves from the embedded map.
-
----
-
-## WebSockets
-
-WebSocket routing uses the same path matching and validator pipeline.
-
-### Upgrade
-
-When a GET request hits a path that has WS blueprints registered and the request has `Upgrade: websocket`, Xerus upgrades it.
-
-### WS context
-
-WS handlers receive a `WSContext`:
-
-- `c.ws` → Bun `ServerWebSocket`
-- `c.http` → the underlying `HTTPContext`
-- `c.message` → on `message` event
-- `c.code`, `c.reason` → on `close` event
-
-Validators can run for WS events too. `Validator.asMiddleware()` will pass `c._wsContext ?? c` into `instance.validate(...)` so your validator can accept either context.
-
-### Closing on validation errors
-
-If WS route execution throws, Xerus closes the socket with code `1008` (policy violation) and a short reason.
-
----
-
-## Route groups
-
-Use `RouteGroup` to mount multiple routes under a shared prefix and middleware stack.
-
-```ts
-import { RouteGroup } from "./src/RouteGroup";
-import { logger } from "./src/Middleware";
-
-const group = new RouteGroup(app, "/api", logger);
-group.mount(UserRoute).mount(CreateUserRoute);
-```
-
----
-
-## Tips & gotchas
-
-### 1) Always `await next()`
-
-If you call `next()` without awaiting it, Xerus throws a `MIDDLEWARE_ERROR` and returns a helpful JSON error.
-
-### 2) Don’t double-write the response
-
-Once a handler finalizes the response (e.g. after `redirect()`), attempting to write again throws an error.
-
-### 3) Prefer validators for request data
-
-Validators run before `preHandle()` and before your route middleware chain. Store and retrieve validated types through:
-
-- `c.resolve(MyType)` (default)
-- or `c.getStore("customKey")`
-
-### 4) Compression is opt-in
-
-Use `compress()` middleware if you want response compression. It only compresses string / byte-like bodies over a threshold and respects `Accept-Encoding`.
-
----
-
-## License
-
-Add your project’s license here.

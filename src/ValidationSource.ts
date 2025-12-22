@@ -8,7 +8,11 @@ export type ValidationSource =
   | { kind: "QUERY"; key?: string }
   | { kind: "PARAM"; key?: string }
   | { kind: "WSMESSAGE" }
-  | { kind: "CUSTOM"; name?: string; provider: (c: HTTPContext) => any | Promise<any> };
+  | {
+    kind: "CUSTOM";
+    name?: string;
+    provider: (c: HTTPContext) => any | Promise<any>;
+  };
 
 export class Source {
   static JSON(): ValidationSource {
@@ -35,7 +39,10 @@ export class Source {
    * Custom injection / DI-style input.
    * You can provide anything here (db handle, auth principal, etc).
    */
-  static CUSTOM(provider: (c: HTTPContext) => any | Promise<any>, name?: string): ValidationSource {
+  static CUSTOM(
+    provider: (c: HTTPContext) => any | Promise<any>,
+    name?: string,
+  ): ValidationSource {
     return { kind: "CUSTOM", provider, name };
   }
 }

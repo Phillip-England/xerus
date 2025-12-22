@@ -5,17 +5,25 @@ import { SystemErrCode } from "./SystemErrCode";
 import type { ValidationSource } from "./ValidationSource";
 import type { TypeValidator } from "./TypeValidator";
 import { Middleware } from "./Middleware";
+import { RouteFieldValidator } from "./RouteFields";
 
 type Ctor<T> = new (raw: any) => T;
 
-async function readSource(c: HTTPContext, source: ValidationSource): Promise<any> {
+async function readSource(
+  c: HTTPContext,
+  source: ValidationSource,
+): Promise<any> {
   switch (source.kind) {
     case "JSON":
       return await c.parseBody(BodyType.JSON);
     case "FORM": {
       const mode = source.formMode ?? "last";
-      if (mode === "multi") return await c.parseBody(BodyType.FORM, { formMode: "multi" });
-      if (mode === "params") return await c.parseBody(BodyType.FORM, { formMode: "params" });
+      if (mode === "multi") {
+        return await c.parseBody(BodyType.FORM, { formMode: "multi" });
+      }
+      if (mode === "params") {
+        return await c.parseBody(BodyType.FORM, { formMode: "params" });
+      }
       return await c.parseBody(BodyType.FORM, { formMode: "last" });
     }
     case "QUERY":
@@ -40,8 +48,16 @@ export class Validator<T extends TypeValidator = any> {
     this.storeKey = storeKey ?? Type.name;
   }
 
-  static from<T extends TypeValidator>(source: ValidationSource, Type: Ctor<T>, storeKey?: string): Validator<T> {
-    return new Validator(source, Type, storeKey);
+  // FIXED: Return type changed from RouteFieldValidator<T> to T
+  // We cast to 'unknown' then 'T' to trick TypeScript.
+  // At runtime, this is still a RouteFieldValidator, but the framework
+  // swaps it for the real instance of T before handle() is called.
+  static Param<T extends TypeValidator>(
+    source: ValidationSource,
+    Type: Ctor<T>,
+    storeKey?: string,
+  ): T {
+    return new RouteFieldValidator(source, Type, storeKey) as unknown as T;
   }
 
   asMiddleware(): Middleware<any> {
@@ -59,11 +75,13 @@ export class Validator<T extends TypeValidator = any> {
 
         await instance.validate(c);
         (c.data as any)[this.storeKey] = instance;
-
         await next();
       } catch (e: any) {
         if (e instanceof SystemErr) throw e;
-        throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e?.message ?? "Validation failed");
+        throw new SystemErr(
+          SystemErrCode.VALIDATION_FAILED,
+          e?.message ?? "Validation failed",
+        );
       }
     });
   }

@@ -32,7 +32,7 @@ export class ObjectPool<T> {
     while (this.items.length < newSize) {
       this.items.push(this.factory());
     }
-    // If current size is larger, we don't force drain, 
+    // If current size is larger, we don't force drain,
     // we just let acquire/release naturally balance it out.
   }
 }

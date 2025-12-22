@@ -1,7 +1,7 @@
 export type RouteBlueprint = {
   Ctor: new () => any; // XerusRoute ctor (kept loose here to avoid circular imports)
-  middlewares: any[];  // XerusMiddleware<any>[]
-  errHandler?: any;    // HTTPErrorHandlerFunc
+  middlewares: any[]; // XerusMiddleware<any>[]
+  errHandler?: any; // HTTPErrorHandlerFunc
   wsChain?: {
     open?: RouteBlueprint;
     message?: RouteBlueprint;

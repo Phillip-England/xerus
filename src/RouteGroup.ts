@@ -7,7 +7,11 @@ export class RouteGroup<T extends Record<string, any> = Record<string, any>> {
   prefixPath: string;
   middlewares: Middleware<T>[];
 
-  constructor(app: Xerus<T>, prefixPath: string, ...middlewares: Middleware<T>[]) {
+  constructor(
+    app: Xerus<T>,
+    prefixPath: string,
+    ...middlewares: Middleware<T>[]
+  ) {
     this.app = app;
     this.prefixPath = prefixPath === "/" ? "/" : prefixPath.replace(/\/+$/, "");
     this.middlewares = middlewares;
@@ -24,10 +28,12 @@ export class RouteGroup<T extends Record<string, any> = Record<string, any>> {
           super.onMount?.();
 
           const basePath = (this as any).path as string;
-          const prefixed =
-            groupPrefix === "/"
-              ? basePath
-              : (groupPrefix + (basePath === "/" ? "" : basePath)).replace(/\/{2,}/g, "/");
+          const prefixed = groupPrefix === "/"
+            ? basePath
+            : (groupPrefix + (basePath === "/" ? "" : basePath)).replace(
+              /\/{2,}/g,
+              "/",
+            );
 
           (this as any).path = prefixed;
 
