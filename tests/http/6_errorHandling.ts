@@ -41,8 +41,9 @@ class MissingFile extends XerusRoute {
 
 export function errorHandling(app: Xerus) {
   app.onErr(async (c: HTTPContext, err: any) => {
-    const detail =
-      err instanceof Error ? err.message : String(err ?? "Unknown Error");
+    const detail = err instanceof Error
+      ? err.message
+      : String(err ?? "Unknown Error");
     c.setStatus(500).json({
       error: {
         code: "GLOBAL_ERROR",

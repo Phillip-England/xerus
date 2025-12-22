@@ -1,3 +1,4 @@
+// tests/http/17_validatorTypes.ts
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
@@ -11,6 +12,7 @@ import { SystemErrCode } from "../../src/SystemErrCode";
 export class SearchQuery implements TypeValidator {
   term!: string;
   limit!: number;
+
   async validate(c: HTTPContext) {
     this.term = c.query("q") || "";
     this.limit = Number(c.query("limit") || "10");
@@ -32,6 +34,7 @@ export class SearchQuery implements TypeValidator {
 
 export class ProductIdParam implements TypeValidator {
   id!: number;
+
   async validate(c: HTTPContext) {
     this.id = Number(c.getParam("id"));
     if (!Number.isInteger(this.id) || this.id <= 0) {
@@ -46,6 +49,7 @@ export class ProductIdParam implements TypeValidator {
 export class CreateUserBody implements TypeValidator {
   username!: string;
   email!: string;
+
   async validate(c: HTTPContext) {
     const raw: any = await c.parseBody(BodyType.JSON);
     this.username = raw.username;
@@ -63,6 +67,7 @@ export class CreateUserBody implements TypeValidator {
 export class LoginForm implements TypeValidator {
   user!: string;
   pass!: string;
+
   async validate(c: HTTPContext) {
     const raw: any = await c.parseBody(BodyType.FORM);
     this.user = raw.username;
@@ -79,8 +84,10 @@ export class LoginForm implements TypeValidator {
 
 export class ApiKeyValidator implements TypeValidator {
   key!: string;
+
   async validate(c: HTTPContext) {
-    this.key = c.getHeader("X-Api-Key") ?? "";
+    // ✅ HeaderRef -> primitive
+    this.key = c.getHeader("X-Api-Key").get() ?? "";
     if (this.key !== "secret-123") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid API Key");
     }
@@ -91,6 +98,7 @@ class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/query";
   query = Validator.Ctx(SearchQuery);
+
   async handle(c: HTTPContext) {
     c.json({ term: this.query.term, limit: this.query.limit });
   }
@@ -100,6 +108,7 @@ class PathRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/product/:id";
   prod = Validator.Ctx(ProductIdParam);
+
   async handle(c: HTTPContext) {
     c.json({ productId: this.prod.id });
   }
@@ -109,6 +118,7 @@ class JsonRoute extends XerusRoute {
   method = Method.POST;
   path = "/vtypes/json";
   body = Validator.Ctx(CreateUserBody);
+
   async handle(c: HTTPContext) {
     c.json({ user: this.body.username, email: this.body.email });
   }
@@ -118,6 +128,7 @@ class FormRoute extends XerusRoute {
   method = Method.POST;
   path = "/vtypes/form";
   form = Validator.Ctx(LoginForm);
+
   async handle(c: HTTPContext) {
     c.json({ login: this.form.user });
   }
@@ -127,6 +138,7 @@ class CustomRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/custom";
   auth = Validator.Ctx(ApiKeyValidator);
+
   async handle(c: HTTPContext) {
     c.json({ authorized: true, key: this.auth.key });
   }

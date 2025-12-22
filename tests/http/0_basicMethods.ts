@@ -10,7 +10,7 @@ import type { TypeValidator } from "../../src/TypeValidator";
 
 class JsonObjectBody implements TypeValidator {
   body: any;
-  
+
   async validate(c: HTTPContext) {
     this.body = await c.parseBody(BodyType.JSON);
     if (

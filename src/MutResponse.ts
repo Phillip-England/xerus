@@ -1,22 +1,24 @@
+// src/MutResponse.ts
+import { HeadersBag } from "./Headers";
+import { CookieJar } from "./Cookies";
+
 export class MutResponse {
   statusCode: number;
-
-  // store normalized keys
-  headers: Record<string, string>;
-  cookies: string[];
+  headers: HeadersBag;
+  cookies: CookieJar;
   bodyContent: BodyInit | null;
 
   constructor() {
     this.statusCode = 200;
-    this.headers = {};
-    this.cookies = [];
+    this.headers = new HeadersBag();
+    this.cookies = new CookieJar();
     this.bodyContent = "";
   }
 
   reset(): void {
     this.statusCode = 200;
-    this.headers = {};
-    this.cookies = [];
+    this.headers.reset();
+    this.cookies.resetResponse();
     this.bodyContent = "";
   }
 
@@ -25,47 +27,18 @@ export class MutResponse {
     return this;
   }
 
+  getHeader(name: string): string | null {
+    return this.headers.get(name);
+  }
+
   setHeader(name: string, value: string): this {
-    const key = name.toLowerCase();
-
-    if (key === "set-cookie") {
-      this.cookies.push(value);
-      return this;
-    }
-
-    this.headers[key] = value;
+    this.headers.set(name, value);
     return this;
   }
 
-  // ✅ optional: proper multi-value append helper (see section 3)
   appendHeader(name: string, value: string): this {
-    const key = name.toLowerCase();
-
-    if (key === "set-cookie") {
-      this.cookies.push(value);
-      return this;
-    }
-
-    const cur = this.headers[key];
-    this.headers[key] = cur && cur.length > 0 ? `${cur}, ${value}` : value;
+    this.headers.append(name, value);
     return this;
-  }
-
-  appendCookie(value: string): this {
-    this.cookies.push(value);
-    return this;
-  }
-
-  getHeader(name: string): string {
-    const key = name.toLowerCase();
-
-    if (key === "set-cookie") {
-      return this.cookies.length > 0
-        ? this.cookies[this.cookies.length - 1]
-        : "";
-    }
-
-    return this.headers[key] || "";
   }
 
   getBody(): BodyInit | null {
@@ -78,16 +51,12 @@ export class MutResponse {
   }
 
   send(): Response {
-    if (this.cookies.length === 0) {
-      return new Response(this.bodyContent, {
-        status: this.statusCode,
-        headers: this.headers, // ✅ now normalized
-      });
-    }
+    const h = this.headers.toHeaders();
 
-    const h = new Headers(this.headers);
-    for (const cookie of this.cookies) {
-      h.append("Set-Cookie", cookie);
+    // ✅ Attach ALL Set-Cookie lines (critical for CSRF + multi-cookie tests)
+    const cookieLines = this.cookies.getSetCookieLines();
+    for (const line of cookieLines) {
+      h.append("Set-Cookie", line);
     }
 
     return new Response(this.bodyContent, {

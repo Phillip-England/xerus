@@ -46,7 +46,8 @@ export const cors = (options: CORSOptions = {}): XerusMiddleware => {
       "Content-Type, Authorization";
 
     if (options.credentials) {
-      const reqOrigin = c.getHeader("Origin");
+      // FIX: Added .get() to retrieve the string value
+      const reqOrigin = c.getHeader("Origin").get();
       if (origin === "*" && reqOrigin) origin = reqOrigin;
       c.setHeader("Access-Control-Allow-Credentials", "true");
     }
@@ -74,12 +75,12 @@ export const requestId = (opts?: {
   const gen = opts?.generator ?? (() => crypto.randomUUID());
 
   return new Middleware(async (c, next) => {
-    const incoming = c.getHeader(headerName) ||
-      c.getHeader(headerName.toLowerCase());
+    // FIX: Added .get() to both calls so 'incoming' is string | null
+    const incoming = c.getHeader(headerName).get() ||
+      c.getHeader(headerName.toLowerCase()).get();
+      
     const id = incoming && incoming.length > 0 ? incoming : gen();
 
-    // REMOVED: (c.data as any) cast no longer strictly needed if data is Record<string,any>
-    // but keeping it safe is fine too.
     c.data[storeKey] = id;
     c.setHeader(headerName, id);
     await next();
@@ -151,7 +152,9 @@ export const csrf = (opts?: {
 
   return new Middleware(async (c, next) => {
     const method = c.method.toUpperCase();
-    const existing = c.getCookie(cookieName);
+    
+    // FIX: .get() was added here in previous step (correct)
+    const existing = c.getCookie(cookieName).get();
 
     if (ignore.has(method)) {
       if (ensureCookieOnSafeMethods && !existing) {
@@ -171,8 +174,10 @@ export const csrf = (opts?: {
     }
 
     const cookieToken = existing;
-    const headerToken = c.getHeader(headerName) ||
-      c.getHeader(headerName.toLowerCase());
+    
+    // FIX: Added .get() here to fix type mismatch with string
+    const headerToken = c.getHeader(headerName).get() ||
+      c.getHeader(headerName.toLowerCase()).get();
 
     if (!cookieToken || !headerToken || cookieToken !== headerToken) {
       c.errorJSON(403, "CSRF_FAILED", "CSRF token missing or invalid", {

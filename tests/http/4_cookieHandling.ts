@@ -1,3 +1,4 @@
+// tests/http/4_cookieHandling.ts
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
@@ -6,6 +7,7 @@ import { HTTPContext } from "../../src/HTTPContext";
 class SetCookie extends XerusRoute {
   method = Method.GET;
   path = "/cookies/set";
+
   async handle(c: HTTPContext) {
     c.setCookie("theme", "dark", { path: "/", httpOnly: true });
     c.json({ message: "Cookie set" });
@@ -15,6 +17,7 @@ class SetCookie extends XerusRoute {
 class SetComplexCookie extends XerusRoute {
   method = Method.GET;
   path = "/cookies/set-complex";
+
   async handle(c: HTTPContext) {
     c.setCookie("session_id", "12345", {
       httpOnly: true,
@@ -30,8 +33,10 @@ class SetComplexCookie extends XerusRoute {
 class GetCookie extends XerusRoute {
   method = Method.GET;
   path = "/cookies/get";
+
   async handle(c: HTTPContext) {
-    const theme = c.getCookie("theme");
+    // ✅ CookieRef -> primitive
+    const theme = c.getCookie("theme").get();
     c.json({ theme });
   }
 }
@@ -39,6 +44,7 @@ class GetCookie extends XerusRoute {
 class ClearCookie extends XerusRoute {
   method = Method.GET;
   path = "/cookies/clear";
+
   async handle(c: HTTPContext) {
     c.clearCookie("theme");
     c.json({ message: "Cookie cleared" });

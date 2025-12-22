@@ -1,3 +1,4 @@
+// src/HTTPContext.ts
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -5,6 +6,8 @@ import { SystemErrCode } from "./SystemErrCode";
 import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
 import type { WSContext } from "./WSContext";
+import { HeaderRef, RequestHeaders } from "./Headers";
+import type { CookieRef } from "./Cookies";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
@@ -16,7 +19,6 @@ export type ParseBodyOptions = {
   formMode?: "last" | "multi" | "params";
 };
 
-// REMOVED: <T> Generic
 export class HTTPContext {
   req!: Request;
   res: MutResponse;
@@ -33,11 +35,8 @@ export class HTTPContext {
   private _parsedBodyMode: ParsedBodyMode = "NONE";
 
   public _wsMessage: string | Buffer | null = null;
-
-  // REMOVED: <T> from WSContext type
   public _wsContext: WSContext | null = null;
 
-  // CHANGED: T to Record<string, any>
   data: Record<string, any> = {};
   store: Record<string, any> = {};
 
@@ -45,21 +44,20 @@ export class HTTPContext {
   private _state: ContextState = ContextState.OPEN;
   public _isWS: boolean = false;
 
+  private _reqHeaders: RequestHeaders | null = null;
+
   constructor() {
     this.res = new MutResponse();
   }
 
   private cleanObj(obj: Record<string, any>) {
-    for (const key in obj) {
-      delete obj[key];
-    }
+    for (const key in obj) delete obj[key];
   }
 
   isWsRoute(): boolean {
     return this._wsContext != null;
   }
 
-  // REMOVED: <T> return type
   ws(): WSContext {
     if (!this._wsContext) {
       throw new SystemErr(
@@ -101,10 +99,10 @@ export class HTTPContext {
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
-  }
 
-  // ... (rest of methods: clearResponse, markSent, get url, etc are identical) ...
-  // ... (Just ensure no <T> casts remain in methods like getRequestId) ...
+    this._reqHeaders = new RequestHeaders(req.headers);
+    this.res.cookies.resetRequest(req.headers.get("Cookie"));
+  }
 
   clearResponse() {
     this.res.reset();
@@ -156,8 +154,8 @@ export class HTTPContext {
     return this.err;
   }
 
-  getResHeader(name: string): string | null {
-    return this.res.getHeader(name) || null;
+  getResHeader(name: string): HeaderRef {
+    return new HeaderRef(this.res.headers, name);
   }
 
   private ensureBodyModifiable() {
@@ -181,20 +179,21 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.setStatus(status).json({
-      error: {
-        code,
-        message,
-        ...(extra ?? {}),
-      },
+      error: { code, message, ...(extra ?? {}) },
     });
   }
 
   getClientIP(): string {
-    const xff = this.getHeader("x-forwarded-for") ||
-      this.getHeader("X-Forwarded-For");
+    const xff =
+      this.getHeader("x-forwarded-for").get() ||
+      this.getHeader("X-Forwarded-For").get();
     if (xff) return xff.split(",")[0].trim();
-    const xrip = this.getHeader("x-real-ip") || this.getHeader("X-Real-IP");
+
+    const xrip =
+      this.getHeader("x-real-ip").get() ||
+      this.getHeader("X-Real-IP").get();
     if (xrip) return xrip.trim();
+
     return "unknown";
   }
 
@@ -202,14 +201,9 @@ export class HTTPContext {
     return (this.data as any).requestId || "";
   }
 
-  // ... (Redirect, Body Parsing, Cookie, Headers methods remain unchanged) ...
   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
-  redirect(
-    path: string,
-    arg2?: number | Record<string, any>,
-    arg3?: number,
-  ): void {
+  redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
     let status = 302;
@@ -245,8 +239,9 @@ export class HTTPContext {
         "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?",
       );
     }
+
     this.res.setStatus(status);
-    this.res.setHeader("Location", finalLocation);
+    this.res.headers.set("Location", finalLocation);
     this.finalize();
   }
 
@@ -270,7 +265,8 @@ export class HTTPContext {
       );
     }
     if (
-      nextMode === "MULTIPART" && this._parsedBodyMode !== "NONE" &&
+      nextMode === "MULTIPART" &&
+      this._parsedBodyMode !== "NONE" &&
       this._parsedBodyMode !== "MULTIPART"
     ) {
       throw new SystemErr(
@@ -292,22 +288,13 @@ export class HTTPContext {
     const isMultipart = ct.includes("multipart/form-data");
 
     if (isJson && expectedType !== BodyType.JSON) {
-      throw new SystemErr(
-        SystemErrCode.BODY_PARSING_FAILED,
-        "Unexpected JSON data",
-      );
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
     }
     if (isForm && expectedType !== BodyType.FORM) {
-      throw new SystemErr(
-        SystemErrCode.BODY_PARSING_FAILED,
-        "Unexpected FORM data",
-      );
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
     }
     if (isMultipart && expectedType !== BodyType.MULTIPART_FORM) {
-      throw new SystemErr(
-        SystemErrCode.BODY_PARSING_FAILED,
-        "Unexpected MULTIPART_FORM data",
-      );
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
     }
   }
 
@@ -316,32 +303,20 @@ export class HTTPContext {
     if (expectedType === BodyType.TEXT) return;
 
     const ct = this.contentType();
-    if (expectedType === BodyType.JSON) {
-      if (!ct.includes("application/json")) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Expected Content-Type application/json",
-        );
-      }
-      return;
+    if (expectedType === BodyType.JSON && !ct.includes("application/json")) {
+      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
     }
-    if (expectedType === BodyType.FORM) {
-      if (!ct.includes("application/x-www-form-urlencoded")) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Expected Content-Type application/x-www-form-urlencoded",
-        );
-      }
-      return;
+    if (expectedType === BodyType.FORM && !ct.includes("application/x-www-form-urlencoded")) {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Expected Content-Type application/x-www-form-urlencoded",
+      );
     }
-    if (expectedType === BodyType.MULTIPART_FORM) {
-      if (!ct.includes("multipart/form-data")) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Expected Content-Type multipart/form-data",
-        );
-      }
-      return;
+    if (expectedType === BodyType.MULTIPART_FORM && !ct.includes("multipart/form-data")) {
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Expected Content-Type multipart/form-data",
+      );
     }
   }
 
@@ -361,51 +336,28 @@ export class HTTPContext {
     return out;
   }
 
-  async parseBody(
-    expectedType: BodyType.TEXT,
-    opts?: ParseBodyOptions,
-  ): Promise<string>;
-  async parseBody(
-    expectedType: BodyType.MULTIPART_FORM,
-    opts?: ParseBodyOptions,
-  ): Promise<FormData>;
+  async parseBody(expectedType: BodyType.TEXT, opts?: ParseBodyOptions): Promise<string>;
+  async parseBody(expectedType: BodyType.MULTIPART_FORM, opts?: ParseBodyOptions): Promise<FormData>;
   async parseBody(
     expectedType: BodyType.FORM,
     opts?: ParseBodyOptions & { formMode?: "last" | undefined },
   ): Promise<ParsedFormBodyLast>;
-  async parseBody(
-    expectedType: BodyType.FORM,
-    opts: ParseBodyOptions & { formMode: "multi" },
-  ): Promise<ParsedFormBodyMulti>;
-  async parseBody(
-    expectedType: BodyType.FORM,
-    opts: ParseBodyOptions & { formMode: "params" },
-  ): Promise<URLSearchParams>;
-  async parseBody<J = any>(
-    expectedType: BodyType.JSON,
-    opts?: ParseBodyOptions,
-  ): Promise<J>;
-  async parseBody(
-    expectedType: BodyType,
-    opts: ParseBodyOptions = {},
-  ): Promise<any> {
+  async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "multi" }): Promise<ParsedFormBodyMulti>;
+  async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "params" }): Promise<URLSearchParams>;
+  async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
+  async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
-    if (
-      expectedType === BodyType.JSON && this._body !== undefined &&
-      this._parsedBodyMode === "JSON"
-    ) {
+    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
       return this._body;
     }
 
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
-      (this._parsedBodyMode === "TEXT" ||
-        this._parsedBodyMode === "JSON" ||
-        this._parsedBodyMode === "FORM")
+      (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")
     ) {
       return this._rawBody;
     }
@@ -419,28 +371,23 @@ export class HTTPContext {
           this._parsedBodyMode = "JSON";
           return parsed;
         } catch (err: any) {
-          throw new SystemErr(
-            SystemErrCode.BODY_PARSING_FAILED,
-            `JSON parsing failed: ${err.message}`,
-          );
+          throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
+
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
         const params = new URLSearchParams(this._rawBody);
         if (mode === "params") return params;
-        const parsed = mode === "multi"
-          ? this.parseFormMulti(this._rawBody)
-          : this.parseFormLast(this._rawBody);
+        const parsed = mode === "multi" ? this.parseFormMulti(this._rawBody) : this.parseFormLast(this._rawBody);
         this._body = parsed;
         this._parsedBodyMode = "FORM";
         return parsed;
       }
+
       if (expectedType === BodyType.TEXT) {
-        this._parsedBodyMode = this._parsedBodyMode === "NONE"
-          ? "TEXT"
-          : this._parsedBodyMode;
+        this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;
       }
     }
@@ -448,10 +395,7 @@ export class HTTPContext {
     const ct = this.contentType();
     if (ct.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          "Unexpected MULTIPART_FORM data",
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
       }
       this.assertReparseAllowed("MULTIPART");
       const fd = await this.req.formData();
@@ -461,13 +405,9 @@ export class HTTPContext {
     }
 
     this.assertReparseAllowed(
-      expectedType === BodyType.TEXT
-        ? "TEXT"
-        : expectedType === BodyType.JSON
-        ? "JSON"
-        : expectedType === BodyType.FORM
-        ? "FORM"
-        : "TEXT",
+      expectedType === BodyType.TEXT ? "TEXT" :
+      expectedType === BodyType.JSON ? "JSON" :
+      expectedType === BodyType.FORM ? "FORM" : "TEXT",
     );
 
     const text = await this.req.text();
@@ -485,10 +425,7 @@ export class HTTPContext {
         this._parsedBodyMode = "JSON";
         return parsed;
       } catch (err: any) {
-        throw new SystemErr(
-          SystemErrCode.BODY_PARSING_FAILED,
-          `JSON parsing failed: ${err.message}`,
-        );
+        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
       }
     }
 
@@ -496,9 +433,7 @@ export class HTTPContext {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
       if (mode === "params") return params;
-      const parsed = mode === "multi"
-        ? this.parseFormMulti(text)
-        : this.parseFormLast(text);
+      const parsed = mode === "multi" ? this.parseFormMulti(text) : this.parseFormLast(text);
       this._body = parsed;
       this._parsedBodyMode = "FORM";
       return parsed;
@@ -527,21 +462,48 @@ export class HTTPContext {
     return this;
   }
 
-  setHeader(name: string, value: string): this {
-    if (this._timedOut) return this;
+  /**
+   * ✅ returns HeaderRef (response)
+   */
+  setHeader(name: string, value: string): HeaderRef {
+    if (this._timedOut) return new HeaderRef(this.res.headers, name);
     this.ensureConfigurable();
+
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `Attempted to set invalid header "${name}".`,
       );
     }
-    this.res.setHeader(name.toLowerCase(), value);
-    return this;
+
+    this.res.headers.set(name, value);
+    return new HeaderRef(this.res.headers, name);
   }
 
-  getHeader(name: string): string | null {
-    return this.req.headers.get(name);
+  /**
+   * ✅ returns HeaderRef (request)
+   */
+  getHeader(name: string): HeaderRef {
+    const view = this._reqHeaders ?? new RequestHeaders(this.req.headers);
+    return new HeaderRef(view, name);
+  }
+
+  /**
+   * ✅ returns HeaderRef (response)
+   */
+  appendHeader(name: string, value: string): HeaderRef {
+    if (this._timedOut) return new HeaderRef(this.res.headers, name);
+    this.ensureConfigurable();
+
+    if (/[\r\n]/.test(value)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Attempted to set invalid header "${name}".`,
+      );
+    }
+
+    this.res.headers.append(name, value);
+    return new HeaderRef(this.res.headers, name);
   }
 
   html(content: string): void {
@@ -555,7 +517,7 @@ export class HTTPContext {
   text(content: string): void {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
-    if (!this.res.getHeader("Content-Type")) {
+    if (!this.res.headers.get("Content-Type")) {
       this.setHeader("Content-Type", "text/plain");
     }
     this.res.body(content);
@@ -582,14 +544,13 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
+
     const file = Bun.file(path);
     if (!(await file.exists())) {
-      throw new SystemErr(
-        SystemErrCode.FILE_NOT_FOUND,
-        `file does not exist at ${path}`,
-      );
+      throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
     }
-    this.res.setHeader("Content-Type", file.type || "application/octet-stream");
+
+    this.res.headers.set("Content-Type", file.type || "application/octet-stream");
     this.res.body(file);
     this.finalize();
   }
@@ -602,66 +563,48 @@ export class HTTPContext {
     return this.store[key] as TVal;
   }
 
-  getCookie(name: string): string | undefined {
-    const cookies = this.req.headers.get("Cookie");
-    if (!cookies) return undefined;
-    const parts = cookies.split(";");
-    for (const part of parts) {
-      const s = part.trim();
-      if (!s) continue;
-      const eq = s.indexOf("=");
-      if (eq === -1) continue;
-      const k = s.slice(0, eq).trim();
-      if (k !== name) continue;
-      const v = s.slice(eq + 1);
-      return v;
-    }
-    return undefined;
+  /**
+   * ✅ returns CookieRef (request read)
+   */
+  getCookie(name: string): CookieRef {
+    return this.res.cookies.ref(name);
   }
 
-  setCookie(name: string, value: string, options: CookieOptions = {}) {
-    if (this._timedOut) return;
+  /**
+   * ✅ returns CookieRef (response write)
+   */
+  setCookie(name: string, value: string, options: CookieOptions = {}): CookieRef {
+    if (this._timedOut) return this.res.cookies.ref(name);
     this.ensureConfigurable();
-    let cookieString = `${name}=${encodeURIComponent(value)}`;
 
     options.path ??= "/";
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
-
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }
 
-    if (options.path) cookieString += `; Path=${options.path}`;
-    if (options.domain) cookieString += `; Domain=${options.domain}`;
-    if (options.maxAge !== undefined) {
-      cookieString += `; Max-Age=${options.maxAge}`;
-    }
-    if (options.expires) {
-      cookieString += `; Expires=${options.expires.toUTCString()}`;
-    }
-    if (options.httpOnly) cookieString += `; HttpOnly`;
-    if (options.secure) cookieString += `; Secure`;
-    if (options.sameSite) cookieString += `; SameSite=${options.sameSite}`;
-
-    this.setHeader("Set-Cookie", cookieString);
+    this.res.cookies.set(name, value, options);
+    return this.res.cookies.ref(name);
   }
 
-  clearCookie(name: string, path: string = "/", domain?: string): void {
-    if (this._timedOut) return;
-    this.setCookie(name, "", { path, domain, maxAge: 0, expires: new Date(0) });
-  }
-
-  appendHeader(name: string, value: string): this {
-    if (this._timedOut) return this;
+  /**
+   * ✅ returns CookieRef
+   */
+  clearCookie(name: string, path: string = "/", domain?: string): CookieRef {
+    if (this._timedOut) return this.res.cookies.ref(name);
     this.ensureConfigurable();
-    if (/[\r\n]/.test(value)) {
-      throw new SystemErr(
-        SystemErrCode.INTERNAL_SERVER_ERR,
-        `Attempted to set invalid header "${name}".`,
-      );
-    }
-    this.res.appendHeader(name.toLowerCase(), value);
-    return this;
+    this.res.cookies.clear(name, { path, domain });
+    return this.res.cookies.ref(name);
+  }
+
+  get headers() {
+    // response headers helper (set/append/get)
+    return this.res.headers;
+  }
+
+  get cookies() {
+    // response cookie helper (set/clear) + request get
+    return this.res.cookies;
   }
 }
