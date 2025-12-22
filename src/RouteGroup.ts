@@ -3,7 +3,7 @@ import type { XerusMiddleware } from "./Middleware";
 import { XerusRoute } from "./XerusRoute";
 
 // REMOVED: <T>
-type MwLike = 
+type MwLike =
   | XerusMiddleware
   | (new () => XerusMiddleware);
 
@@ -29,13 +29,15 @@ export class RouteGroup {
         onMount(): void {
           super.onMount?.();
           const basePath = (this as any).path as string;
-          const prefixed =
-            groupPrefix === "/"
-              ? basePath
-              : (groupPrefix + (basePath === "/" ? "" : basePath)).replace(/\/{2,}/g, "/");
-          
+          const prefixed = groupPrefix === "/"
+            ? basePath
+            : (groupPrefix + (basePath === "/" ? "" : basePath)).replace(
+              /\/{2,}/g,
+              "/",
+            );
+
           (this as any).path = prefixed;
-          
+
           if (groupMws.length > 0) {
             this.use(...(groupMws as any));
           }

@@ -2,7 +2,15 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { MwErrorTrigger } from "../middleware/mwErrorTrigger";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+
+class MwErrorTrigger implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    throw new Error("Failure in Middleware");
+  }
+}
 
 class StandardErr extends XerusRoute {
   method = Method.GET;
@@ -33,9 +41,8 @@ class MissingFile extends XerusRoute {
 
 export function errorHandling(app: Xerus) {
   app.onErr(async (c: HTTPContext, err: any) => {
-    const detail = err instanceof Error
-      ? err.message
-      : String(err ?? "Unknown Error");
+    const detail =
+      err instanceof Error ? err.message : String(err ?? "Unknown Error");
     c.setStatus(500).json({
       error: {
         code: "GLOBAL_ERROR",
@@ -44,6 +51,5 @@ export function errorHandling(app: Xerus) {
       },
     });
   });
-
   app.mount(StandardErr, MwErr, MissingFile);
 }

@@ -4,7 +4,8 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
-import type { TestStore } from "../TestStore";
+import { Inject } from "../../src/RouteFields";
+import { TestStore } from "../TestStore";
 import type { HTTPContext } from "../../src/HTTPContext";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
@@ -48,14 +49,15 @@ class WSJsonValidator implements TypeValidator {
   }
 }
 
-class ValidatedChat extends XerusRoute<HTTPContext<TestStore>> {
+class ValidatedChat extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/validate";
+  store = Inject(TestStore);
 
   // 2. Inject the validator using the WSMESSAGE source
   msg = Validator.Param(Source.WSMESSAGE(), WSJsonValidator);
 
-  async handle(c: HTTPContext<TestStore>) {
+  async handle(c: HTTPContext) {
     let ws = c.ws();
     // 3. Access the parsed data via the injected property
     if (this.msg.data.type === "ping") {
@@ -66,6 +68,6 @@ class ValidatedChat extends XerusRoute<HTTPContext<TestStore>> {
   }
 }
 
-export function wsValidationMethods(app: Xerus<TestStore>) {
+export function wsValidationMethods(app: Xerus) {
   app.mount(ValidatedChat);
 }

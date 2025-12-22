@@ -5,12 +5,13 @@ import type { Validator } from "./Validator";
 import type { XerusMiddleware } from "./Middleware";
 
 // REMOVED: <T>
-type MiddlewareInput = 
+type MiddlewareInput =
   | XerusMiddleware
   | (new (...args: any[]) => XerusMiddleware);
 
 function isCtor(x: any): x is new (...args: any[]) => any {
-  return typeof x === "function" && x.prototype && x.prototype.constructor === x;
+  return typeof x === "function" && x.prototype &&
+    x.prototype.constructor === x;
 }
 
 // REMOVED: <T>
@@ -22,7 +23,7 @@ export abstract class XerusRoute {
   public _middlewares: XerusMiddleware[] = [];
   public _errHandler?: HTTPErrorHandlerFunc;
 
-  onMount(): void {} 
+  onMount(): void {}
 
   async validate(_c: HTTPContext): Promise<void> {}
   async preHandle(_c: HTTPContext): Promise<void> {}
@@ -33,10 +34,10 @@ export abstract class XerusRoute {
 
   use(...middlewares: MiddlewareInput[]): this {
     const normalized = middlewares.map((m) => {
-        if (isCtor(m)) {
-            return new m();
-        }
-        return m;
+      if (isCtor(m)) {
+        return new m();
+      }
+      return m;
     });
     this._middlewares.push(...(normalized as XerusMiddleware[]));
     return this;

@@ -3,7 +3,7 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Inject } from "../../src/RouteFields"; // Import Inject
-import { TestStore } from "../TestStore";       // Import the Class
+import { TestStore } from "../TestStore"; // Import the Class
 
 class PoolSet extends XerusRoute {
   method = Method.GET;
@@ -14,10 +14,10 @@ class PoolSet extends XerusRoute {
 
   async handle(c: HTTPContext) {
     const val = c.query("val");
-    
+
     // Type-safe access!
     this.store.test_val = val;
-    
+
     c.json({ value: val });
   }
 }
@@ -31,7 +31,7 @@ class PoolGet extends XerusRoute {
   async handle(c: HTTPContext) {
     // Type-safe retrieval
     const val = this.store.test_val;
-    
+
     c.json({ value: val });
   }
 }

@@ -3,12 +3,21 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
-import { GroupHeaderMiddleware } from "../middleware/mwGroupHeader"; // Updated Import
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
+import type { XerusMiddleware } from "../../src/Middleware";
+import type { AnyContext } from "../../src/MiddlewareFn";
+import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+
+export class GroupHeaderMiddleware implements XerusMiddleware {
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
+    c.setHeader("X-Group-Auth", "passed");
+    await next();
+  }
+}
 
 class AnyJsonBody implements TypeValidator {
   data: any;
@@ -16,8 +25,13 @@ class AnyJsonBody implements TypeValidator {
     this.data = raw;
   }
   async validate(c: HTTPContext) {
-    if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
+    if (
+      !this.data || typeof this.data !== "object" || Array.isArray(this.data)
+    ) {
+      throw new SystemErr(
+        SystemErrCode.VALIDATION_FAILED,
+        "Expected JSON object body",
+      );
     }
   }
 }
@@ -43,8 +57,7 @@ class AdminDashboard extends XerusRoute {
   method = Method.GET;
   path = "/admin/dashboard";
   onMount() {
-    // Pass the class definition, Xerus instantiates it
-    this.use(GroupHeaderMiddleware); 
+    this.use(GroupHeaderMiddleware);
   }
   async handle(c: HTTPContext) {
     c.text("Welcome to the Dashboard");

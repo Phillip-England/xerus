@@ -9,11 +9,11 @@ export class TestStore implements InjectableStore {
   csrfToken?: string;
   test_val?: string;
   secretKey?: string;
-  
+
   // Internal flags can remain if needed, or be managed by the framework
   __timeoutSent?: boolean;
   __holdRelease?: Promise<void>;
-  
+
   // Allow dynamic keys if you really need them (like [key: string]: any)
   [key: string]: any;
 }

@@ -18,13 +18,10 @@ const closeSchema = z.object({
   reason: z.string(),
 });
 
-// Validator for Headers (used in WS Open)
 class HeaderClientValidator implements TypeValidator {
-  client: string;
-  constructor(raw: any) {
-    this.client = raw || "";
-  }
+  client!: string;
   async validate(c: HTTPContext) {
+    this.client = c.getHeader("X-Client") ?? "";
     if (this.client.length === 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -37,63 +34,53 @@ class HeaderClientValidator implements TypeValidator {
   }
 }
 
-// Validator for Close Event (uses c.ws())
 class CloseEventValidator implements TypeValidator {
   async validate(c: HTTPContext) {
     let ws = c.ws();
-    // Validate that the close code/reason match expectations
     await closeSchema.parseAsync({ code: ws.code, reason: ws.reason });
   }
 }
 
-class LifecycleOpen extends XerusRoute<HTTPContext<TestStore>> {
+class LifecycleOpen extends XerusRoute {
   method = Method.WS_OPEN;
   path = "/ws/lifecycle-validate";
-
-  // Validate headers using Source.CUSTOM
-  headers = Validator.Param(
-    Source.CUSTOM((c) => c.getHeader("X-Client")),
-    HeaderClientValidator,
-  );
-
-  async handle(c: HTTPContext<TestStore>) {
+  // Updated to use Ctx
+  headers = Validator.Ctx(HeaderClientValidator);
+  async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send("open-ok");
   }
 }
 
-class LifecycleMessage extends XerusRoute<HTTPContext<TestStore>> {
+class LifecycleMessage extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/lifecycle-validate";
-  async handle(c: HTTPContext<TestStore>) {
+  async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send("cleared");
   }
 }
 
-class LifecycleClose extends XerusRoute<HTTPContext<TestStore>> {
+class LifecycleClose extends XerusRoute {
   method = Method.WS_CLOSE;
   path = "/ws/close-validate";
-
-  // Validate close frame data.
-  // We use Source.CUSTOM to just trigger the validator; the validator accesses c.ws() internally.
-  closer = Validator.Param(Source.CUSTOM(() => true), CloseEventValidator);
-
-  async handle(c: HTTPContext<TestStore>) {
+  // Updated to use Ctx. No source needed for checking WS Close state on context
+  closer = Validator.Ctx(CloseEventValidator);
+  async handle(c: HTTPContext) {
     let ws = c.ws();
     lastClose = { code: ws.code, reason: ws.reason };
     closeCount++;
   }
 }
 
-class CloseStats extends XerusRoute<TestStore> {
+class CloseStats extends XerusRoute {
   method = Method.GET;
   path = "/ws-close-stats";
-  async handle(c: HTTPContext<TestStore>) {
+  async handle(c: HTTPContext) {
     c.json({ closeCount, lastClose });
   }
 }
 
-export function wsLifecycleValidation(app: Xerus<TestStore>) {
+export function wsLifecycleValidation(app: Xerus) {
   app.mount(LifecycleOpen, LifecycleMessage, LifecycleClose, CloseStats);
 }

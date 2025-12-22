@@ -36,9 +36,9 @@ class CsrfGetRoute extends XerusRoute {
     this.use(csrfMw);
   }
   async handle(c: HTTPContext) {
-    // Note: Ensure your CSRF middleware writes to 'store' if you use getStore(), 
+    // Note: Ensure your CSRF middleware writes to 'store' if you use getStore(),
     // or access c.data.csrfToken if it writes to 'data'.
-    c.json({ token: c.data.csrfToken }); 
+    c.json({ token: c.data.csrfToken });
   }
 }
 

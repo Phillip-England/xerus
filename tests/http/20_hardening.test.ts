@@ -27,7 +27,7 @@ test("Hardening: Headers should be mutable after body written (Onion Pattern sup
   const res = await fetch(`${BaseURL}/harden/late-header`);
   expect(res.status).toBe(200);
   // Framework allows headers after body logic (before sending to client)
-  expect(res.headers.get("X-Late")).toBe("Too late"); 
+  expect(res.headers.get("X-Late")).toBe("Too late");
 });
 
 test("Hardening: Headers should be IMMUTABLE after Streaming starts", async () => {
@@ -51,6 +51,6 @@ test("Hardening: Duplicate route registration should throw at startup", async ()
   const app = new Xerus();
   app.mount(A);
   expect(() => {
-    app.mount(A); 
+    app.mount(A);
   }).toThrow("ROUTE_ALREADY_REGISTERED");
 });

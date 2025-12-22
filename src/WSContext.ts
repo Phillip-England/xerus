@@ -28,7 +28,7 @@ export class WSContext {
   get data(): HTTPContext {
     return this.ws.data;
   }
-  
+
   // ... (rest is identical)
   get readyState(): number {
     return (this.ws as any).readyState ?? 0;

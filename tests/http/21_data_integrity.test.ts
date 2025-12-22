@@ -12,7 +12,7 @@ test("Integrity: Form should parse multiple values when formMode='multi'", async
   const res = await fetch(`${BaseURL}/integrity/form-multi`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "tag=a&tag=b&user=me"
+    body: "tag=a&tag=b&user=me",
   });
   const json = await res.json();
   expect(res.status).toBe(200);
@@ -25,7 +25,7 @@ test("Integrity: Empty body parsed as JSON should trigger error handling", async
   const res = await fetch(`${BaseURL}/integrity/empty-json`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: "" // Empty string
+    body: "", // Empty string
   });
   const json = await res.json();
   // Expecting the try/catch in route to handle it

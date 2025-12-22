@@ -33,7 +33,7 @@ export class HTTPContext {
   private _parsedBodyMode: ParsedBodyMode = "NONE";
 
   public _wsMessage: string | Buffer | null = null;
-  
+
   // REMOVED: <T> from WSContext type
   public _wsContext: WSContext | null = null;
 
@@ -89,7 +89,7 @@ export class HTTPContext {
 
     this.cleanObj(this.data);
     this.cleanObj(this.store);
-    
+
     this._isWS = false;
 
     const urlIndex = req.url.indexOf("/", 8);
@@ -102,7 +102,7 @@ export class HTTPContext {
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
   }
-  
+
   // ... (rest of methods: clearResponse, markSent, get url, etc are identical) ...
   // ... (Just ensure no <T> casts remain in methods like getRequestId) ...
 
@@ -110,7 +110,7 @@ export class HTTPContext {
     this.res.reset();
     this._state = ContextState.OPEN;
   }
-  
+
   markSent() {
     this._state = ContextState.SENT;
   }
@@ -132,7 +132,7 @@ export class HTTPContext {
   private get _timedOut(): boolean {
     return !!(this.data as any).__timeoutSent;
   }
-  
+
   private ensureConfigurable() {
     if (this._timedOut) return;
     if (this._state === ContextState.SENT) return;

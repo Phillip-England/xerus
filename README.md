@@ -1,6 +1,7 @@
 # Xerus (minimal guide)
 
 A tiny HTTP + WebSocket framework for Bun with:
+
 - trie-based routing (static / params / wildcard)
 - middleware (global + route + groups), with onion semantics
 - dependency injection (app-level + route-field injection)
@@ -43,7 +44,7 @@ await app.listen(8080);
 ## Routing: static, params, wildcard
 
 ```ts
-import { XerusRoute, Method } from "xerus";
+import { Method, XerusRoute } from "xerus";
 
 export class StaticRoute extends XerusRoute {
   method = Method.GET;
@@ -84,7 +85,7 @@ app.static("/static", "./public"); // GET /static/* -> ./public/*
 Embed files at build time (useful for single-binary-ish deploys):
 
 ```ts
-import { embedDir } from "xerus/macros" with { type: 'macro' };
+import { embedDir } from "xerus/macros" with { type: "macro" };
 
 const embedded = embedDir("/abs/path/to/public"); // compile-time-ish helper
 app.embed("/static", embedded); // GET /static/* from embedded map
@@ -99,7 +100,7 @@ Middleware is `async (c, next) => { ...; await next(); ... }`.
 ### Global middleware
 
 ```ts
-import { Middleware, logger, cors, requestId } from "xerus";
+import { cors, logger, Middleware, requestId } from "xerus";
 
 const app = new Xerus();
 
@@ -119,13 +120,15 @@ class PrivateRoute extends XerusRoute {
 
   constructor() {
     super();
-    this.use(new Middleware(async (c, next) => {
-      if (!c.getHeader("authorization")) {
-        c.errorJSON(401, "UNAUTHORIZED", "missing auth");
-        return;
-      }
-      await next();
-    }));
+    this.use(
+      new Middleware(async (c, next) => {
+        if (!c.getHeader("authorization")) {
+          c.errorJSON(401, "UNAUTHORIZED", "missing auth");
+          return;
+        }
+        await next();
+      }),
+    );
   }
 
   async handle(c) {
@@ -203,7 +206,7 @@ class NeedsRepo extends XerusRoute {
   repo = Inject(UserRepo);
 
   async handle(c) {
-    const r1 = this.repo;                 // route field
+    const r1 = this.repo; // route field
     const r2 = c.getStore<UserRepo>("userRepo"); // store
     c.json({ same: r1 === r2 });
   }
@@ -219,10 +222,11 @@ Validation uses a **TypeValidator**:
 - constructor accepts raw input
 - `validate(c)` throws on failure
 - the validated instance is stored on `c.data[storeKey]`
-- with route-field validators, it’s also assigned to the route property for the request
+- with route-field validators, it’s also assigned to the route property for the
+  request
 
 ```ts
-import { TypeValidator, HTTPContext, SystemErr, SystemErrCode } from "xerus";
+import { HTTPContext, SystemErr, SystemErrCode, TypeValidator } from "xerus";
 
 export class CreateUserBody implements TypeValidator {
   username: string;
@@ -231,7 +235,10 @@ export class CreateUserBody implements TypeValidator {
   }
   async validate(_c: HTTPContext) {
     if (this.username.length < 3) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "username too short");
+      throw new SystemErr(
+        SystemErrCode.VALIDATION_FAILED,
+        "username too short",
+      );
     }
   }
 }
@@ -240,7 +247,7 @@ export class CreateUserBody implements TypeValidator {
 ### JSON body
 
 ```ts
-import { Validator, Source } from "xerus";
+import { Source, Validator } from "xerus";
 
 class CreateUserRoute extends XerusRoute {
   method = Method.POST;
@@ -265,7 +272,9 @@ class CreateUserRoute extends XerusRoute {
 ```ts
 class LoginForm implements TypeValidator {
   email: string;
-  constructor(raw: any) { this.email = String(raw?.email ?? ""); }
+  constructor(raw: any) {
+    this.email = String(raw?.email ?? "");
+  }
   async validate() {
     if (!this.email.includes("@")) throw new Error("bad email");
   }
@@ -285,6 +294,7 @@ class LoginRoute extends XerusRoute {
 ```
 
 Form modes:
+
 - `Source.FORM("last")` → `{ key: string }` (last value wins)
 - `Source.FORM("multi")` → `{ key: string | string[] }`
 - `Source.FORM("params")` → `URLSearchParams`
@@ -294,9 +304,13 @@ Form modes:
 ```ts
 class ActiveDirQuery implements TypeValidator {
   activeDir: string;
-  constructor(raw: any) { this.activeDir = String(raw ?? ""); }
+  constructor(raw: any) {
+    this.activeDir = String(raw ?? "");
+  }
   async validate() {
-    if (!this.activeDir.startsWith("/")) throw new Error("activeDir must be absolute");
+    if (!this.activeDir.startsWith("/")) {
+      throw new Error("activeDir must be absolute");
+    }
   }
 }
 
@@ -305,7 +319,11 @@ class QueryRoute extends XerusRoute {
   path = "/";
 
   // validate a single query key
-  activeDir = Validator.Param(Source.QUERY("activeDir"), ActiveDirQuery, "activeDir");
+  activeDir = Validator.Param(
+    Source.QUERY("activeDir"),
+    ActiveDirQuery,
+    "activeDir",
+  );
 
   async handle(c) {
     c.json({ activeDir: this.activeDir.activeDir });
@@ -318,7 +336,9 @@ class QueryRoute extends XerusRoute {
 ```ts
 class UserIdParam implements TypeValidator {
   id: string;
-  constructor(raw: any) { this.id = String(raw ?? ""); }
+  constructor(raw: any) {
+    this.id = String(raw ?? "");
+  }
   async validate() {
     if (!/^[0-9]+$/.test(this.id)) throw new Error("id must be numeric");
   }
@@ -343,7 +363,9 @@ The WS message is exposed as `Source.WSMESSAGE()` (raw string/Buffer).
 ```ts
 class ChatMessage implements TypeValidator {
   text: string;
-  constructor(raw: any) { this.text = String(raw ?? ""); }
+  constructor(raw: any) {
+    this.text = String(raw ?? "");
+  }
   async validate() {
     if (this.text.length === 0) throw new Error("empty message");
   }
@@ -354,12 +376,13 @@ class ChatMessage implements TypeValidator {
 
 ## WebSockets: OPEN / MESSAGE / CLOSE / DRAIN routes
 
-Xerus attaches WS routing to the same path (and upgrades on `GET` with `Upgrade: websocket`).
+Xerus attaches WS routing to the same path (and upgrades on `GET` with
+`Upgrade: websocket`).
 
 Define one or more WS routes with the same `path` but different methods:
 
 ```ts
-import { Method, XerusRoute, Validator, Source } from "xerus";
+import { Method, Source, Validator, XerusRoute } from "xerus";
 
 class ChatOpen extends XerusRoute {
   method = Method.WS_OPEN;
@@ -444,7 +467,8 @@ app.onNotFound(async (c) => {
 });
 ```
 
-If you don’t set `onNotFound`, Xerus will throw a `ROUTE_NOT_FOUND` system error.
+If you don’t set `onNotFound`, Xerus will throw a `ROUTE_NOT_FOUND` system
+error.
 
 ---
 
@@ -468,7 +492,9 @@ app.mount(
 
 // 404 + global error
 app.onNotFound(async (c) => c.setStatus(404).text("not found"));
-app.onErr(async (c, err) => c.errorJSON(500, "INTERNAL", "error", { detail: err?.message }));
+app.onErr(async (c, err) =>
+  c.errorJSON(500, "INTERNAL", "error", { detail: err?.message })
+);
 
 await app.listen(8080);
 ```

@@ -81,25 +81,19 @@ export class LoginForm implements TypeValidator {
 }
 
 export class ApiKeyValidator implements TypeValidator {
-  key: string;
-  constructor(raw: any) {
-    this.key = raw;
-  }
+  key!: string;
   async validate(c: HTTPContext) {
+    this.key = c.getHeader("X-Api-Key") ?? "";
     if (this.key !== "secret-123") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid API Key");
     }
   }
 }
 
-// --- UPDATED ROUTES USING PROPERTIES ---
-
 class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/query";
-
   query = Validator.Param(Source.QUERY(), SearchQuery);
-
   async handle(c: HTTPContext) {
     c.json({ term: this.query.term, limit: this.query.limit });
   }
@@ -108,9 +102,7 @@ class QueryRoute extends XerusRoute {
 class PathRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/product/:id";
-
   prod = Validator.Param(Source.PARAM("id"), ProductIdParam);
-
   async handle(c: HTTPContext) {
     c.json({ productId: this.prod.id });
   }
@@ -119,9 +111,7 @@ class PathRoute extends XerusRoute {
 class JsonRoute extends XerusRoute {
   method = Method.POST;
   path = "/vtypes/json";
-
   body = Validator.Param(Source.JSON(), CreateUserBody);
-
   async handle(c: HTTPContext) {
     c.json({ user: this.body.username, email: this.body.email });
   }
@@ -130,9 +120,7 @@ class JsonRoute extends XerusRoute {
 class FormRoute extends XerusRoute {
   method = Method.POST;
   path = "/vtypes/form";
-
   form = Validator.Param(Source.FORM(), LoginForm);
-
   async handle(c: HTTPContext) {
     c.json({ login: this.form.user });
   }
@@ -141,12 +129,8 @@ class FormRoute extends XerusRoute {
 class CustomRoute extends XerusRoute {
   method = Method.GET;
   path = "/vtypes/custom";
-
-  auth = Validator.Param(
-    Source.CUSTOM((c) => c.getHeader("X-Api-Key")),
-    ApiKeyValidator,
-  );
-
+  // Updated to use Ctx
+  auth = Validator.Ctx(ApiKeyValidator);
   async handle(c: HTTPContext) {
     c.json({ authorized: true, key: this.auth.key });
   }

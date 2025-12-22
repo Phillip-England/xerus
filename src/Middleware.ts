@@ -72,12 +72,12 @@ export const requestId = (opts?: {
   const headerName = opts?.headerName ?? "X-Request-Id";
   const storeKey = opts?.storeKey ?? "requestId";
   const gen = opts?.generator ?? (() => crypto.randomUUID());
-  
+
   return new Middleware(async (c, next) => {
     const incoming = c.getHeader(headerName) ||
       c.getHeader(headerName.toLowerCase());
     const id = incoming && incoming.length > 0 ? incoming : gen();
-    
+
     // REMOVED: (c.data as any) cast no longer strictly needed if data is Record<string,any>
     // but keeping it safe is fine too.
     c.data[storeKey] = id;
@@ -210,7 +210,7 @@ export const timeout = (
       ]);
 
       if (winner !== TIMEOUT) return;
-      
+
       c.data.__timeoutSent = true;
       if (!c.isDone) {
         c.res.setStatus(504);

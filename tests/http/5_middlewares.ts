@@ -13,7 +13,7 @@ import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 
 class MwOrderLogger implements XerusMiddleware {
   private name: string;
-  
+
   constructor(name: string) {
     this.name = name;
   }
@@ -22,10 +22,13 @@ class MwOrderLogger implements XerusMiddleware {
   async execute(c: AnyContext, next: MiddlewareNextFn) {
     const existing = c.getResHeader("X-Order") || "";
     // Log "In"
-    c.setHeader("X-Order", existing ? `${existing}->${this.name}-In` : `${this.name}-In`);
-    
+    c.setHeader(
+      "X-Order",
+      existing ? `${existing}->${this.name}-In` : `${this.name}-In`,
+    );
+
     await next(); // Pass control
-    
+
     // Log "Out"
     const after = c.getResHeader("X-Order") || "";
     c.setHeader("X-Order", `${after}->${this.name}-Out`);

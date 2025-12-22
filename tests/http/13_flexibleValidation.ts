@@ -10,11 +10,9 @@ import { Source } from "../../src/ValidationSource";
 import type { TypeValidator } from "../../src/TypeValidator";
 
 class HeaderValidator implements TypeValidator {
-  val: string;
-  constructor(raw: any) {
-    this.val = raw ?? "";
-  }
+  val!: string;
   async validate(c: HTTPContext) {
+    this.val = c.getHeader("X-Secret") ?? "";
     if (this.val !== "xerus-power") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid Secret");
     }
@@ -44,12 +42,8 @@ class PageQueryValidator implements TypeValidator {
 class HeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/header";
-
-  secret = Validator.Param(
-    Source.CUSTOM((c) => c.getHeader("X-Secret")),
-    HeaderValidator,
-  );
-
+  // Updated to use Ctx
+  secret = Validator.Ctx(HeaderValidator);
   async handle(c: HTTPContext) {
     c.json({ status: "ok" });
   }
@@ -58,9 +52,7 @@ class HeaderRoute extends XerusRoute {
 class ParamRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/param/:id";
-
   params = Validator.Param(Source.PARAM("id"), IdParamValidator);
-
   async handle(c: HTTPContext) {
     c.json({ id: this.params.id });
   }
@@ -69,9 +61,7 @@ class ParamRoute extends XerusRoute {
 class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/query";
-
   query = Validator.Param(Source.QUERY("page"), PageQueryValidator);
-
   async handle(c: HTTPContext) {
     c.json({ page: this.query.page });
   }

@@ -1,9 +1,10 @@
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { WSContext } from "../../src/WSContext";
 import { Validator } from "../../src/Validator";
 import { Source } from "../../src/ValidationSource";
+import { Inject } from "../../src/RouteFields";
+import { TestStore } from "../TestStore";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
@@ -24,9 +25,10 @@ export class ChatMessageValidator implements TypeValidator {
   }
 }
 
-class ValidatorWsRoute extends XerusRoute<HTTPContext> {
+class ValidatorWsRoute extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/validator";
+  store = Inject(TestStore);
 
   // Updated to use property pattern
   msg = Validator.Param(Source.WSMESSAGE(), ChatMessageValidator);

@@ -64,7 +64,7 @@ class LateHeaderRoute extends XerusRoute {
   path = "/harden/late-header";
   async handle(c: HTTPContext) {
     c.json({ ok: true });
-    c.setHeader("X-Late", "Too late"); 
+    c.setHeader("X-Late", "Too late");
   }
 }
 
@@ -76,13 +76,13 @@ class StreamSafetyRoute extends XerusRoute {
       start(ctrl) {
         ctrl.enqueue(new TextEncoder().encode("stream data"));
         ctrl.close();
-      }
+      },
     });
-    
+
     c.stream(stream);
-    
+
     try {
-      c.setHeader("X-Fail", "True"); 
+      c.setHeader("X-Fail", "True");
     } catch (e) {
       // Swallow error
     }
@@ -96,6 +96,6 @@ export function hardening(app: Xerus) {
     BrokenServiceRoute,
     DoubleNextRoute,
     LateHeaderRoute,
-    StreamSafetyRoute
+    StreamSafetyRoute,
   );
 }

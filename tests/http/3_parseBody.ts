@@ -27,11 +27,10 @@ class JsonBody implements TypeValidator {
 }
 
 class TextBody implements TypeValidator {
-  content: string;
-  constructor(raw: any) {
-    this.content = raw;
-  }
+  content!: string;
+  // No constructor needed for Ctx validators, or it receives undefined
   async validate(c: HTTPContext) {
+    this.content = await c.parseBody(BodyType.TEXT);
     if (typeof this.content !== "string") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -57,19 +56,16 @@ class FormBody implements TypeValidator {
 }
 
 class MultipartBody implements TypeValidator {
-  fd: FormData;
-  constructor(raw: any) {
-    this.fd = raw;
+  fd!: FormData;
+  async validate(c: HTTPContext) {
+    this.fd = await c.parseBody(BodyType.MULTIPART_FORM);
   }
-  async validate(c: HTTPContext) {}
 }
 
 class ParseJson extends XerusRoute {
   method = Method.POST;
   path = "/parse/json";
-
   body = Validator.Param(Source.JSON(), JsonBody);
-
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.data });
   }
@@ -78,13 +74,8 @@ class ParseJson extends XerusRoute {
 class ParseText extends XerusRoute {
   method = Method.POST;
   path = "/parse/text";
-
-  // Use Custom Source for TEXT
-  body = Validator.Param(
-    Source.CUSTOM((c) => c.parseBody(BodyType.TEXT)),
-    TextBody,
-  );
-
+  // Updated to use Ctx instead of Source.CUSTOM
+  body = Validator.Ctx(TextBody);
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.content });
   }
@@ -93,9 +84,7 @@ class ParseText extends XerusRoute {
 class ParseForm extends XerusRoute {
   method = Method.POST;
   path = "/parse/form";
-
   body = Validator.Param(Source.FORM(), FormBody);
-
   async handle(c: HTTPContext) {
     c.json({ status: "success", data: this.body.data });
   }
@@ -104,13 +93,8 @@ class ParseForm extends XerusRoute {
 class ParseMultipart extends XerusRoute {
   method = Method.POST;
   path = "/parse/multipart";
-
-  // Use Custom Source for MULTIPART
-  body = Validator.Param(
-    Source.CUSTOM((c) => c.parseBody(BodyType.MULTIPART_FORM)),
-    MultipartBody,
-  );
-
+  // Updated to use Ctx instead of Source.CUSTOM
+  body = Validator.Ctx(MultipartBody);
   async handle(c: HTTPContext) {
     const result: Record<string, string> = {};
     this.body.fd.forEach((value: FormDataEntryValue, key: string) => {

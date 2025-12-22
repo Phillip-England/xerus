@@ -40,11 +40,9 @@ export class UserIdParam implements TypeValidator {
 }
 
 export class ApiKeyHeader implements TypeValidator {
-  key: string;
-  constructor(raw: any) {
-    this.key = String(raw ?? "");
-  }
-  async validate(_c: HTTPContext) {
+  key!: string;
+  async validate(c: HTTPContext) {
+    this.key = c.getHeader("X-Api-Key") ?? "";
     if (this.key !== "xerus-secret-123") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -77,11 +75,9 @@ export class CreateUserJson implements TypeValidator {
 }
 
 export class IpValidator implements TypeValidator {
-  ip: string;
-  constructor(raw: any) {
-    this.ip = String(raw ?? "unknown");
-  }
-  async validate(_c: HTTPContext) {
+  ip!: string;
+  async validate(c: HTTPContext) {
+    this.ip = c.getClientIP();
     if (this.ip === "unknown") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -109,16 +105,13 @@ export class WsPingValidator implements TypeValidator {
 class AllValidatorsRoute extends XerusRoute {
   method = Method.POST;
   path = "/showcase/all/:id";
-
-  // Updated: All validators as class properties
   userId = Validator.Param(Source.PARAM("id"), UserIdParam);
   query = Validator.Param(Source.QUERY(), QueryFilter);
-  apiKey = Validator.Param(
-    Source.CUSTOM((c) => c.getHeader("X-Api-Key")),
-    ApiKeyHeader,
-  );
+  // Updated to Ctx
+  apiKey = Validator.Ctx(ApiKeyHeader);
   body = Validator.Param(Source.JSON(), CreateUserJson);
-  ip = Validator.Param(Source.CUSTOM((c) => c.getClientIP()), IpValidator);
+  // Updated to Ctx
+  ip = Validator.Ctx(IpValidator);
 
   async handle(c: HTTPContext) {
     c.json({
@@ -138,10 +131,7 @@ class AllValidatorsRoute extends XerusRoute {
 class WsShowcaseRoute extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/showcase/ws";
-
-  // Updated WebSocket message validator
   msg = Validator.Param(Source.WSMESSAGE(), WsPingValidator);
-
   async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send(`PONG-${this.msg.content}`);

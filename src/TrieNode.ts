@@ -17,8 +17,6 @@ export interface RouteBlueprint {
   };
 }
 
-
-
 export class TrieNode {
   handlers: Record<string, RouteBlueprint> = {};
 
@@ -33,4 +31,3 @@ export class TrieNode {
   paramKey?: string;
   wildcard?: TrieNode;
 }
-

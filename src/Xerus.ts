@@ -1,9 +1,9 @@
 import type { Server, ServerWebSocket } from "bun";
-import { TrieNode, type RouteBlueprint } from "./TrieNode";
+import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { Middleware } from "./Middleware";
 import type { XerusMiddleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
-import type { HTTPHandlerFunc, HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
+import type { HTTPErrorHandlerFunc, HTTPHandlerFunc } from "./HTTPHandlerFunc";
 import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
@@ -17,29 +17,31 @@ import {
   type InjectableStore,
   isRouteFieldInject,
   isRouteFieldValidator,
+  isRouteFieldValidatorCtx,
 } from "./RouteFields";
 
 // REMOVED: <T>
 type AnyCtx = HTTPContext;
 
 // REMOVED: <T>
-type MiddlewareInput = 
+type MiddlewareInput =
   | XerusMiddleware
   | (new (...args: any[]) => XerusMiddleware);
 
 function isCtor(x: any): x is new (...args: any[]) => any {
-    return typeof x === "function" && x.prototype && x.prototype.constructor === x;
+  return typeof x === "function" && x.prototype &&
+    x.prototype.constructor === x;
 }
 
 // REMOVED: <T>
 export class Xerus {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
-  
+
   // REMOVED: <T>
-  private preMiddlewares: XerusMiddleware[] = []; 
-  private globalMiddlewares: XerusMiddleware[] = []; 
-  
+  private preMiddlewares: XerusMiddleware[] = [];
+  private globalMiddlewares: XerusMiddleware[] = [];
+
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
   private resolvedRoutes = new Map<
@@ -47,7 +49,7 @@ export class Xerus {
     { blueprint?: RouteBlueprint; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 500;
-  
+
   // REMOVED: <T>
   private contextPool: ObjectPool<HTTPContext>;
 
@@ -65,10 +67,10 @@ export class Xerus {
   // REMOVED: <T>
   private normalizeMiddlewares(list: MiddlewareInput[]): XerusMiddleware[] {
     return list.map((m) => {
-        if (isCtor(m)) {
-            return new m();
-        }
-        return m as XerusMiddleware;
+      if (isCtor(m)) {
+        return new m();
+      }
+      return m as XerusMiddleware;
     });
   }
 
@@ -105,7 +107,7 @@ export class Xerus {
         if (
           k === "_middlewares" ||
           k === "_errHandler" ||
-          k === "validators" 
+          k === "validators"
         ) continue;
         props[k] = (instance as any)[k];
       }
@@ -130,7 +132,7 @@ export class Xerus {
       });
     };
   }
-  
+
   // ... (onErr, embed, static, register, search, find are essentially unchanged except removing AnyCtx<T> if present) ...
   onErr(h: HTTPErrorHandlerFunc) {
     this.errHandler = h;
@@ -246,7 +248,7 @@ export class Xerus {
       this.routes[`${method} ${path}`] = blueprint;
     }
   }
-  
+
   // ... (search and find are identical logic, just no type changes needed really) ...
   private search(
     node: TrieNode,
@@ -255,8 +257,8 @@ export class Xerus {
     method: string,
     params: Record<string, string>,
   ): { blueprint?: RouteBlueprint; params: Record<string, string> } | null {
-     // ... (unchanged)
-     if (index === parts.length) {
+    // ... (unchanged)
+    if (index === parts.length) {
       if ((node.handlers as any)[method]) {
         return { blueprint: (node.handlers as any)[method], params };
       }
@@ -387,21 +389,37 @@ export class Xerus {
     const props = Object.getOwnPropertyNames(routeInstance);
     for (const prop of props) {
       const val = (routeInstance as any)[prop];
+      if (isRouteFieldValidatorCtx(val)) {
+        const Type = val.Type;
+        const storeKey = val.storeKey ?? Type.name ?? prop;
+
+        const mw = new Middleware(async (c: HTTPContext, next) => {
+          const instance = new Type();
+          await instance.validate(c);
+          c.data[storeKey] = instance;
+          (routeInstance as any)[prop] = instance;
+          await next();
+        });
+
+        validatorMws.push(mw);
+        continue;
+      }
+
       if (isRouteFieldInject(val)) {
         const Type = val.Type;
         const storeKey = val.storeKey;
         const mw = new Middleware(async (c: HTTPContext, next) => {
-            const instance: any = new Type();
-            const key = storeKey ??
-                instance?.storeKey ??
-                Type?.name ??
-                prop;
-            if (instance && typeof instance.init === "function") {
-                await instance.init(c);
-            }
-            c.setStore(key, instance);
-            (routeInstance as any)[prop] = instance;
-            await next();
+          const instance: any = new Type();
+          const key = storeKey ??
+            instance?.storeKey ??
+            Type?.name ??
+            prop;
+          if (instance && typeof instance.init === "function") {
+            await instance.init(c);
+          }
+          c.setStore(key, instance);
+          (routeInstance as any)[prop] = instance;
+          await next();
         });
         injectMws.push(mw);
         continue;
@@ -434,7 +452,9 @@ export class Xerus {
       }
     }
 
-    const { injectMws, validatorMws } = this.collectRouteFieldMiddlewares(routeInstance);
+    const { injectMws, validatorMws } = this.collectRouteFieldMiddlewares(
+      routeInstance,
+    );
 
     const preHandleMw = new Middleware(
       async (_c, next) => {
@@ -615,7 +635,7 @@ export class Xerus {
       const httpCtx = ws.data as HTTPContext;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
-      
+
       if (!blueprint) return;
 
       httpCtx.clearResponse();

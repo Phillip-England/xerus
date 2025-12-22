@@ -1,5 +1,4 @@
 import { Xerus } from "../../src/Xerus";
-import type { TestStore } from "../TestStore";
 import { basicMethods } from "./0_basicMethods";
 import { routeGrouping } from "./1_routeGrouping";
 import { staticFiles } from "./2_staticFiles";
@@ -22,7 +21,7 @@ import { injectionPattern } from "./19_injection";
 import { hardening } from "./20_hardening"; // Updated
 import { dataIntegrity } from "./21_data_integrity"; // New
 
-const app = new Xerus<TestStore>();
+const app = new Xerus();
 
 errorHandling(app);
 basicMethods(app);
