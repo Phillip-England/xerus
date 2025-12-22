@@ -4,42 +4,41 @@ import { Method } from "./Method";
 import type { Validator } from "./Validator";
 import type { XerusMiddleware } from "./Middleware";
 
-// Define a type for middleware input: either an instance or a class constructor
-type MiddlewareInput<T extends Record<string, any>> = 
-  | XerusMiddleware<T>
-  | (new (...args: any[]) => XerusMiddleware<T>);
+// REMOVED: <T>
+type MiddlewareInput = 
+  | XerusMiddleware
+  | (new (...args: any[]) => XerusMiddleware);
 
 function isCtor(x: any): x is new (...args: any[]) => any {
   return typeof x === "function" && x.prototype && x.prototype.constructor === x;
 }
 
-export abstract class XerusRoute<
-  T extends Record<string, any> = Record<string, any>,
-> {
+// REMOVED: <T>
+export abstract class XerusRoute {
   abstract method: Method;
   abstract path: string;
+
   validators: Validator<any>[] = [];
-  public _middlewares: XerusMiddleware<T>[] = [];
+  public _middlewares: XerusMiddleware[] = [];
   public _errHandler?: HTTPErrorHandlerFunc;
 
-  onMount(): void {} // called once at mount-time
+  onMount(): void {} 
 
-  async validate(_c: HTTPContext<T>): Promise<void> {}
-  async preHandle(_c: HTTPContext<T>): Promise<void> {}
-  async postHandle(_c: HTTPContext<T>): Promise<void> {}
-  async onFinally(_c: HTTPContext<T>): Promise<void> {}
+  async validate(_c: HTTPContext): Promise<void> {}
+  async preHandle(_c: HTTPContext): Promise<void> {}
+  async postHandle(_c: HTTPContext): Promise<void> {}
+  async onFinally(_c: HTTPContext): Promise<void> {}
 
-  abstract handle(c: HTTPContext<T>): Promise<void>;
+  abstract handle(c: HTTPContext): Promise<void>;
 
-  // Update .use() to accept constructors
-  use(...middlewares: MiddlewareInput<T>[]): this {
+  use(...middlewares: MiddlewareInput[]): this {
     const normalized = middlewares.map((m) => {
         if (isCtor(m)) {
             return new m();
         }
         return m;
     });
-    this._middlewares.push(...(normalized as XerusMiddleware<T>[]));
+    this._middlewares.push(...(normalized as XerusMiddleware[]));
     return this;
   }
 

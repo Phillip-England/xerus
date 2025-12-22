@@ -16,7 +16,8 @@ export type ParseBodyOptions = {
   formMode?: "last" | "multi" | "params";
 };
 
-export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
+// REMOVED: <T> Generic
+export class HTTPContext {
   req!: Request;
   res: MutResponse;
 
@@ -32,10 +33,12 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private _parsedBodyMode: ParsedBodyMode = "NONE";
 
   public _wsMessage: string | Buffer | null = null;
-  public _wsContext: WSContext<T> | null = null;
+  
+  // REMOVED: <T> from WSContext type
+  public _wsContext: WSContext | null = null;
 
-  // FIX: Initialize these once. We will never re-assign them.
-  data: T = {} as T;
+  // CHANGED: T to Record<string, any>
+  data: Record<string, any> = {};
   store: Record<string, any> = {};
 
   private err: Error | undefined | string;
@@ -44,10 +47,8 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
   constructor() {
     this.res = new MutResponse();
-    // data and store are already initialized above
   }
 
-  // FIX: Helper to scrub objects without breaking the reference
   private cleanObj(obj: Record<string, any>) {
     for (const key in obj) {
       delete obj[key];
@@ -58,7 +59,8 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     return this._wsContext != null;
   }
 
-  ws(): WSContext<T> {
+  // REMOVED: <T> return type
+  ws(): WSContext {
     if (!this._wsContext) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -75,7 +77,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
     this._url = null;
     this._segments = null;
-    this.params = params; // params usually come fresh from the router, so assignment is okay here
+    this.params = params;
 
     this._body = undefined;
     this._rawBody = null;
@@ -85,7 +87,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this._wsMessage = null;
     this._wsContext = null;
 
-    // FIX: Scrub the existing objects instead of allocating new ones
     this.cleanObj(this.data);
     this.cleanObj(this.store);
     
@@ -101,9 +102,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
   }
-
-  // ... (rest of the file remains unchanged)
   
+  // ... (rest of methods: clearResponse, markSent, get url, etc are identical) ...
+  // ... (Just ensure no <T> casts remain in methods like getRequestId) ...
+
   clearResponse() {
     this.res.reset();
     this._state = ContextState.OPEN;
@@ -130,7 +132,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private get _timedOut(): boolean {
     return !!(this.data as any).__timeoutSent;
   }
-
+  
   private ensureConfigurable() {
     if (this._timedOut) return;
     if (this._state === ContextState.SENT) return;
@@ -200,6 +202,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     return (this.data as any).requestId || "";
   }
 
+  // ... (Redirect, Body Parsing, Cookie, Headers methods remain unchanged) ...
   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
   redirect(

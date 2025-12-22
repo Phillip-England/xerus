@@ -1,3 +1,4 @@
+// ... imports unchanged
 import type { HTTPContext } from "./HTTPContext";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -13,6 +14,7 @@ async function readSource(
   c: HTTPContext,
   source: ValidationSource,
 ): Promise<any> {
+  // ... switch/case implementation unchanged
   switch (source.kind) {
     case "JSON":
       return await c.parseBody(BodyType.JSON);
@@ -56,21 +58,19 @@ export class Validator<T extends TypeValidator = any> {
     return new RouteFieldValidator(source, Type, storeKey) as unknown as T;
   }
 
-  // ✅ New: direct runner (no "middleware in middleware" hop)
-  async run(c: HTTPContext<any>): Promise<T> {
+  // CHANGED: Removed <any>
+  async run(c: HTTPContext): Promise<T> {
     try {
       const raw = await readSource(c, this.source);
       const instance = new this.Type(raw);
-
       if (typeof (instance as any)?.validate !== "function") {
         throw new SystemErr(
           SystemErrCode.VALIDATION_FAILED,
           `Type "${this.Type.name}" does not implement validate(c)`,
         );
       }
-
       await instance.validate(c);
-      (c.data as any)[this.storeKey] = instance;
+      c.data[this.storeKey] = instance;
       return instance;
     } catch (e: any) {
       if (e instanceof SystemErr) throw e;
@@ -81,8 +81,9 @@ export class Validator<T extends TypeValidator = any> {
     }
   }
 
-  asMiddleware(): Middleware<any> {
-    return new Middleware<any>(async (c: HTTPContext<any>, next) => {
+  // CHANGED: Removed <any>
+  asMiddleware(): Middleware {
+    return new Middleware(async (c: HTTPContext, next) => {
       await this.run(c);
       await next();
     });

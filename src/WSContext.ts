@@ -1,18 +1,17 @@
-// src/WSContext.ts
 import type { ServerWebSocket } from "bun";
 import type { HTTPContext } from "./HTTPContext";
 
-export class WSContext<T extends Record<string, any> = Record<string, any>> {
-  ws: ServerWebSocket<HTTPContext<T>>;
-  http: HTTPContext<T>;
-
+// REMOVED: <T>
+export class WSContext {
+  ws: ServerWebSocket<HTTPContext>;
+  http: HTTPContext;
   message: string | Buffer | "";
   code: number;
   reason: string;
 
   constructor(
-    ws: ServerWebSocket<HTTPContext<T>>,
-    http: HTTPContext<T>,
+    ws: ServerWebSocket<HTTPContext>,
+    http: HTTPContext,
     opts?: {
       message?: string | Buffer | null;
       code?: number | null;
@@ -26,10 +25,11 @@ export class WSContext<T extends Record<string, any> = Record<string, any>> {
     this.reason = opts?.reason ?? "";
   }
 
-  get data(): HTTPContext<T> {
+  get data(): HTTPContext {
     return this.ws.data;
   }
-
+  
+  // ... (rest is identical)
   get readyState(): number {
     return (this.ws as any).readyState ?? 0;
   }

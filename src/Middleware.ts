@@ -1,27 +1,26 @@
 import type { AnyContext, MiddlewareFn } from "./MiddlewareFn";
 import type { MiddlewareNextFn } from "./MiddlewareNextFn";
 
-export interface XerusMiddleware<
-  T extends Record<string, any> = Record<string, any>,
-  C extends AnyContext<T> = AnyContext<T>,
-> {
-  execute(c: C, next: MiddlewareNextFn): Promise<void>;
+// REMOVED: <T>
+export interface XerusMiddleware {
+  execute(c: AnyContext, next: MiddlewareNextFn): Promise<void>;
 }
 
-export class Middleware<T extends Record<string, any> = Record<string, any>>
-  implements XerusMiddleware<T, AnyContext<T>> {
-  private callback: MiddlewareFn<T>;
+// REMOVED: <T>
+export class Middleware implements XerusMiddleware {
+  private callback: MiddlewareFn;
 
-  constructor(callback: MiddlewareFn<T>) {
+  constructor(callback: MiddlewareFn) {
     this.callback = callback;
   }
 
-  async execute(c: AnyContext<T>, next: MiddlewareNextFn): Promise<void> {
+  async execute(c: AnyContext, next: MiddlewareNextFn): Promise<void> {
     return this.callback(c, next);
   }
 }
 
-export const logger: XerusMiddleware<any> = new Middleware<any>(
+// REMOVED: <any>
+export const logger: XerusMiddleware = new Middleware(
   async (c, next) => {
     const start = performance.now();
     await next();
@@ -37,8 +36,9 @@ export interface CORSOptions {
   credentials?: boolean;
 }
 
-export const cors = (options: CORSOptions = {}): XerusMiddleware<any> => {
-  return new Middleware<any>(async (c, next) => {
+// REMOVED: <any>
+export const cors = (options: CORSOptions = {}): XerusMiddleware => {
+  return new Middleware(async (c, next) => {
     let origin = options.origin || "*";
     const methods = options.methods?.join(", ") ||
       "GET, POST, PUT, DELETE, PATCH, OPTIONS";
@@ -68,16 +68,19 @@ export const requestId = (opts?: {
   headerName?: string;
   storeKey?: string;
   generator?: () => string;
-}): XerusMiddleware<any> => {
+}): XerusMiddleware => {
   const headerName = opts?.headerName ?? "X-Request-Id";
   const storeKey = opts?.storeKey ?? "requestId";
   const gen = opts?.generator ?? (() => crypto.randomUUID());
-
-  return new Middleware<any>(async (c, next) => {
+  
+  return new Middleware(async (c, next) => {
     const incoming = c.getHeader(headerName) ||
       c.getHeader(headerName.toLowerCase());
     const id = incoming && incoming.length > 0 ? incoming : gen();
-    (c.data as any)[storeKey] = id;
+    
+    // REMOVED: (c.data as any) cast no longer strictly needed if data is Record<string,any>
+    // but keeping it safe is fine too.
+    c.data[storeKey] = id;
     c.setHeader(headerName, id);
     await next();
   });
@@ -88,7 +91,7 @@ export const rateLimit = (opts: {
   max: number;
   key?: (c: any) => string;
   message?: string;
-}): XerusMiddleware<any> => {
+}): XerusMiddleware => {
   const windowMs = opts.windowMs;
   const max = opts.max;
   const message = opts.message ?? "Rate limit exceeded";
@@ -97,18 +100,17 @@ export const rateLimit = (opts: {
   type Bucket = { count: number; resetAt: number };
   const buckets = new Map<string, Bucket>();
 
-  return new Middleware<any>(async (c, next) => {
+  return new Middleware(async (c, next) => {
     const now = Date.now();
     const key = keyFn(c);
-
     let b = buckets.get(key);
+
     if (!b || now >= b.resetAt) {
       b = { count: 0, resetAt: now + windowMs };
       buckets.set(key, b);
     }
 
     b.count += 1;
-
     const remaining = Math.max(0, max - b.count);
     const retryAfterSec = Math.max(0, Math.ceil((b.resetAt - now) / 1000));
 
@@ -134,7 +136,7 @@ export const csrf = (opts?: {
   path?: string;
   ignoreMethods?: string[];
   ensureCookieOnSafeMethods?: boolean;
-}): XerusMiddleware<any> => {
+}): XerusMiddleware => {
   const cookieName = opts?.cookieName ?? "csrf_token";
   const headerName = opts?.headerName ?? "x-csrf-token";
   const path = opts?.path ?? "/";
@@ -145,10 +147,9 @@ export const csrf = (opts?: {
     ),
   );
   const ensureCookieOnSafeMethods = opts?.ensureCookieOnSafeMethods ?? true;
-
   const gen = () => crypto.randomUUID().replace(/-/g, "");
 
-  return new Middleware<any>(async (c, next) => {
+  return new Middleware(async (c, next) => {
     const method = c.method.toUpperCase();
     const existing = c.getCookie(cookieName);
 
@@ -161,9 +162,9 @@ export const csrf = (opts?: {
           secure: opts?.secureCookie,
           sameSite,
         });
-        (c.data as any).csrfToken = token;
+        c.data.csrfToken = token;
       } else if (existing) {
-        (c.data as any).csrfToken = existing;
+        c.data.csrfToken = existing;
       }
       await next();
       return;
@@ -180,8 +181,7 @@ export const csrf = (opts?: {
       });
       return;
     }
-
-    (c.data as any).csrfToken = cookieToken;
+    c.data.csrfToken = cookieToken;
     await next();
   });
 };
@@ -189,13 +189,12 @@ export const csrf = (opts?: {
 export const timeout = (
   ms: number,
   opts?: { message?: string },
-): XerusMiddleware<any> => {
+): XerusMiddleware => {
   const detail = opts?.message ?? `Request timed out after ${ms}ms`;
   const TIMEOUT = Symbol("XERUS_TIMEOUT");
 
-  return new Middleware<any>(async (c, next) => {
+  return new Middleware(async (c, next) => {
     let timer: any = null;
-
     const downstream = (async () => {
       await next();
     })().catch(() => {});
@@ -209,10 +208,10 @@ export const timeout = (
         downstream.then(() => "DOWNSTREAM" as const),
         timeoutPromise,
       ]);
+
       if (winner !== TIMEOUT) return;
-
-      (c.data as any).__timeoutSent = true;
-
+      
+      c.data.__timeoutSent = true;
       if (!c.isDone) {
         c.res.setStatus(504);
         c.res.setHeader("Content-Type", "application/json");
@@ -223,8 +222,7 @@ export const timeout = (
         );
         c.finalize();
       }
-
-      (c.data as any).__holdRelease = downstream;
+      c.data.__holdRelease = downstream;
       return;
     } finally {
       if (timer) clearTimeout(timer);

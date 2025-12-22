@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-import type { TestStore } from "../TestStore";
+// import type { TestStore } from "../TestStore"; // Not needed for types anymore
 import type { XerusMiddleware } from "../../src/Middleware";
 import type { AnyContext } from "../../src/MiddlewareFn";
 import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
@@ -18,6 +18,7 @@ class MwOrderLogger implements XerusMiddleware {
     this.name = name;
   }
 
+  // Removed <AnyContext> generic
   async execute(c: AnyContext, next: MiddlewareNextFn) {
     const existing = c.getResHeader("X-Order") || "";
     // Log "In"
@@ -32,6 +33,7 @@ class MwOrderLogger implements XerusMiddleware {
 }
 
 class MwShortCircuit implements XerusMiddleware {
+  // Removed <AnyContext> generic
   async execute(c: AnyContext, next: MiddlewareNextFn) {
     // We do NOT call next(), stopping the chain here.
     c.setStatus(200).text("Intercepted by Middleware");
@@ -41,8 +43,10 @@ class MwShortCircuit implements XerusMiddleware {
 export const treasureKey = "secretKey" as const;
 export const treasureValue = "secretValue";
 
-class MwTreasure implements XerusMiddleware<TestStore> {
-  async execute(c: AnyContext<TestStore>, next: MiddlewareNextFn) {
+// Removed <TestStore> generic
+class MwTreasure implements XerusMiddleware {
+  // Removed <TestStore> generic
+  async execute(c: AnyContext, next: MiddlewareNextFn) {
     c.setStore(treasureKey, treasureValue);
     await next();
   }
@@ -52,49 +56,53 @@ class MwTreasure implements XerusMiddleware<TestStore> {
 // ✅ ROUTES
 // -------------------------------------------------------------------------
 
-class OrderRoute extends XerusRoute<TestStore> {
+// Removed <TestStore> generic
+class OrderRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/order";
 
   onMount() {
-    // ✅ FIX: Use 'new' to instantiate the classes
     this.use(new MwOrderLogger("A"), new MwOrderLogger("B"));
   }
 
-  async handle(c: HTTPContext<TestStore>) {
+  // Removed <TestStore> generic
+  async handle(c: HTTPContext) {
     c.json({ message: "Handler reached" });
   }
 }
 
-class ShortRoute extends XerusRoute<TestStore> {
+// Removed <TestStore> generic
+class ShortRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/short-circuit";
 
   onMount() {
-    // ✅ FIX: Use 'new' to instantiate the class
     this.use(new MwShortCircuit());
   }
 
-  async handle(c: HTTPContext<TestStore>) {
+  // Removed <TestStore> generic
+  async handle(c: HTTPContext) {
     c.text("This should never be seen");
   }
 }
 
-class StoreRoute extends XerusRoute<TestStore> {
+// Removed <TestStore> generic
+class StoreRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/store";
 
   onMount() {
-    // ✅ FIX: Use 'new' to instantiate the class
     this.use(new MwTreasure());
   }
 
-  async handle(c: HTTPContext<TestStore>) {
+  // Removed <TestStore> generic
+  async handle(c: HTTPContext) {
     const value = c.getStore(treasureKey);
     c.json({ storedValue: value });
   }
 }
 
-export function middlewares(app: Xerus<TestStore>) {
+// Removed <TestStore> generic
+export function middlewares(app: Xerus) {
   app.mount(OrderRoute, ShortRoute, StoreRoute);
 }

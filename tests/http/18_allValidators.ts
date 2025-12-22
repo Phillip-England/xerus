@@ -135,7 +135,7 @@ class AllValidatorsRoute extends XerusRoute {
   }
 }
 
-class WsShowcaseRoute extends XerusRoute<any> {
+class WsShowcaseRoute extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/showcase/ws";
 

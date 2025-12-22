@@ -1,11 +1,11 @@
 import type { MiddlewareNextFn } from "./MiddlewareNextFn";
 import type { HTTPContext } from "./HTTPContext";
 
-export type AnyContext<T extends Record<string, any> = Record<string, any>> =
-  HTTPContext<T>;
+// REMOVED: <T>
+export type AnyContext = HTTPContext;
 
-export type MiddlewareFn<T extends Record<string, any> = Record<string, any>> =
-  (
-    c: AnyContext<T>,
-    next: MiddlewareNextFn,
-  ) => Promise<void>;
+// REMOVED: <T>
+export type MiddlewareFn = (
+  c: AnyContext,
+  next: MiddlewareNextFn,
+) => Promise<void>;

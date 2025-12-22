@@ -3,6 +3,7 @@ import type { ValidationSource } from "./ValidationSource";
 import type { TypeValidator } from "./TypeValidator";
 
 type Ctor<T> = new (...args: any[]) => T;
+
 const XERUS_FIELD = Symbol.for("xerus:routefield");
 
 export type RouteFieldKind = "validator" | "inject";
@@ -10,7 +11,8 @@ export type AnyRouteField = RouteFieldValidator<any> | RouteFieldInject<any>;
 
 export interface InjectableStore {
   storeKey?: string;
-  init?(c: HTTPContext<any>): Promise<void>;
+  // CHANGED: Removed <any>
+  init?(c: HTTPContext): Promise<void>;
 }
 
 export class RouteFieldValidator<T extends TypeValidator = any> {
