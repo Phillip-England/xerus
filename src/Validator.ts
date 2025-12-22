@@ -12,30 +12,18 @@ async function readSource(c: HTTPContext, source: ValidationSource): Promise<any
   switch (source.kind) {
     case "JSON":
       return await c.parseBody(BodyType.JSON);
-
     case "FORM": {
-      // Narrow formMode so TS can select the correct overload.
       const mode = source.formMode ?? "last";
-
-      if (mode === "multi") {
-        return await c.parseBody(BodyType.FORM, { formMode: "multi" });
-      }
-      if (mode === "params") {
-        return await c.parseBody(BodyType.FORM, { formMode: "params" });
-      }
-      // "last" (or undefined) matches the "last" overload
+      if (mode === "multi") return await c.parseBody(BodyType.FORM, { formMode: "multi" });
+      if (mode === "params") return await c.parseBody(BodyType.FORM, { formMode: "params" });
       return await c.parseBody(BodyType.FORM, { formMode: "last" });
     }
-
     case "QUERY":
       return source.key ? c.query(source.key, "") : c.queries;
-
     case "PARAM":
       return source.key ? c.getParam(source.key, "") : c.params;
-
     case "WSMESSAGE":
       return c._wsMessage;
-
     case "CUSTOM":
       return await source.provider(c);
   }
@@ -52,20 +40,16 @@ export class Validator<T extends TypeValidator = any> {
     this.storeKey = storeKey ?? Type.name;
   }
 
-  static from<T extends TypeValidator>(
-    source: ValidationSource,
-    Type: Ctor<T>,
-    storeKey?: string,
-  ): Validator<T> {
+  static from<T extends TypeValidator>(source: ValidationSource, Type: Ctor<T>, storeKey?: string): Validator<T> {
     return new Validator(source, Type, storeKey);
   }
 
   asMiddleware(): Middleware<any> {
-    return new Middleware<any>(async (c, next) => {
+    return new Middleware<any>(async (c: HTTPContext<any>, next) => {
       try {
         const raw = await readSource(c, this.source);
-
         const instance = new this.Type(raw);
+
         if (typeof (instance as any)?.validate !== "function") {
           throw new SystemErr(
             SystemErrCode.VALIDATION_FAILED,
@@ -73,11 +57,9 @@ export class Validator<T extends TypeValidator = any> {
           );
         }
 
-        // If this is a WS request, allow the validator to access the WSContext
-        const ctxToPass = c._wsContext ?? c;
-        await instance.validate(ctxToPass);
-
+        await instance.validate(c);
         (c.data as any)[this.storeKey] = instance;
+
         await next();
       } catch (e: any) {
         if (e instanceof SystemErr) throw e;

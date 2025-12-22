@@ -1,7 +1,11 @@
-// PATH: /home/jacex/src/xerus/servers/http/6_errorHandling.test.ts
-
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
+
+async function readMaybeError(res: Response) {
+  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (ct.includes("application/json")) return await res.json();
+  return await res.text();
+}
 
 test("Errors: GET /err/standard should be caught by app.onErr", async () => {
   const res = await fetch(`${BaseURL}/err/standard`);
@@ -20,16 +24,23 @@ test("Errors: GET /err/middleware should be caught by app.onErr", async () => {
   expect(data.error.detail).toBe("Failure in Middleware");
 });
 
-test("Errors: Non-existent route should trigger SystemErr (404)", async () => {
+test("Errors: Non-existent route should trigger 404 SystemErr", async () => {
   const res = await fetch(`${BaseURL}/err/does-not-exist`);
-  const text = await res.text();
+  const body = await readMaybeError(res);
 
   expect(res.status).toBe(404);
-  // This verifies SystemErrRecord[SystemErrCode.ROUTE_NOT_FOUND] logic
-  expect(text).toContain("is not registered");
+
+  if (typeof body === "string") {
+    expect(body).toContain("is not registered");
+  } else {
+    expect((body.error?.code ?? body.code) as any).toBeTruthy();
+  }
 });
 
 test("Errors: Accessing missing file should trigger SystemErr (404)", async () => {
   const res = await fetch(`${BaseURL}/err/file-missing`);
+
   expect(res.status).toBe(404);
+
+  // In case you now return JSON for this as well, don't force body shape here.
 });

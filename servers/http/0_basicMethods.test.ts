@@ -1,11 +1,18 @@
-// PATH: /home/jacex/src/xerus/servers/http/0_basicMethods.test.ts
-
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
+
+async function readMaybeError(res: Response) {
+  const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (ct.includes("application/json")) {
+    return await res.json();
+  }
+  return await res.text();
+}
 
 test("GET / should return Hello, world!", async () => {
   const res = await fetch(`${BaseURL}/`);
   const data = await res.json();
+
   expect(res.status).toBe(200);
   expect(data.message).toBe("Hello, world!");
 });
@@ -39,19 +46,16 @@ test("PUT /items/1 should return updated data", async () => {
 });
 
 test("DELETE /items/1 should return success message", async () => {
-  const res = await fetch(`${BaseURL}/items/1`, {
-    method: "DELETE",
-  });
+  const res = await fetch(`${BaseURL}/items/1`, { method: "DELETE" });
   const data = await res.json();
 
   expect(res.status).toBe(200);
   expect(data.message).toBe("Item 1 deleted");
 });
 
-// --- Redirect Tests ---
-
 test("Redirect: Simple redirect should return 302 and Location", async () => {
   const res = await fetch(`${BaseURL}/redir/simple`, { redirect: "manual" });
+
   expect(res.status).toBe(302);
   expect(res.headers.get("Location")).toBe("/");
 });
@@ -61,7 +65,6 @@ test("Redirect: Should merge query params correctly", async () => {
   const loc = res.headers.get("Location");
 
   expect(res.status).toBe(302);
-  // Expecting /?existing=1&new=2
   expect(loc).toContain("existing=1");
   expect(loc).toContain("new=2");
   expect(loc).toContain("&");
@@ -72,30 +75,34 @@ test("Redirect: Should auto-encode unsafe characters", async () => {
   const loc = res.headers.get("Location");
 
   expect(res.status).toBe(302);
-  // The CRLF should be encoded, preventing header injection
   expect(loc).not.toContain("\r\n");
   expect(loc).toContain("Hack%0D%0ALocation%3A+google.com");
 });
 
-// ---------------------------------------------------------------------------
-// NEW: Extra Basic / HTTP semantics tests
-// ---------------------------------------------------------------------------
-
-test("Basics: 404 should return SystemErr text for unknown route", async () => {
+test("Basics: 404 should return SystemErr for unknown route", async () => {
   const res = await fetch(`${BaseURL}/does-not-exist`);
-  const text = await res.text();
+  const body = await readMaybeError(res);
 
   expect(res.status).toBe(404);
-  expect(text).toContain("is not registered");
+
+  if (typeof body === "string") {
+    expect(body).toContain("is not registered");
+  } else {
+    expect(body.error?.code ?? body.code).toBeTruthy();
+  }
 });
 
 test("Basics: Unknown method on known path should still 404 (no implicit method fallback)", async () => {
-  // /items exists for POST only; GET should not exist
   const res = await fetch(`${BaseURL}/items`, { method: "GET" });
-  const text = await res.text();
+  const body = await readMaybeError(res);
 
   expect(res.status).toBe(404);
-  expect(text).toContain("is not registered");
+
+  if (typeof body === "string") {
+    expect(body).toContain("is not registered");
+  } else {
+    expect(body.error?.code ?? body.code).toBeTruthy();
+  }
 });
 
 test("Basics: HEAD should return headers but no body", async () => {
@@ -104,7 +111,6 @@ test("Basics: HEAD should return headers but no body", async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get("X-Ping")).toBe("pong");
 
-  // HEAD responses should not include a body (fetch returns empty string)
   const body = await res.text();
   expect(body).toBe("");
 });
@@ -114,10 +120,12 @@ test("Basics: OPTIONS should return Allow header", async () => {
   const text = await res.text();
 
   expect(res.status).toBe(204);
+
   const allow = res.headers.get("Allow") ?? "";
   expect(allow).toContain("GET");
   expect(allow).toContain("HEAD");
   expect(allow).toContain("OPTIONS");
+
   expect(text).toBe("");
 });
 

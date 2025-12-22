@@ -15,11 +15,13 @@ import type { TypeValidator } from "../../src/TypeValidator";
 // ---------------------------------------------------------
 export class QueryFilter implements TypeValidator {
   status: string;
+
   constructor(raw: any) {
-    // raw is the entire query object if key is not specified
-    this.status = raw.status || "active";
+    // Source.QUERY() should provide a key/value object-like shape
+    this.status = raw?.status || "active";
   }
-  async validate(c: HTTPContext) {
+
+  async validate(_c: HTTPContext) {
     if (!["active", "archived"].includes(this.status)) {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid status query");
     }
@@ -31,11 +33,13 @@ export class QueryFilter implements TypeValidator {
 // ---------------------------------------------------------
 export class UserIdParam implements TypeValidator {
   id: number;
+
   constructor(raw: any) {
     this.id = Number(raw);
   }
-  async validate(c: HTTPContext) {
-    if (isNaN(this.id) || this.id <= 0) {
+
+  async validate(_c: HTTPContext) {
+    if (!Number.isFinite(this.id) || this.id <= 0) {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid User ID path param");
     }
   }
@@ -46,10 +50,12 @@ export class UserIdParam implements TypeValidator {
 // ---------------------------------------------------------
 export class ApiKeyHeader implements TypeValidator {
   key: string;
+
   constructor(raw: any) {
-    this.key = raw || "";
+    this.key = String(raw ?? "");
   }
-  async validate(c: HTTPContext) {
+
+  async validate(_c: HTTPContext) {
     if (this.key !== "xerus-secret-123") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid API Key Header");
     }
@@ -66,15 +72,19 @@ const userSchema = z.object({
 
 export class CreateUserJson implements TypeValidator {
   data: z.infer<typeof userSchema>;
+
   constructor(raw: any) {
     this.data = raw;
   }
-  async validate(c: HTTPContext) {
-    // Zod throws errors, so we catch and rethrow as SystemErr for cleaner output
+
+  async validate(_c: HTTPContext) {
     try {
-      await userSchema.parseAsync(this.data);
+      this.data = await userSchema.parseAsync(this.data);
     } catch (e: any) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, e.issues?.[0]?.message || "Invalid JSON");
+      throw new SystemErr(
+        SystemErrCode.VALIDATION_FAILED,
+        e?.issues?.[0]?.message || "Invalid JSON",
+      );
     }
   }
 }
@@ -84,10 +94,12 @@ export class CreateUserJson implements TypeValidator {
 // ---------------------------------------------------------
 export class IpValidator implements TypeValidator {
   ip: string;
+
   constructor(raw: any) {
-    this.ip = raw;
+    this.ip = String(raw ?? "unknown");
   }
-  async validate(c: HTTPContext) {
+
+  async validate(_c: HTTPContext) {
     if (this.ip === "unknown") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Could not determine IP");
     }
@@ -99,10 +111,12 @@ export class IpValidator implements TypeValidator {
 // ---------------------------------------------------------
 export class WsPingValidator implements TypeValidator {
   content: string;
+
   constructor(raw: any) {
     this.content = String(raw);
   }
-  async validate(c: HTTPContext) {
+
+  async validate(_c: HTTPContext) {
     if (this.content !== "PING") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected PING message");
     }
@@ -115,7 +129,7 @@ export class WsPingValidator implements TypeValidator {
 
 class AllValidatorsRoute extends XerusRoute {
   method = Method.POST;
-  path = "/showcase/all/:id"; // :id corresponds to Source.PARAM("id")
+  path = "/showcase/all/:id";
 
   validators = [
     Validator.from(Source.PARAM("id"), UserIdParam),
@@ -126,39 +140,38 @@ class AllValidatorsRoute extends XerusRoute {
   ];
 
   async handle(c: HTTPContext) {
-    // Resolve all data with full type safety
-    const { id } = c.resolve(UserIdParam);
-    const { status } = c.resolve(QueryFilter);
-    const { key } = c.resolve(ApiKeyHeader);
-    const { data } = c.resolve(CreateUserJson);
-    const { ip } = c.resolve(IpValidator);
+    // ✅ New model: pull validated instances from `data`
+    const userId = c.resolve(UserIdParam) as UserIdParam;
+    const query = c.resolve(QueryFilter) as QueryFilter;
+    const apiKey = c.resolve(ApiKeyHeader) as ApiKeyHeader;
+    const body = c.resolve(CreateUserJson) as CreateUserJson;
+    const ip = c.resolve(IpValidator) as IpValidator;
 
     c.json({
       success: true,
       resolved: {
-        id,
-        status,
-        key_masked: key.slice(0, 5) + "...",
-        username: data.username,
-        role: data.role,
-        ip
-      }
+        id: userId.id,
+        status: query.status,
+        key_masked: apiKey.key.slice(0, 5) + "...",
+        username: body.data.username,
+        role: body.data.role,
+        ip: ip.ip,
+      },
     });
   }
 }
 
-class WsShowcaseRoute extends XerusRoute<any, WSContext> {
+class WsShowcaseRoute extends XerusRoute<any> {
   method = Method.WS_MESSAGE;
   path = "/showcase/ws";
 
-  validators = [
-    Validator.from(Source.WSMESSAGE(), WsPingValidator)
-  ];
+  validators = [Validator.from(Source.WSMESSAGE(), WsPingValidator)];
 
-  async handle(c: WSContext) {
-    // Access validated message
-    const msg = c.http.resolve(WsPingValidator);
-    c.ws.send(`PONG-${msg.content}`);
+  async handle(c: HTTPContext) {
+    let ws = c.ws()
+    // ✅ New model: validated data comes from `data` (not c.http.resolve)
+    const msg = c.resolve(WsPingValidator) as WsPingValidator;
+    ws.send(`PONG-${msg.content}`);
   }
 }
 

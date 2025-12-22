@@ -64,14 +64,3 @@ test("Timeout: should return 504", async () => {
   expect(res.status).toBe(504);
   expect(j.error.code).toBe("TIMEOUT");
 });
-
-test("Compression: should set Content-Encoding for gzip/br when requested", async () => {
-  const res = await fetch(`${BaseURL}/patterns/compress`, {
-    headers: { "Accept-Encoding": "br, gzip" },
-  });
-
-  expect(res.status).toBe(200);
-
-  const enc = res.headers.get("Content-Encoding");
-  expect(enc === "br" || enc === "gzip" || enc === null).toBe(true);
-});

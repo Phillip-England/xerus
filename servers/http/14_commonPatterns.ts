@@ -3,7 +3,7 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
 import type { TestStore } from "../TestStore";
-import { requestId, rateLimit, csrf, timeout, compress } from "../../src/Middleware";
+import { requestId, rateLimit, csrf, timeout } from "../../src/Middleware";
 
 const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
 
@@ -64,17 +64,6 @@ class TimeoutRoute extends XerusRoute<TestStore> {
   }
 }
 
-class CompressRoute extends XerusRoute<TestStore> {
-  method = Method.GET;
-  path = "/patterns/compress";
-  onMount() {
-    this.use(compress());
-  }
-  async handle(c: HTTPContext<TestStore>) {
-    c.text("x".repeat(5000));
-  }
-}
-
 export function commonPatterns(app: Xerus<TestStore>) {
   app.mount(
     RequestIdRoute,
@@ -82,6 +71,5 @@ export function commonPatterns(app: Xerus<TestStore>) {
     CsrfGetRoute,
     CsrfPostRoute,
     TimeoutRoute,
-    CompressRoute,
   );
 }

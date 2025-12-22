@@ -1,6 +1,7 @@
 import type { Server, ServerWebSocket } from "bun";
 import { TrieNode } from "./TrieNode";
 import { Middleware } from "./Middleware";
+import type { XerusMiddleware } from "./Middleware";
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPHandlerFunc, HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { SystemErr } from "./SystemErr";
@@ -12,10 +13,14 @@ import { XerusRoute } from "./XerusRoute";
 import { Method } from "./Method";
 import { WSContext } from "./WSContext";
 import type { Validator } from "./Validator";
+import type { TypeValidator } from "./TypeValidator";
+
+type AnyCtx<T extends Record<string, any>> = HTTPContext<T>;
+type MwLike<T extends Record<string, any>> = XerusMiddleware<T> | (new () => XerusMiddleware<T>);
 
 interface RouteBlueprint {
-  Ctor: new () => XerusRoute<any, any>;
-  middlewares: Middleware<any>[];
+  Ctor: new () => XerusRoute<any>;
+  middlewares: XerusMiddleware<any>[];
   errHandler?: HTTPErrorHandlerFunc;
   wsChain?: {
     open?: RouteBlueprint;
@@ -25,14 +30,23 @@ interface RouteBlueprint {
   };
 }
 
+function isCtor(x: any): x is new () => any {
+  return typeof x === "function";
+}
+
 export class Xerus<T extends Record<string, any> = Record<string, any>> {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
-  private globalMiddlewares: Middleware<T>[] = [];
+
+  private preMiddlewares: XerusMiddleware<T>[] = []; // runs before validators
+  private globalMiddlewares: XerusMiddleware<T>[] = []; // runs after validators
+
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
+
   private resolvedRoutes = new Map<string, { blueprint?: RouteBlueprint; params: Record<string, string> }>();
   private readonly MAX_CACHE_SIZE = 500;
+
   private contextPool: ObjectPool<HTTPContext<T>>;
 
   constructor() {
@@ -43,27 +57,52 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     this.contextPool.resize(size);
   }
 
-  mount(...routeCtors: (new () => XerusRoute<T, any>)[] | any[]) {
+  private normalizeMiddlewares(list: MwLike<T>[]): XerusMiddleware<T>[] {
+    return list.map((m) => (isCtor(m) ? new (m as any)() : (m as XerusMiddleware<T>)));
+  }
+
+  usePre(...m: MwLike<T>[]) {
+    this.preMiddlewares.push(...this.normalizeMiddlewares(m));
+  }
+
+  use(...m: MwLike<T>[]) {
+    this.globalMiddlewares.push(...this.normalizeMiddlewares(m));
+  }
+
+  inject(...injectorCtors: Array<new () => TypeValidator>) {
+    for (const Ctor of injectorCtors) {
+      this.usePre(
+        new Middleware<any>(async (http: HTTPContext<T>, next) => {
+          const instance = new Ctor();
+          await instance.validate(http as any);
+          (http.data as any)[Ctor.name] = instance;
+          await next();
+        }),
+      );
+    }
+  }
+
+  mount(...routeCtors: (new () => XerusRoute<T>)[] | any[]) {
     for (const Ctor of routeCtors) {
       const instance = new Ctor();
       instance.onMount();
+
       const blueprint: RouteBlueprint = {
         Ctor,
         middlewares: this.globalMiddlewares.concat(instance._middlewares),
         errHandler: instance._errHandler,
       };
+
       this.register(instance.method, instance.path, blueprint);
     }
   }
 
-  use(...m: Middleware<T>[]) {
-    this.globalMiddlewares.push(...m);
-  }
-
-  onNotFound(h: HTTPHandlerFunc, ...m: Middleware<T>[]) {
+  onNotFound(h: HTTPHandlerFunc, ...m: MwLike<T>[]) {
     this.notFoundHandler = async (c) => {
-      const chain = this.globalMiddlewares.concat(m);
-      await this.runMiddlewareChain(chain, c as HTTPContext<T>, async () => {
+      const chain = this.preMiddlewares
+        .concat(this.globalMiddlewares)
+        .concat(this.normalizeMiddlewares(m));
+      await this.runMiddlewareChain(chain, c as any, async () => {
         await h(c);
       });
     };
@@ -80,10 +119,12 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     class EmbedRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix + "/*";
+
       async handle(c: HTTPContext) {
         const lookupPath = c.path.substring(pathPrefix.length);
         const file = embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
         if (!file) throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
+
         c.setHeader("Content-Type", file.type);
         let bodyData = file.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -91,14 +132,17 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         c.finalize();
       }
     }
+
     this.mount(EmbedRoute);
   }
 
   static(pathPrefix: string, rootDir: string) {
     const absRoot = resolve(rootDir);
+
     class StaticRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
+
       async handle(c: HTTPContext) {
         const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
@@ -107,15 +151,18 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
+
         await c.file(finalPath);
       }
     }
+
     this.mount(StaticRoute);
   }
 
   private register(method: string, path: string, blueprint: RouteBlueprint) {
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
+
     for (const part of parts) {
       if (part.startsWith(":")) {
         node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
@@ -129,6 +176,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     const isWS = [Method.WS_OPEN, Method.WS_MESSAGE, Method.WS_CLOSE, Method.WS_DRAIN].includes(method as Method);
+
     if (isWS) {
       if (!node.wsHandler) {
         (node as any).wsHandler = { open: undefined, message: undefined, close: undefined, drain: undefined };
@@ -156,6 +204,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     (node.handlers as any)[method] = blueprint;
+
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -181,6 +230,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     const part = parts[index];
+
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
@@ -225,24 +275,30 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
+
     this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
 
   private async runMiddlewareChain(
-    middlewares: Middleware<T>[],
-    context: HTTPContext<T>,
+    middlewares: XerusMiddleware<T>[],
+    context: AnyCtx<T>,
     finalHandler: () => Promise<void>,
   ) {
     let index = -1;
+    const httpCtx = context;
+
     const dispatch = async (i: number): Promise<void> => {
       if (i <= index) throw new Error("next() called multiple times");
       index = i;
+
       if (i === middlewares.length) {
         await finalHandler();
         return;
       }
+
       const mw = middlewares[i];
+
       let nextCalled = false;
       let nextFinished = false;
 
@@ -255,26 +311,27 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         }
       };
 
-      await mw.execute(context, nextWrapper);
+      await mw.execute(context as any, nextWrapper);
 
-      if (nextCalled && !nextFinished && !context.isDone) {
-        (context as any).__tainted = true;
+      if (nextCalled && !nextFinished && !httpCtx.isDone) {
+        (httpCtx as any).__tainted = true;
         throw new SystemErr(SystemErrCode.MIDDLEWARE_ERROR, `Middleware at index ${i} did not await next()`);
       }
     };
+
     await dispatch(0);
   }
 
-  private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext<T> | WSContext<T>, isWS: boolean) {
-    const httpCtx = isWS ? (context as WSContext<T>).http : (context as HTTPContext<T>);
+  private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext<T>) {
+    const httpCtx = context;
     const routeInstance = new blueprint.Ctor();
-    const validatorChain: Middleware<any>[] = (routeInstance.validators ?? []).map((v: Validator<any>) =>
-      v.asMiddleware(),
-    );
 
-    const preHandleMw = new Middleware<any>(async (_c, next) => {
+    const validatorChain: XerusMiddleware<any>[] =
+      (routeInstance.validators ?? []).map((v: Validator<any>) => v.asMiddleware());
+
+    const preHandleMw: XerusMiddleware<any> = new Middleware<any>(async (_c, next) => {
       if (typeof (routeInstance as any).validate === "function") {
-        await (routeInstance as any).validate(context);
+        await (routeInstance as any).validate(context as any);
       }
       await routeInstance.preHandle(context as any);
       await next();
@@ -286,10 +343,13 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       await routeInstance.postHandle(context as any);
     };
 
-    const fullChain = validatorChain.concat([preHandleMw]).concat(blueprint.middlewares);
+    const fullChain = this.preMiddlewares
+      .concat(validatorChain)
+      .concat([preHandleMw])
+      .concat(blueprint.middlewares);
 
     try {
-      await this.runMiddlewareChain(fullChain, httpCtx, finalHandler);
+      await this.runMiddlewareChain(fullChain, context, finalHandler);
     } finally {
       await routeInstance.onFinally(context as any);
     }
@@ -299,6 +359,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
+
     const { blueprint, params } = this.find(method, path);
 
     if (
@@ -314,6 +375,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         (context as any)._wsBlueprints = blueprint;
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
+
         context.clearResponse();
         this.contextPool.release(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
@@ -324,11 +386,13 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
     }
 
     let context: HTTPContext<T> | undefined;
+
     try {
       context = this.contextPool.acquire();
       context.reset(req, params);
+
       if (blueprint) {
-        await this.executeRoute(blueprint, context, false);
+        await this.executeRoute(blueprint, context);
         const resp = context.res.send();
         context.markSent();
         return resp;
@@ -340,6 +404,7 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         context.markSent();
         return resp;
       }
+
       throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`);
     } catch (e: any) {
       const c = context || new HTTPContext<T>();
@@ -372,15 +437,18 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
 
       console.warn(`[XERUS WARNING] Uncaught error on ${method} ${path}`);
       console.error(e);
+
       c.errorJSON(500, SystemErrCode.INTERNAL_SERVER_ERR, "Internal Server Error", {
         detail: e?.message ?? "Unknown",
       });
+
       const resp = c.res.send();
       c.markSent();
       return resp;
     } finally {
       if (context) {
         if ((context as any).__tainted) {
+          // do not reuse tainted contexts
         } else {
           const hold = (context.data as any)?.__holdRelease;
           if (hold && typeof (hold as any).then === "function") {
@@ -420,7 +488,6 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
       const httpCtx = ws.data as HTTPContext<T>;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
-
       if (!blueprint) return;
 
       if (eventName === "message") {
@@ -429,16 +496,16 @@ export class Xerus<T extends Record<string, any> = Record<string, any>> {
         httpCtx._wsMessage = null;
       }
 
+      // Attach WSContext onto HTTPContext so routes can use `c.ws()`
       let wsCtx: WSContext<T>;
       if (eventName === "message") wsCtx = new WSContext<T>(ws, httpCtx, { message: args[0] });
       else if (eventName === "close") wsCtx = new WSContext<T>(ws, httpCtx, { code: args[0], reason: args[1] });
       else wsCtx = new WSContext<T>(ws, httpCtx);
 
-      // Inject WSContext into HTTPContext for Validators
       httpCtx._wsContext = wsCtx;
 
       try {
-        await app.executeRoute(blueprint, wsCtx, true);
+        await app.executeRoute(blueprint, httpCtx);
       } catch (e: any) {
         wsCloseOnError(ws, e);
       } finally {

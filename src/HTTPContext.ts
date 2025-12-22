@@ -4,8 +4,10 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { ContextState } from "./ContextState";
 import type { CookieOptions } from "./CookieOptions";
+import type { WSContext } from "./WSContext";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
+
 export type ParsedFormBodyLast = Record<string, string>;
 export type ParsedFormBodyMulti = Record<string, string | string[]>;
 export type ParseBodyOptions = {
@@ -16,10 +18,12 @@ export type ParseBodyOptions = {
 export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   req!: Request;
   res: MutResponse;
+
   private _url: URL | null = null;
   path: string = "/";
   method: string = "GET";
   route: string = "";
+
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
 
@@ -28,16 +32,46 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private _parsedBodyMode: ParsedBodyMode = "NONE";
 
   public _wsMessage: string | Buffer | null = null;
-  public _wsContext: any = null; // Holds WSContext during WS request lifecycle
+
+  /**
+   * Holds WSContext during WS request lifecycle (open/message/close/drain).
+   * Only set while inside Bun websocket callbacks.
+   */
+  public _wsContext: WSContext<T> | null = null;
 
   data: T = {} as T;
   private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
 
+  /**
+   * True after upgrade occurs (context is now owned by websocket lifecycle).
+   */
   public _isWS: boolean = false;
 
   constructor() {
     this.res = new MutResponse();
+  }
+
+  /**
+   * Returns true if we are currently executing inside a WS route lifecycle
+   * (open/message/close/drain) and a WSContext is available.
+   */
+  isWsRoute(): boolean {
+    return this._wsContext != null;
+  }
+
+  /**
+   * Returns the WSContext wrapper if available.
+   * Throws if called from a normal HTTP request handler/middleware.
+   */
+  ws(): WSContext<T> {
+    if (!this._wsContext) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "WebSocket context is not available. Are you calling c.ws() from a non-WS route/middleware?",
+      );
+    }
+    return this._wsContext;
   }
 
   resolve<V>(Type: new (...args: any[]) => V): V {
@@ -46,7 +80,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     if (val === undefined) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
-        `Resolved dependency '${key}' not found in context. Ensure the Validator is registered in the route.`,
+        `Resolved dependency '${key}' not found in context. Ensure the Validator/Injector is registered.`,
       );
     }
     return val as V;
@@ -56,14 +90,19 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this.req = req;
     this.res.reset();
     this._state = ContextState.OPEN;
+
     this._url = null;
     this._segments = null;
+
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
+
     this.err = undefined;
+
     this._wsMessage = null;
     this._wsContext = null;
+
     this.data = {} as T;
     this._isWS = false;
 
@@ -164,10 +203,13 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   }
 
   getClientIP(): string {
-    const xff = this.getHeader("x-forwarded-for") || this.getHeader("X-Forwarded-For");
+    const xff =
+      this.getHeader("x-forwarded-for") || this.getHeader("X-Forwarded-For");
     if (xff) return xff.split(",")[0].trim();
+
     const xrip = this.getHeader("x-real-ip") || this.getHeader("X-Real-IP");
     if (xrip) return xrip.trim();
+
     return "unknown";
   }
 
@@ -180,6 +222,7 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let status = 302;
     let finalLocation = path;
 
@@ -266,14 +309,19 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   private enforceStrictContentType(expectedType: BodyType, strict: boolean) {
     if (!strict) return;
     if (expectedType === BodyType.TEXT) return;
+
     const ct = this.contentType();
 
     if (expectedType === BodyType.JSON) {
       if (!ct.includes("application/json")) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Expected Content-Type application/json",
+        );
       }
       return;
     }
+
     if (expectedType === BodyType.FORM) {
       if (!ct.includes("application/x-www-form-urlencoded")) {
         throw new SystemErr(
@@ -283,9 +331,13 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       }
       return;
     }
+
     if (expectedType === BodyType.MULTIPART_FORM) {
       if (!ct.includes("multipart/form-data")) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type multipart/form-data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Expected Content-Type multipart/form-data",
+        );
       }
       return;
     }
@@ -324,17 +376,24 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
   async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
+
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
-    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
+    if (
+      expectedType === BodyType.JSON &&
+      this._body !== undefined &&
+      this._parsedBodyMode === "JSON"
+    ) {
       return this._body;
     }
 
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
-      (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")
+      (this._parsedBodyMode === "TEXT" ||
+        this._parsedBodyMode === "JSON" ||
+        this._parsedBodyMode === "FORM")
     ) {
       return this._rawBody;
     }
@@ -348,7 +407,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
           this._parsedBodyMode = "JSON";
           return parsed;
         } catch (err: any) {
-          throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+          throw new SystemErr(
+            SystemErrCode.BODY_PARSING_FAILED,
+            `JSON parsing failed: ${err.message}`,
+          );
         }
       }
 
@@ -357,8 +419,12 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         const mode = opts.formMode ?? "last";
         const params = new URLSearchParams(this._rawBody);
         if (mode === "params") return params;
+
         const parsed =
-          mode === "multi" ? this.parseFormMulti(this._rawBody) : this.parseFormLast(this._rawBody);
+          mode === "multi"
+            ? this.parseFormMulti(this._rawBody)
+            : this.parseFormLast(this._rawBody);
+
         this._body = parsed;
         this._parsedBodyMode = "FORM";
         return parsed;
@@ -407,7 +473,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
         this._parsedBodyMode = "JSON";
         return parsed;
       } catch (err: any) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          `JSON parsing failed: ${err.message}`,
+        );
       }
     }
 
@@ -415,7 +484,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
       if (mode === "params") return params;
-      const parsed = mode === "multi" ? this.parseFormMulti(text) : this.parseFormLast(text);
+
+      const parsed =
+        mode === "multi" ? this.parseFormMulti(text) : this.parseFormLast(text);
+
       this._body = parsed;
       this._parsedBodyMode = "FORM";
       return parsed;
@@ -448,7 +520,10 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     if (this._timedOut) return this;
     this.ensureConfigurable();
     if (/[\r\n]/.test(value)) {
-      throw new SystemErr(SystemErrCode.INTERNAL_SERVER_ERR, `Attempted to set invalid header "${name}".`);
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Attempted to set invalid header "${name}".`,
+      );
     }
     this.res.setHeader(name, value);
     return this;
@@ -526,11 +601,11 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let cookieString = `${name}=${encodeURIComponent(value)}`;
     options.path ??= "/";
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
-
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }

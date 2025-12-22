@@ -1,8 +1,6 @@
-// src/TrieNode.ts
-
 export type RouteBlueprint = {
   Ctor: new () => any; // XerusRoute ctor (kept loose here to avoid circular imports)
-  middlewares: any[];  // Middleware<any>[]
+  middlewares: any[];  // XerusMiddleware<any>[]
   errHandler?: any;    // HTTPErrorHandlerFunc
   wsChain?: {
     open?: RouteBlueprint;
@@ -13,10 +11,8 @@ export type RouteBlueprint = {
 };
 
 export class TrieNode {
-  // For HTTP methods (GET/POST/etc) store the RouteBlueprint you execute
   handlers: Record<string, RouteBlueprint> = {};
 
-  // For WebSocket (leaf) store the 4 WS event blueprints
   wsHandler?: {
     open?: RouteBlueprint;
     message?: RouteBlueprint;

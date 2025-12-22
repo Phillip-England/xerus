@@ -14,41 +14,45 @@ const closeSchema = z.object({
   reason: z.string(),
 });
 
-class LifecycleOpen extends XerusRoute<TestStore, WSContext<TestStore>> {
+class LifecycleOpen extends XerusRoute<HTTPContext<TestStore>> {
   method = Method.WS_OPEN;
   path = "/ws/lifecycle-validate";
 
-  async validate(c: WSContext<TestStore>) {
-    const client = c.http.getHeader("X-Client") || "";
+  async validate(c: HTTPContext<TestStore>) {
+    const client = c.getHeader("X-Client") || "";
     if (client.length === 0) throw new Error("Missing X-Client header");
     if (client !== "tester") throw new Error("Bad client header");
   }
 
-  async handle(c: WSContext<TestStore>) {
-    c.ws.send("open-ok");
+  async handle(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
+    ws.send("open-ok");
   }
 }
 
-class LifecycleMessage extends XerusRoute<TestStore, WSContext<TestStore>> {
+class LifecycleMessage extends XerusRoute<HTTPContext<TestStore>> {
   method = Method.WS_MESSAGE;
   path = "/ws/lifecycle-validate";
 
-  async handle(c: WSContext<TestStore>) {
+  async handle(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
     // Validation from OPEN must not leak into MESSAGE
-    c.ws.send("cleared");
+    ws.send("cleared");
   }
 }
 
-class LifecycleClose extends XerusRoute<TestStore, WSContext<TestStore>> {
+class LifecycleClose extends XerusRoute<HTTPContext<TestStore>> {
   method = Method.WS_CLOSE;
   path = "/ws/close-validate";
 
-  async validate(c: WSContext<TestStore>) {
-    closeSchema.parse({ code: c.code, reason: c.reason });
+  async validate(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
+    closeSchema.parse({ code:ws.code, reason:ws.reason });
   }
 
-  async handle(c: WSContext<TestStore>) {
-    lastClose = { code: c.code, reason: c.reason };
+  async handle(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
+    lastClose = { code:ws.code, reason:ws.reason };
     closeCount++;
   }
 }

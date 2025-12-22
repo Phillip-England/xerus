@@ -1,19 +1,28 @@
-import type { MiddlewareFn } from "./MiddlewareFn";
-import { HTTPContext } from "./HTTPContext";
+import type { MiddlewareFn, AnyContext } from "./MiddlewareFn";
+import type { MiddlewareNextFn } from "./MiddlewareNextFn";
 
-export class Middleware<T extends Record<string, any> = Record<string, any>> {
+export interface XerusMiddleware<
+  T extends Record<string, any> = Record<string, any>,
+  C extends AnyContext<T> = AnyContext<T>,
+> {
+  execute(c: C, next: MiddlewareNextFn): Promise<void>;
+}
+
+export class Middleware<T extends Record<string, any> = Record<string, any>>
+  implements XerusMiddleware<T, AnyContext<T>>
+{
   private callback: MiddlewareFn<T>;
 
   constructor(callback: MiddlewareFn<T>) {
     this.callback = callback;
   }
 
-  async execute(c: HTTPContext<T>, next: () => Promise<void>): Promise<void> {
+  async execute(c: AnyContext<T>, next: MiddlewareNextFn): Promise<void> {
     return this.callback(c, next);
   }
 }
 
-export const logger = new Middleware<any>(async (c, next) => {
+export const logger: XerusMiddleware<any> = new Middleware<any>(async (c, next) => {
   const start = performance.now();
   await next();
   const duration = performance.now() - start;
@@ -27,7 +36,7 @@ export interface CORSOptions {
   credentials?: boolean;
 }
 
-export const cors = (options: CORSOptions = {}) => {
+export const cors = (options: CORSOptions = {}): XerusMiddleware<any> => {
   return new Middleware<any>(async (c, next) => {
     let origin = options.origin || "*";
     const methods = options.methods?.join(", ") || "GET, POST, PUT, DELETE, PATCH, OPTIONS";
@@ -35,9 +44,7 @@ export const cors = (options: CORSOptions = {}) => {
 
     if (options.credentials) {
       const reqOrigin = c.getHeader("Origin");
-      if (origin === "*" && reqOrigin) {
-        origin = reqOrigin;
-      }
+      if (origin === "*" && reqOrigin) origin = reqOrigin;
       c.setHeader("Access-Control-Allow-Credentials", "true");
     }
 
@@ -58,7 +65,7 @@ export const requestId = (opts?: {
   headerName?: string;
   storeKey?: string;
   generator?: () => string;
-}) => {
+}): XerusMiddleware<any> => {
   const headerName = opts?.headerName ?? "X-Request-Id";
   const storeKey = opts?.storeKey ?? "requestId";
   const gen = opts?.generator ?? (() => crypto.randomUUID());
@@ -66,10 +73,8 @@ export const requestId = (opts?: {
   return new Middleware<any>(async (c, next) => {
     const incoming = c.getHeader(headerName) || c.getHeader(headerName.toLowerCase());
     const id = incoming && incoming.length > 0 ? incoming : gen();
-
     (c.data as any)[storeKey] = id;
     c.setHeader(headerName, id);
-
     await next();
   });
 };
@@ -77,13 +82,13 @@ export const requestId = (opts?: {
 export const rateLimit = (opts: {
   windowMs: number;
   max: number;
-  key?: (c: HTTPContext<any>) => string;
+  key?: (c: any) => string;
   message?: string;
-}) => {
+}): XerusMiddleware<any> => {
   const windowMs = opts.windowMs;
   const max = opts.max;
   const message = opts.message ?? "Rate limit exceeded";
-  const keyFn = opts.key ?? ((c: HTTPContext<any>) => c.getClientIP() ?? "unknown");
+  const keyFn = opts.key ?? ((c: any) => c.getClientIP() ?? "unknown");
 
   type Bucket = { count: number; resetAt: number };
   const buckets = new Map<string, Bucket>();
@@ -125,7 +130,7 @@ export const csrf = (opts?: {
   path?: string;
   ignoreMethods?: string[];
   ensureCookieOnSafeMethods?: boolean;
-}) => {
+}): XerusMiddleware<any> => {
   const cookieName = opts?.cookieName ?? "csrf_token";
   const headerName = opts?.headerName ?? "x-csrf-token";
   const path = opts?.path ?? "/";
@@ -169,19 +174,16 @@ export const csrf = (opts?: {
   });
 };
 
-export const timeout = (ms: number, opts?: { message?: string }) => {
+export const timeout = (ms: number, opts?: { message?: string }): XerusMiddleware<any> => {
   const detail = opts?.message ?? `Request timed out after ${ms}ms`;
   const TIMEOUT = Symbol("XERUS_TIMEOUT");
 
   return new Middleware<any>(async (c, next) => {
     let timer: any = null;
 
-    // Start downstream, but *always* handle rejection so it never becomes "unhandled"
     const downstream = (async () => {
       await next();
-    })().catch(() => {
-      // swallow: timeout responses should not be overwritten by downstream errors
-    });
+    })().catch(() => {});
 
     const timeoutPromise = new Promise<typeof TIMEOUT>((resolve) => {
       timer = setTimeout(() => resolve(TIMEOUT), ms);
@@ -189,124 +191,21 @@ export const timeout = (ms: number, opts?: { message?: string }) => {
 
     try {
       const winner = await Promise.race([downstream.then(() => "DOWNSTREAM" as const), timeoutPromise]);
-
-      // Downstream finished first → normal path
       if (winner !== TIMEOUT) return;
 
-      // Timeout won → lock the context and send response if nothing already wrote
       (c.data as any).__timeoutSent = true;
 
       if (!c.isDone) {
         c.res.setStatus(504);
         c.res.setHeader("Content-Type", "application/json");
-        c.res.body(
-          JSON.stringify({
-            error: {
-              code: "TIMEOUT",
-              message: "Gateway Timeout",
-              detail,
-            },
-          }),
-        );
+        c.res.body(JSON.stringify({ error: { code: "TIMEOUT", message: "Gateway Timeout", detail } }));
         c.finalize();
       }
 
-      // IMPORTANT: keep the context from being returned to the pool until downstream settles
       (c.data as any).__holdRelease = downstream;
       return;
     } finally {
       if (timer) clearTimeout(timer);
     }
-  });
-};
-
-
-
-export const compress = (opts?: {
-  thresholdBytes?: number;
-  preferBrotli?: boolean;
-}) => {
-  const threshold = opts?.thresholdBytes ?? 1024;
-  const preferBrotli = opts?.preferBrotli ?? true;
-
-  function accepts(accept: string, enc: string) {
-    return accept.toLowerCase().includes(enc);
-  }
-
-  function bodySize(body: any): number {
-    if (typeof body === "string") return new TextEncoder().encode(body).byteLength;
-    if (body instanceof Uint8Array) return body.byteLength;
-    if (body instanceof ArrayBuffer) return body.byteLength;
-    return 0;
-  }
-
-  function getBytes(body: any): Uint8Array | null {
-    if (typeof body === "string") return new TextEncoder().encode(body);
-    if (body instanceof ArrayBuffer) return new Uint8Array(body);
-    if (body instanceof Uint8Array) return body;
-    return null;
-  }
-
-  function makeSource(bytes: Uint8Array) {
-    return new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      },
-    });
-  }
-
-  function tryMakeCompressedStream(enc: "br" | "gzip", bytes: Uint8Array): ReadableStream<Uint8Array> | null {
-    const CS = (globalThis as any).CompressionStream;
-    if (!CS) return null;
-    try {
-      const cs = new CS(enc);
-      return makeSource(bytes).pipeThrough(cs);
-    } catch {
-      return null;
-    }
-  }
-
-  return new Middleware<any>(async (c, next) => {
-    await next();
-
-    const alreadyEncoded = !!c.getResHeader("Content-Encoding");
-    if (alreadyEncoded) return;
-
-    if (c.method.toUpperCase() === "HEAD") return;
-    if (c.res.statusCode === 204 || c.res.statusCode === 304) return;
-
-    const accept = c.getHeader("Accept-Encoding") || "";
-    const wantsBr = preferBrotli && accepts(accept, "br");
-    const wantsGzip = accepts(accept, "gzip");
-    if (!wantsBr && !wantsGzip) return;
-
-    const body = (c.res as any).getBody?.() ?? (c.res as any).bodyContent;
-    if (body == null) return;
-    if (typeof body !== "string" && !(body instanceof Uint8Array) && !(body instanceof ArrayBuffer)) return;
-
-    const size = bodySize(body);
-    if (size < threshold) return;
-
-    const bytes = getBytes(body);
-    if (!bytes) return;
-
-    let enc: "br" | "gzip" | null = null;
-    let stream: ReadableStream<Uint8Array> | null = null;
-
-    if (wantsBr) {
-      stream = tryMakeCompressedStream("br", bytes);
-      if (stream) enc = "br";
-    }
-    if (!stream && wantsGzip) {
-      stream = tryMakeCompressedStream("gzip", bytes);
-      if (stream) enc = "gzip";
-    }
-
-    if (!stream || !enc) return;
-
-    c.setHeader("Content-Encoding", enc);
-    c.setHeader("Vary", "Accept-Encoding");
-    c.res.body(stream);
   });
 };

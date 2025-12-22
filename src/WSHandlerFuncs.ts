@@ -1,6 +1,10 @@
-import type { WSContext } from "./WSContext";
+import type { HTTPContext } from "./HTTPContext";
 
-export type WSOpenFunc = (c: WSContext) => Promise<void>;
-export type WSMessageFunc = (c: WSContext) => Promise<void>;
-export type WSDrainFunc = (c: WSContext) => Promise<void>;
-export type WSCloseFunc = (c: WSContext) => Promise<void>;
+/**
+ * WebSocket handlers now receive the same HTTPContext as regular HTTP routes.
+ * Access the WSContext via `c.ws()`.
+ */
+export type WSOpenFunc<T extends Record<string, any> = Record<string, any>> = (c: HTTPContext<T>) => Promise<void>;
+export type WSMessageFunc<T extends Record<string, any> = Record<string, any>> = (c: HTTPContext<T>) => Promise<void>;
+export type WSDrainFunc<T extends Record<string, any> = Record<string, any>> = (c: HTTPContext<T>) => Promise<void>;
+export type WSCloseFunc<T extends Record<string, any> = Record<string, any>> = (c: HTTPContext<T>) => Promise<void>;

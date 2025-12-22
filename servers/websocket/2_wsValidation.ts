@@ -4,6 +4,7 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { WSContext } from "../../src/WSContext";
 import type { TestStore } from "../TestStore";
+import type { HTTPContext } from "../../src/HTTPContext";
 
 const schema = z.object({
   type: z.enum(["chat", "ping"]),
@@ -12,19 +13,20 @@ const schema = z.object({
 
 type Msg = z.infer<typeof schema>;
 
-class ValidatedChat extends XerusRoute<TestStore, WSContext<TestStore>> {
+class ValidatedChat extends XerusRoute<HTTPContext<TestStore>> {
   method = Method.WS_MESSAGE;
   path = "/ws/validate";
   msg!: Msg;
 
-  async validate(c: WSContext<TestStore>) {
-    if (typeof c.message !== "string") {
+  async validate(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
+    if (typeof ws.message !== "string") {
       throw new Error("Expected text WS message");
     }
 
     let parsedJSON: unknown;
     try {
-      parsedJSON = JSON.parse(c.message);
+      parsedJSON = JSON.parse(ws.message);
     } catch {
       throw new Error("Invalid JSON");
     }
@@ -32,9 +34,10 @@ class ValidatedChat extends XerusRoute<TestStore, WSContext<TestStore>> {
     this.msg = await schema.parseAsync(parsedJSON);
   }
 
-  async handle(c: WSContext<TestStore>) {
-    if (this.msg.type === "ping") c.ws.send("pong");
-    else c.ws.send(`received: ${this.msg.content}`);
+  async handle(c: HTTPContext<TestStore>) {
+    let ws = c.ws()
+    if (this.msg.type === "ping") ws.send("pong");
+    else ws.send(`received: ${this.msg.content}`);
   }
 }
 

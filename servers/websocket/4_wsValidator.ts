@@ -24,7 +24,7 @@ export class ChatMessageValidator implements TypeValidator {
   }
 }
 
-class ValidatorWsRoute extends XerusRoute<any, WSContext> {
+class ValidatorWsRoute extends XerusRoute<HTTPContext> {
   method = Method.WS_MESSAGE;
   path = "/ws/validator";
 
@@ -32,10 +32,11 @@ class ValidatorWsRoute extends XerusRoute<any, WSContext> {
     Validator.from(Source.WSMESSAGE(), ChatMessageValidator)
   ];
 
-  async handle(c: WSContext) {
+  async handle(c: HTTPContext) {
+    let ws = c.ws()
     // Resolve works on the underlying HTTPContext
-    const msg = c.http.resolve(ChatMessageValidator);
-    c.ws.send(`clean: ${msg.content}`);
+    const msg = c.resolve(ChatMessageValidator);
+    ws.send(`clean: ${msg.content}`);
   }
 }
 

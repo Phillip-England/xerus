@@ -2,9 +2,24 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { BodyType } from "../../src/BodyType";
+import { Validator } from "../../src/Validator";
+import { Source } from "../../src/ValidationSource";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
+import type { TypeValidator } from "../../src/TypeValidator";
+
+// Validator for JSON Body
+class JsonObjectBody implements TypeValidator {
+  body: any;
+  constructor(raw: any) {
+    this.body = raw;
+  }
+  async validate(c: HTTPContext) {
+    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
+    }
+  }
+}
 
 class Root extends XerusRoute {
   method = Method.GET;
@@ -17,35 +32,22 @@ class Root extends XerusRoute {
 class CreateItem extends XerusRoute {
   method = Method.POST;
   path = "/items";
-  body: any;
-
-  async validate(c: HTTPContext) {
-    this.body = await c.parseBody(BodyType.JSON);
-    // Manual validation replacing Validator class
-    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
-    }
-  }
+  validators = [Validator.from(Source.JSON(), JsonObjectBody)];
 
   async handle(c: HTTPContext) {
-    c.setStatus(201).json({ message: "Item created", data: this.body });
+    const b = c.resolve(JsonObjectBody);
+    c.setStatus(201).json({ message: "Item created", data: b.body });
   }
 }
 
 class UpdateItem extends XerusRoute {
   method = Method.PUT;
   path = "/items/1";
-  body: any;
-
-  async validate(c: HTTPContext) {
-    this.body = await c.parseBody(BodyType.JSON);
-    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected JSON object body");
-    }
-  }
+  validators = [Validator.from(Source.JSON(), JsonObjectBody)];
 
   async handle(c: HTTPContext) {
-    c.json({ message: "Item 1 updated", data: this.body });
+    const b = c.resolve(JsonObjectBody);
+    c.json({ message: "Item 1 updated", data: b.body });
   }
 }
 
@@ -78,6 +80,12 @@ class RedirUnsafe extends XerusRoute {
   path = "/redir/unsafe";
   async handle(c: HTTPContext) {
     const dangerous = "Hack\r\nLocation: google.com";
+    // The redirect method inside HTTPContext handles strict checking
+    // But for the test expecting "Hack%0D%0ALocation%3A+google.com", 
+    // we rely on encodeURIComponent happening inside the redirect logic 
+    // or manual usage. 
+    // However, your HTTPContext throws error on newline in headers.
+    // Let's assume the test wants safe encoding:
     c.redirect("/", { msg: dangerous });
   }
 }
@@ -160,6 +168,6 @@ export function basicMethods(app: Xerus) {
     EchoQuery,
     EchoHeader,
     StatusTest,
-    JsonTest
+    JsonTest,
   );
 }

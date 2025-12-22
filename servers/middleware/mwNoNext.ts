@@ -1,5 +1,5 @@
 import { Middleware } from "../../src/Middleware";
 
-export let mwNoNext = new Middleware(async (c, next) => {
-  // i dont call next!
+export const mwNoNext = new Middleware(async (c, next) => {
+  // Intentionally not calling next()
 });
