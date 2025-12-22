@@ -1,20 +1,34 @@
+// index.ts
 export * from "./src/BodyType";
 export * from "./src/ContextState";
 export * from "./src/CookieOptions";
 export * from "./src/HTTPContext";
 export * from "./src/HTTPHandlerFunc";
+
+export * from "./src/Method";
+
 export * from "./src/Middleware";
 export * from "./src/MiddlewareFn";
 export * from "./src/MiddlewareNextFn";
+
 export * from "./src/MutResponse";
 export * from "./src/ObjectPool";
 export * from "./src/RouteGroup";
+
 export * from "./src/SystemErr";
 export * from "./src/SystemErrCode";
 export * from "./src/SystemErrRecord";
+
 export * from "./src/TrieNode";
+
+export * from "./src/TypeValidator";
+export * from "./src/ValidationSource";
+export * from "./src/Validator";
+
 export * from "./src/WSContext";
 export * from "./src/WSHandlerFuncs";
+
+export * from "./src/XerusRoute";
 export * from "./src/Xerus";
+
 export * from "./src/macros";
-export * from './src/RouteGroup'
