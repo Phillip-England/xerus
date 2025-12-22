@@ -84,7 +84,7 @@ app.static("/static", "./public"); // GET /static/* -> ./public/*
 Embed files at build time (useful for single-binary-ish deploys):
 
 ```ts
-import { embedDir } from "xerus/macros";
+import { embedDir } from "xerus/macros" with { type: 'macro' };
 
 const embedded = embedDir("/abs/path/to/public"); // compile-time-ish helper
 app.embed("/static", embedded); // GET /static/* from embedded map
