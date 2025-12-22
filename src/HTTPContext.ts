@@ -1,4 +1,3 @@
-// src/HTTPContext.ts
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -25,7 +24,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   path: string = "/";
   method: string = "GET";
   route: string = "";
-
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
 
@@ -36,16 +34,8 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   public _wsMessage: string | Buffer | null = null;
   public _wsContext: WSContext<T> | null = null;
 
-  /**
-   * Request-scoped scratchpad.
-   * (requestId, csrfToken, misc middleware state, etc)
-   */
+  // FIX: Initialize these once. We will never re-assign them.
   data: T = {} as T;
-
-  /**
-   * ✅ Injected stores live here.
-   * (db connections, global config objects, etc)
-   */
   store: Record<string, any> = {};
 
   private err: Error | undefined | string;
@@ -54,6 +44,14 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
   constructor() {
     this.res = new MutResponse();
+    // data and store are already initialized above
+  }
+
+  // FIX: Helper to scrub objects without breaking the reference
+  private cleanObj(obj: Record<string, any>) {
+    for (const key in obj) {
+      delete obj[key];
+    }
   }
 
   isWsRoute(): boolean {
@@ -77,19 +75,20 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
 
     this._url = null;
     this._segments = null;
+    this.params = params; // params usually come fresh from the router, so assignment is okay here
 
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
-
     this.err = undefined;
 
     this._wsMessage = null;
     this._wsContext = null;
 
-    this.data = {} as T;
-    this.store = {};
-
+    // FIX: Scrub the existing objects instead of allocating new ones
+    this.cleanObj(this.data);
+    this.cleanObj(this.store);
+    
     this._isWS = false;
 
     const urlIndex = req.url.indexOf("/", 8);
@@ -101,14 +100,15 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
-    this.params = params;
   }
 
+  // ... (rest of the file remains unchanged)
+  
   clearResponse() {
     this.res.reset();
     this._state = ContextState.OPEN;
   }
-
+  
   markSent() {
     this._state = ContextState.SENT;
   }
@@ -191,10 +191,8 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
     const xff = this.getHeader("x-forwarded-for") ||
       this.getHeader("X-Forwarded-For");
     if (xff) return xff.split(",")[0].trim();
-
     const xrip = this.getHeader("x-real-ip") || this.getHeader("X-Real-IP");
     if (xrip) return xrip.trim();
-
     return "unknown";
   }
 
@@ -211,7 +209,6 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
   ): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
-
     let status = 302;
     let finalLocation = path;
 
@@ -219,23 +216,19 @@ export class HTTPContext<T extends Record<string, any> = Record<string, any>> {
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
       if (typeof arg3 === "number") status = arg3;
-
       const params = new URLSearchParams();
-for (const [key, value] of Object.entries(arg2)) {
-  if (value === undefined || value === null) continue;
-
-  const t = typeof value;
-  if (t === "string" || t === "number" || t === "boolean") {
-    params.append(key, String(value));
-    continue;
-  }
-
-  throw new SystemErr(
-    SystemErrCode.INTERNAL_SERVER_ERR,
-    `Redirect query param "${key}" must be string/number/boolean (got ${t}).`,
-  );
-}
-
+      for (const [key, value] of Object.entries(arg2)) {
+        if (value === undefined || value === null) continue;
+        const t = typeof value;
+        if (t === "string" || t === "number" || t === "boolean") {
+          params.append(key, String(value));
+          continue;
+        }
+        throw new SystemErr(
+          SystemErrCode.INTERNAL_SERVER_ERR,
+          `Redirect query param "${key}" must be string/number/boolean (got ${t}).`,
+        );
+      }
       const queryString = params.toString();
       if (queryString.length > 0) {
         const separator = finalLocation.includes("?") ? "&" : "?";
@@ -249,7 +242,6 @@ for (const [key, value] of Object.entries(arg2)) {
         "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?",
       );
     }
-
     this.res.setStatus(status);
     this.res.setHeader("Location", finalLocation);
     this.finalize();
@@ -291,7 +283,6 @@ for (const [key, value] of Object.entries(arg2)) {
 
   private enforceKnownTypeMismatch(expectedType: BodyType) {
     if (expectedType === BodyType.TEXT) return;
-
     const ct = this.contentType();
     const isJson = ct.includes("application/json");
     const isForm = ct.includes("application/x-www-form-urlencoded");
@@ -322,7 +313,6 @@ for (const [key, value] of Object.entries(arg2)) {
     if (expectedType === BodyType.TEXT) return;
 
     const ct = this.contentType();
-
     if (expectedType === BodyType.JSON) {
       if (!ct.includes("application/json")) {
         throw new SystemErr(
@@ -432,13 +422,11 @@ for (const [key, value] of Object.entries(arg2)) {
           );
         }
       }
-
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
         const params = new URLSearchParams(this._rawBody);
         if (mode === "params") return params;
-
         const parsed = mode === "multi"
           ? this.parseFormMulti(this._rawBody)
           : this.parseFormLast(this._rawBody);
@@ -446,7 +434,6 @@ for (const [key, value] of Object.entries(arg2)) {
         this._parsedBodyMode = "FORM";
         return parsed;
       }
-
       if (expectedType === BodyType.TEXT) {
         this._parsedBodyMode = this._parsedBodyMode === "NONE"
           ? "TEXT"
@@ -506,7 +493,6 @@ for (const [key, value] of Object.entries(arg2)) {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
       if (mode === "params") return params;
-
       const parsed = mode === "multi"
         ? this.parseFormMulti(text)
         : this.parseFormLast(text);
@@ -538,21 +524,18 @@ for (const [key, value] of Object.entries(arg2)) {
     return this;
   }
 
-setHeader(name: string, value: string): this {
-  if (this._timedOut) return this;
-  this.ensureConfigurable();
-
-  if (/[\r\n]/.test(value)) {
-    throw new SystemErr(
-      SystemErrCode.INTERNAL_SERVER_ERR,
-      `Attempted to set invalid header "${name}".`,
-    );
+  setHeader(name: string, value: string): this {
+    if (this._timedOut) return this;
+    this.ensureConfigurable();
+    if (/[\r\n]/.test(value)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Attempted to set invalid header "${name}".`,
+      );
+    }
+    this.res.setHeader(name.toLowerCase(), value);
+    return this;
   }
-
-  // ✅ normalize header name once at boundary
-  this.res.setHeader(name.toLowerCase(), value);
-  return this;
-}
 
   getHeader(name: string): string | null {
     return this.req.headers.get(name);
@@ -596,7 +579,6 @@ setHeader(name: string, value: string): this {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
-
     const file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(
@@ -604,15 +586,11 @@ setHeader(name: string, value: string): this {
         `file does not exist at ${path}`,
       );
     }
-
     this.res.setHeader("Content-Type", file.type || "application/octet-stream");
     this.res.body(file);
     this.finalize();
   }
 
-  /**
-   * ✅ Store helpers (injected stuff)
-   */
   setStore(key: string, value: any): void {
     this.store[key] = value;
   }
@@ -624,31 +602,23 @@ setHeader(name: string, value: string): this {
   getCookie(name: string): string | undefined {
     const cookies = this.req.headers.get("Cookie");
     if (!cookies) return undefined;
-
-    // split on ';' not '; ' and trim
     const parts = cookies.split(";");
-
     for (const part of parts) {
       const s = part.trim();
       if (!s) continue;
-
       const eq = s.indexOf("=");
       if (eq === -1) continue;
-
       const k = s.slice(0, eq).trim();
       if (k !== name) continue;
-
       const v = s.slice(eq + 1);
       return v;
     }
-
     return undefined;
   }
 
   setCookie(name: string, value: string, options: CookieOptions = {}) {
     if (this._timedOut) return;
     this.ensureConfigurable();
-
     let cookieString = `${name}=${encodeURIComponent(value)}`;
 
     options.path ??= "/";
@@ -679,19 +649,16 @@ setHeader(name: string, value: string): this {
     this.setCookie(name, "", { path, domain, maxAge: 0, expires: new Date(0) });
   }
 
-appendHeader(name: string, value: string): this {
-  if (this._timedOut) return this;
-  this.ensureConfigurable();
-
-  if (/[\r\n]/.test(value)) {
-    throw new SystemErr(
-      SystemErrCode.INTERNAL_SERVER_ERR,
-      `Attempted to set invalid header "${name}".`,
-    );
+  appendHeader(name: string, value: string): this {
+    if (this._timedOut) return this;
+    this.ensureConfigurable();
+    if (/[\r\n]/.test(value)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Attempted to set invalid header "${name}".`,
+      );
+    }
+    this.res.appendHeader(name.toLowerCase(), value);
+    return this;
   }
-
-  // ✅ normalize header name once at boundary
-  this.res.appendHeader(name.toLowerCase(), value);
-  return this;
-}
 }
