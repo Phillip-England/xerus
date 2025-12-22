@@ -1,7 +1,9 @@
+// --- START FILE: src/RouteFields.ts ---
 import type { HTTPContext } from "./HTTPContext";
 import type { TypeValidator } from "./TypeValidator";
 
 type Ctor<T> = new (...args: any[]) => T;
+
 const XERUS_FIELD = Symbol.for("xerus:routefield");
 
 export type RouteFieldKind = "validator" | "inject";
@@ -13,6 +15,15 @@ export type AnyRouteField =
 export interface InjectableStore {
   storeKey?: string;
   init?(c: HTTPContext): Promise<void>;
+}
+
+/**
+ * NEW: Global singleton injectable (created once at startup).
+ * - `init(app)` runs once when registered (optional).
+ */
+export interface InjectableGlobal {
+  storeKey?: string;
+  init?(app: any): Promise<void> | void;
 }
 
 export class RouteFieldValidator<T extends TypeValidator = any> {
@@ -59,3 +70,4 @@ export function Inject<T extends InjectableStore = any>(
 ): T {
   return new RouteFieldInject(Type, storeKey) as unknown as T;
 }
+// --- END FILE: src/RouteFields.ts ---

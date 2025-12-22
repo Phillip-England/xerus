@@ -1,4 +1,4 @@
-// src/HTTPContext.ts
+// --- START FILE: src/HTTPContext.ts ---
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -9,11 +9,8 @@ import type { WSContext } from "./WSContext";
 import type { CookieRef, RequestCookieRef, ResponseCookieRef } from "./Cookies";
 import { URLQuery, URLQueryRef } from "./URLQuery";
 import { PathParams, PathParamRef } from "./PathParams";
-// HTTPContext.ts
 import { RequestCookies, ResponseCookies } from "./Cookies";
 import { HeaderRef, HeadersBag, RequestHeaders } from "./Headers"; // type-only if you want
-
-
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
@@ -33,15 +30,15 @@ export class HTTPContext {
   private _urlQuery: URLQuery | null = null;
   private _pathParams: PathParams | null = null;
 
-  // inside HTTPContext class fields
-private _reqCookiesView: RequestCookies | null = null;
-private _resCookiesWriter: ResponseCookies | null = null;
-
+  private _reqCookiesView: RequestCookies | null = null;
+  private _resCookiesWriter: ResponseCookies | null = null;
 
   path: string = "/";
   method: string = "GET";
   route: string = "";
+
   private _segments: string[] | null = null;
+
   params: Record<string, string> = {};
 
   private _body?: unknown;
@@ -56,12 +53,53 @@ private _resCookiesWriter: ResponseCookies | null = null;
 
   private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
+
   public _isWS: boolean = false;
 
   private _reqHeaders: RequestHeaders | null = null;
 
+  /**
+   * NEW: global singleton registry attached by Xerus per-request.
+   */
+  private _globals: Map<any, any> | null = null;
+
   constructor() {
     this.res = new MutResponse();
+  }
+
+  /** @internal */
+  _setGlobals(map: Map<any, any> | null) {
+    this._globals = map;
+  }
+
+  global<T>(Type: new (...args: any[]) => T): T {
+    return this.getGlobal(Type);
+  }
+
+  getGlobal<T>(Type: new (...args: any[]) => T): T {
+    const g = this._globals;
+    if (!g) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        "Global registry not available on context (did Xerus attach it?)",
+      );
+    }
+
+    // primary lookup by ctor
+    const byCtor = g.get(Type);
+    if (byCtor) return byCtor as T;
+
+    // fallback lookup by name
+    const name = (Type as any)?.name;
+    if (name) {
+      const byName = g.get(name);
+      if (byName) return byName as T;
+    }
+
+    throw new SystemErr(
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,
+    );
   }
 
   private cleanObj(obj: Record<string, any>) {
@@ -91,11 +129,13 @@ private _resCookiesWriter: ResponseCookies | null = null;
     this._urlQuery = null;
     this._pathParams = null;
     this._segments = null;
+
     this.params = params;
 
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
+
     this.err = undefined;
 
     this._wsMessage = null;
@@ -115,11 +155,12 @@ private _resCookiesWriter: ResponseCookies | null = null;
     this.path = pathStr.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
-  this._reqHeaders = new RequestHeaders(req.headers);
-  this.res.cookies.resetRequest(req.headers.get("Cookie"));
 
-  this._reqCookiesView = null;
-  this._resCookiesWriter = null;
+    this._reqHeaders = new RequestHeaders(req.headers);
+
+    this.res.cookies.resetRequest(req.headers.get("Cookie"));
+    this._reqCookiesView = null;
+    this._resCookiesWriter = null;
   }
 
   clearResponse() {
@@ -217,9 +258,14 @@ private _resCookiesWriter: ResponseCookies | null = null;
 
   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
-  redirect(path: string, arg2?: number | Record<string, any>, arg3?: number): void {
+  redirect(
+    path: string,
+    arg2?: number | Record<string, any>,
+    arg3?: number,
+  ): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let status = 302;
     let finalLocation = path;
 
@@ -227,6 +273,7 @@ private _resCookiesWriter: ResponseCookies | null = null;
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
       if (typeof arg3 === "number") status = arg3;
+
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(arg2)) {
         if (value === undefined || value === null) continue;
@@ -240,6 +287,7 @@ private _resCookiesWriter: ResponseCookies | null = null;
           `Redirect query param "${key}" must be string/number/boolean (got ${t}).`,
         );
       }
+
       const queryString = params.toString();
       if (queryString.length > 0) {
         const separator = finalLocation.includes("?") ? "&" : "?";
@@ -296,6 +344,7 @@ private _resCookiesWriter: ResponseCookies | null = null;
 
   private enforceKnownTypeMismatch(expectedType: BodyType) {
     if (expectedType === BodyType.TEXT) return;
+
     const ct = this.contentType();
     const isJson = ct.includes("application/json");
     const isForm = ct.includes("application/x-www-form-urlencoded");
@@ -359,8 +408,10 @@ private _resCookiesWriter: ResponseCookies | null = null;
   async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "multi" }): Promise<ParsedFormBodyMulti>;
   async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "params" }): Promise<URLSearchParams>;
   async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
+
   async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
+
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
@@ -457,18 +508,17 @@ private _resCookiesWriter: ResponseCookies | null = null;
     return text;
   }
 
-getParam(name: string, defaultValue: string = ""): string {
-  return this.getPathParam(name).get() ?? defaultValue;
-}
+  getParam(name: string, defaultValue: string = ""): string {
+    return this.getPathParam(name).get() ?? defaultValue;
+  }
 
-query(key: string, defaultValue: string = ""): string {
-  return this.getURLQuery(key).get() ?? defaultValue;
-}
+  query(key: string, defaultValue: string = ""): string {
+    return this.getURLQuery(key).get() ?? defaultValue;
+  }
 
-get queries(): Record<string, string> {
-  return this.urlQuery.toObject();
-}
-
+  get queries(): Record<string, string> {
+    return this.urlQuery.toObject();
+  }
 
   setStatus(code: number): this {
     if (this._timedOut) return this;
@@ -477,46 +527,33 @@ get queries(): Record<string, string> {
     return this;
   }
 
-  /**
-   * ✅ returns HeaderRef (response)
-   */
   setHeader(name: string, value: string): HeaderRef {
     if (this._timedOut) return new HeaderRef(this.res.headers, name);
     this.ensureConfigurable();
-
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `Attempted to set invalid header "${name}".`,
       );
     }
-
     this.res.headers.set(name, value);
     return new HeaderRef(this.res.headers, name);
   }
 
-  /**
-   * ✅ returns HeaderRef (request)
-   */
   getHeader(name: string): HeaderRef {
     const view = this._reqHeaders ?? new RequestHeaders(this.req.headers);
     return new HeaderRef(view, name);
   }
 
-  /**
-   * ✅ returns HeaderRef (response)
-   */
   appendHeader(name: string, value: string): HeaderRef {
     if (this._timedOut) return new HeaderRef(this.res.headers, name);
     this.ensureConfigurable();
-
     if (/[\r\n]/.test(value)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `Attempted to set invalid header "${name}".`,
       );
     }
-
     this.res.headers.append(name, value);
     return new HeaderRef(this.res.headers, name);
   }
@@ -559,12 +596,10 @@ get queries(): Record<string, string> {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
-
     const file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
     }
-
     this.res.headers.set("Content-Type", file.type || "application/octet-stream");
     this.res.body(file);
     this.finalize();
@@ -578,34 +613,23 @@ get queries(): Record<string, string> {
     return this.store[key] as TVal;
   }
 
-  /**
-   * ✅ returns CookieRef (request read)
-   */
   getCookie(name: string): CookieRef {
     return this.res.cookies.ref(name);
   }
 
-  /**
-   * ✅ returns CookieRef (response write)
-   */
   setCookie(name: string, value: string, options: CookieOptions = {}): CookieRef {
     if (this._timedOut) return this.res.cookies.ref(name);
     this.ensureConfigurable();
-
     options.path ??= "/";
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }
-
     this.res.cookies.set(name, value, options);
     return this.res.cookies.ref(name);
   }
 
-  /**
-   * ✅ returns CookieRef
-   */
   clearCookie(name: string, path: string = "/", domain?: string): CookieRef {
     if (this._timedOut) return this.res.cookies.ref(name);
     this.ensureConfigurable();
@@ -614,124 +638,105 @@ get queries(): Record<string, string> {
   }
 
   get headers() {
-    // response headers helper (set/append/get)
     return this.res.headers;
   }
 
   get cookies() {
-    // response cookie helper (set/clear) + request get
     return this.res.cookies;
   }
 
-/** Native primitive: URL query bag */
-get urlQuery(): URLQuery {
-  if (!this._urlQuery) this._urlQuery = new URLQuery(this.url.searchParams);
-  return this._urlQuery;
+  get urlQuery(): URLQuery {
+    if (!this._urlQuery) this._urlQuery = new URLQuery(this.url.searchParams);
+    return this._urlQuery;
+  }
+
+  get pathParams(): PathParams {
+    if (!this._pathParams) this._pathParams = new PathParams(this.params);
+    return this._pathParams;
+  }
+
+  getURLQuery(): URLQuery;
+  getURLQuery(key: string): URLQueryRef;
+  getURLQuery(key?: string): any {
+    return key ? this.urlQuery.ref(key) : this.urlQuery;
+  }
+
+  getPathParams(): PathParams {
+    return this.pathParams;
+  }
+
+  getPathParamRef(key: string): PathParamRef {
+    return this.pathParams.ref(key);
+  }
+
+  getPathParam(): PathParams;
+  getPathParam(key: string): PathParamRef;
+  getPathParam(key?: string): any {
+    return key ? this.getPathParamRef(key) : this.getPathParams();
+  }
+
+  get reqCookies(): RequestCookies {
+    return this._reqCookiesView ??= new RequestCookies(this.res.cookies);
+  }
+
+  get resCookies(): ResponseCookies {
+    return this._resCookiesWriter ??= new ResponseCookies(this.res.cookies);
+  }
+
+  reqCookie(name: string): RequestCookieRef {
+    return this.reqCookies.ref(name);
+  }
+
+  resCookie(name: string): ResponseCookieRef {
+    return this.resCookies.ref(name);
+  }
+
+  cookie(name: string) {
+    return this.getCookie(name); // your existing combined CookieRef
+  }
+
+  header(name: string) {
+    return this.getHeader(name);
+  }
+
+  get reqHeaders(): RequestHeaders {
+    return this._reqHeaders ?? new RequestHeaders(this.req.headers);
+  }
+
+  get resHeaders(): HeadersBag {
+    return this.res.headers;
+  }
+
+  getReqHeader(name: string): HeaderRef {
+    return new HeaderRef(this.reqHeaders, name);
+  }
+
+  getResHeader(name: string): HeaderRef {
+    return new HeaderRef(this.resHeaders, name);
+  }
+
+  textBody(opts?: ParseBodyOptions): Promise<string> {
+    return this.parseBody(BodyType.TEXT, opts);
+  }
+
+  jsonBody<T = any>(opts?: ParseBodyOptions): Promise<T> {
+    return this.parseBody<T>(BodyType.JSON, opts);
+  }
+
+  formBodyLast(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyLast> {
+    return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "last" });
+  }
+
+  formBodyMulti(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyMulti> {
+    return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "multi" });
+  }
+
+  formBodyParams(opts?: Omit<ParseBodyOptions, "formMode">): Promise<URLSearchParams> {
+    return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "params" });
+  }
+
+  multipartBody(opts?: ParseBodyOptions): Promise<FormData> {
+    return this.parseBody(BodyType.MULTIPART_FORM, opts);
+  }
 }
-
-/** Native primitive: Path params bag */
-get pathParams(): PathParams {
-  if (!this._pathParams) this._pathParams = new PathParams(this.params);
-  return this._pathParams;
-}
-
-/** Native primitive: URL query ref (or bag) */
-getURLQuery(): URLQuery;
-getURLQuery(key: string): URLQueryRef;
-getURLQuery(key?: string): any {
-  return key ? this.urlQuery.ref(key) : this.urlQuery;
-}
-
-// ===== Naming consistency =====
-getPathParams(): PathParams {
-  return this.pathParams;
-}
-
-getPathParamRef(key: string): PathParamRef {
-  return this.pathParams.ref(key);
-}
-
-// Keep your existing getPathParam(...) overloads as aliases,
-// but internally route them:
-getPathParam(): PathParams;
-getPathParam(key: string): PathParamRef;
-getPathParam(key?: string): any {
-  return key ? this.getPathParamRef(key) : this.getPathParams();
-}
-
-
-// ===== Cookies symmetry =====
-get reqCookies(): RequestCookies {
-  return this._reqCookiesView ??= new RequestCookies(this.res.cookies);
-}
-
-get resCookies(): ResponseCookies {
-  return this._resCookiesWriter ??= new ResponseCookies(this.res.cookies);
-}
-
-reqCookie(name: string): RequestCookieRef {
-  return this.reqCookies.ref(name);
-}
-
-resCookie(name: string): ResponseCookieRef {
-  return this.resCookies.ref(name);
-}
-
-// Keep existing (combined) cookie access for backwards compatibility:
-cookie(name: string) {
-  return this.getCookie(name); // your existing combined CookieRef
-}
-
-header(name: string) {
-  return this.getHeader(name);
-}
-
-// ===== Headers symmetry =====
-get reqHeaders(): RequestHeaders {
-  // _reqHeaders is set on reset; this fallback is just safety.
-  return this._reqHeaders ?? new RequestHeaders(this.req.headers);
-}
-
-get resHeaders(): HeadersBag {
-  return this.res.headers;
-}
-
-getReqHeader(name: string): HeaderRef {
-  return new HeaderRef(this.reqHeaders, name);
-}
-
-getResHeader(name: string): HeaderRef {
-  return new HeaderRef(this.resHeaders, name);
-}
-
-// Keep your existing getHeader/setHeader/appendHeader as-is.
-// If you want, you can internally route getHeader to getReqHeader.
-
-// ===== Native body primitives =====
-textBody(opts?: ParseBodyOptions): Promise<string> {
-  return this.parseBody(BodyType.TEXT, opts);
-}
-
-jsonBody<T = any>(opts?: ParseBodyOptions): Promise<T> {
-  return this.parseBody<T>(BodyType.JSON, opts);
-}
-
-// Form modes
-formBodyLast(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyLast> {
-  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "last" });
-}
-
-formBodyMulti(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyMulti> {
-  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "multi" });
-}
-
-formBodyParams(opts?: Omit<ParseBodyOptions, "formMode">): Promise<URLSearchParams> {
-  return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "params" });
-}
-
-multipartBody(opts?: ParseBodyOptions): Promise<FormData> {
-  return this.parseBody(BodyType.MULTIPART_FORM, opts);
-}
-
-
-}
+// --- END FILE: src/HTTPContext.ts ---

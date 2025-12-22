@@ -1,3 +1,4 @@
+// --- START FILE: src/Xerus.ts ---
 import type { Server, ServerWebSocket } from "bun";
 import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { Middleware } from "./Middleware";
@@ -14,11 +15,13 @@ import { Method } from "./Method";
 import { WSContext } from "./WSContext";
 import {
   type InjectableStore,
+  type InjectableGlobal,
   isRouteFieldInject,
   isRouteFieldValidator,
 } from "./RouteFields";
 
 type AnyCtx = HTTPContext;
+
 type MiddlewareInput =
   | XerusMiddleware
   | (new (...args: any[]) => XerusMiddleware);
@@ -31,16 +34,26 @@ function isCtor(x: any): x is new (...args: any[]) => any {
 export class Xerus {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
+
   private preMiddlewares: XerusMiddleware[] = [];
   private globalMiddlewares: XerusMiddleware[] = [];
+
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
+
   private resolvedRoutes = new Map<
     string,
     { blueprint?: RouteBlueprint; params: Record<string, string> }
   >();
+
   private readonly MAX_CACHE_SIZE = 500;
+
   private contextPool: ObjectPool<HTTPContext>;
+
+  /**
+   * NEW: Global singleton container
+   */
+  private globals = new Map<any, any>();
 
   constructor() {
     this.contextPool = new ObjectPool<HTTPContext>(
@@ -70,6 +83,9 @@ export class Xerus {
     this.globalMiddlewares.push(...this.normalizeMiddlewares(m));
   }
 
+  /**
+   * Existing request-scoped inject (creates new per request)
+   */
   inject(...storeCtors: Array<new () => InjectableStore>) {
     for (const Ctor of storeCtors) {
       this.usePre(
@@ -84,6 +100,39 @@ export class Xerus {
         }),
       );
     }
+  }
+
+  /**
+   * NEW: Provide a ready-made singleton instance.
+   */
+  provide<T>(
+    Type: new (...args: any[]) => T,
+    instance: T,
+    storeKey?: string,
+  ) {
+    const key = storeKey ?? (instance as any)?.storeKey ?? Type.name;
+    this.globals.set(Type, instance);
+    this.globals.set(key, instance);
+    return this;
+  }
+
+  /**
+   * NEW: Create singleton global injectables once at startup.
+   */
+  async injectGlobal(...ctors: Array<new () => InjectableGlobal>) {
+    for (const Ctor of ctors) {
+      const instance: any = new Ctor();
+      const key = instance?.storeKey ?? Ctor.name;
+
+      // store before init so init can resolve other globals if needed
+      this.globals.set(Ctor, instance);
+      this.globals.set(key, instance);
+
+      if (instance && typeof instance.init === "function") {
+        await instance.init(this);
+      }
+    }
+    return this;
   }
 
   mount(...routeCtors: (new () => XerusRoute)[] | any[]) {
@@ -137,19 +186,16 @@ export class Xerus {
     class EmbedRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix + "/*";
-
       async handle(c: HTTPContext) {
         const lookupPath = c.path.substring(pathPrefix.length);
         const file = embeddedFiles[lookupPath] ||
           embeddedFiles[lookupPath + "/index.html"];
-
         if (!file) {
           throw new SystemErr(
             SystemErrCode.FILE_NOT_FOUND,
             `Asset ${lookupPath} not found`,
           );
         }
-
         c.setHeader("Content-Type", file.type);
         let bodyData = file.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -162,22 +208,18 @@ export class Xerus {
 
   static(pathPrefix: string, rootDir: string) {
     const absRoot = resolve(rootDir);
-
     class StaticRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
-
       async handle(c: HTTPContext) {
         const urlPath = c.path.substring(
           pathPrefix.length === 1 ? 0 : pathPrefix.length,
         );
         const relativePath = urlPath.replace(/^\/+/, "");
         const finalPath = resolve(join(absRoot, relativePath));
-
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
-
         await c.file(finalPath);
       }
     }
@@ -217,7 +259,9 @@ export class Xerus {
           drain: undefined,
         };
       }
+
       const container = (node as any).wsHandler;
+
       switch (method) {
         case Method.WS_OPEN:
           container.open = blueprint;
@@ -243,6 +287,7 @@ export class Xerus {
     }
 
     (node.handlers as any)[method] = blueprint;
+
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -276,6 +321,7 @@ export class Xerus {
     }
 
     const part = parts[index];
+
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, {
@@ -359,11 +405,14 @@ export class Xerus {
         );
       }
       index = i;
+
       if (i === middlewares.length) {
         await finalHandler();
         return;
       }
+
       const mw = middlewares[i];
+
       let nextCalled = false;
       let nextFinished = false;
 
@@ -396,6 +445,7 @@ export class Xerus {
   } {
     const injectMws: XerusMiddleware[] = [];
     const validatorMws: XerusMiddleware[] = [];
+
     const props = Object.getOwnPropertyNames(routeInstance);
 
     for (const prop of props) {
@@ -407,12 +457,12 @@ export class Xerus {
 
         const mw = new Middleware(async (c: HTTPContext, next) => {
           const instance = new Type();
-          // Injection / Validation logic
           await instance.validate(c);
           c.data[storeKey] = instance;
           (routeInstance as any)[prop] = instance;
           await next();
         });
+
         validatorMws.push(mw);
         continue;
       }
@@ -431,14 +481,17 @@ export class Xerus {
           if (instance && typeof instance.init === "function") {
             await instance.init(c);
           }
+
           c.setStore(key, instance);
           (routeInstance as any)[prop] = instance;
           await next();
         });
+
         injectMws.push(mw);
         continue;
       }
     }
+
     return { injectMws, validatorMws };
   }
 
@@ -447,6 +500,7 @@ export class Xerus {
     context: HTTPContext,
   ) {
     const httpCtx = context;
+
     const routeInstance = new blueprint.Ctor();
     const mounted = (blueprint as any).mounted;
 
@@ -507,13 +561,17 @@ export class Xerus {
       const context = this.contextPool.acquire();
       try {
         context.reset(req, params);
+        (context as any)._setGlobals?.(this.globals);
+
         context._isWS = true;
         (context as any)._wsBlueprints = blueprint;
+
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
 
         context.clearResponse();
         this.contextPool.release(context);
+
         throw new SystemErr(
           SystemErrCode.WEBSOCKET_UPGRADE_FAILURE,
           "Upgrade failed",
@@ -525,9 +583,11 @@ export class Xerus {
     }
 
     let context: HTTPContext | undefined;
+
     try {
       context = this.contextPool.acquire();
       context.reset(req, params);
+      (context as any)._setGlobals?.(this.globals);
 
       if (blueprint) {
         await this.executeRoute(blueprint, context);
@@ -550,6 +610,8 @@ export class Xerus {
     } catch (e: any) {
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
+      (c as any)._setGlobals?.(this.globals);
+
       c.clearResponse();
       c.setErr(e);
 
@@ -594,6 +656,7 @@ export class Xerus {
 
       console.warn(`[XERUS WARNING] Uncaught error on ${method} ${path}`);
       console.error(e);
+
       c.errorJSON(
         500,
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -602,13 +665,14 @@ export class Xerus {
           detail: e?.message ?? "Unknown",
         },
       );
+
       const resp = c.res.send();
       c.markSent();
       return resp;
     } finally {
       if (context) {
         if ((context as any).__tainted) {
-          // Leaked
+          // tainted: do not reuse
         } else {
           const hold = (context.data as any)?.__holdRelease;
           if (hold && typeof (hold as any).then === "function") {
@@ -649,11 +713,11 @@ export class Xerus {
       const httpCtx = ws.data as HTTPContext;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
-
       if (!blueprint) return;
 
       httpCtx.clearResponse();
       httpCtx.setErr(undefined);
+
       if (httpCtx.data && typeof httpCtx.data === "object") {
         delete (httpCtx.data as any).__timeoutSent;
         delete (httpCtx.data as any).__holdRelease;
@@ -666,6 +730,7 @@ export class Xerus {
       }
 
       let wsCtx: WSContext;
+
       if (eventName === "message") {
         wsCtx = new WSContext(ws, httpCtx, { message: args[0] });
       } else if (eventName === "close") {
@@ -676,6 +741,7 @@ export class Xerus {
       } else {
         wsCtx = new WSContext(ws, httpCtx);
       }
+
       httpCtx._wsContext = wsCtx;
 
       try {
@@ -724,3 +790,4 @@ export class Xerus {
     console.log(`🚀 Server running on ${server.port}`);
   }
 }
+// --- END FILE: src/Xerus.ts ---
