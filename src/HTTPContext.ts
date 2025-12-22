@@ -8,6 +8,9 @@ import type { CookieOptions } from "./CookieOptions";
 import type { WSContext } from "./WSContext";
 import { HeaderRef, RequestHeaders } from "./Headers";
 import type { CookieRef } from "./Cookies";
+import { URLQuery, URLQueryRef } from "./URLQuery";
+import { PathParams, PathParamRef } from "./PathParams";
+
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
@@ -24,6 +27,9 @@ export class HTTPContext {
   res: MutResponse;
 
   private _url: URL | null = null;
+  private _urlQuery: URLQuery | null = null;
+  private _pathParams: PathParams | null = null;
+
   path: string = "/";
   method: string = "GET";
   route: string = "";
@@ -74,6 +80,8 @@ export class HTTPContext {
     this._state = ContextState.OPEN;
 
     this._url = null;
+    this._urlQuery = null;
+    this._pathParams = null;
     this._segments = null;
     this.params = params;
 
@@ -443,17 +451,18 @@ export class HTTPContext {
     return text;
   }
 
-  getParam(name: string, defaultValue: string = ""): string {
-    return this.params[name] || defaultValue;
-  }
+getParam(name: string, defaultValue: string = ""): string {
+  return this.getPathParam(name).get() ?? defaultValue;
+}
 
-  query(key: string, defaultValue: string = ""): string {
-    return this.url.searchParams.get(key) || defaultValue;
-  }
+query(key: string, defaultValue: string = ""): string {
+  return this.getURLQuery(key).get() ?? defaultValue;
+}
 
-  get queries(): Record<string, string> {
-    return Object.fromEntries(this.url.searchParams);
-  }
+get queries(): Record<string, string> {
+  return this.urlQuery.toObject();
+}
+
 
   setStatus(code: number): this {
     if (this._timedOut) return this;
@@ -607,4 +616,40 @@ export class HTTPContext {
     // response cookie helper (set/clear) + request get
     return this.res.cookies;
   }
+
+/** Native primitive: URL query bag */
+get urlQuery(): URLQuery {
+  if (!this._urlQuery) this._urlQuery = new URLQuery(this.url.searchParams);
+  return this._urlQuery;
+}
+
+/** Native primitive: Path params bag */
+get pathParams(): PathParams {
+  if (!this._pathParams) this._pathParams = new PathParams(this.params);
+  return this._pathParams;
+}
+
+/** Native primitive: URL query ref (or bag) */
+getURLQuery(): URLQuery;
+getURLQuery(key: string): URLQueryRef;
+getURLQuery(key?: string): any {
+  return key ? this.urlQuery.ref(key) : this.urlQuery;
+}
+
+/** Native primitive: Path param ref (or bag) */
+getPathParam(): PathParams;
+getPathParam(key: string): PathParamRef;
+getPathParam(key?: string): any {
+  return key ? this.pathParams.ref(key) : this.pathParams;
+}
+
+/** Optional aliases if you want the "factory vibe" */
+cookie(name: string) {
+  return this.getCookie(name);
+}
+header(name: string) {
+  return this.getHeader(name);
+}
+
+
 }
