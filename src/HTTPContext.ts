@@ -11,6 +11,7 @@ import { URLQuery, URLQueryRef } from "./URLQuery";
 import { PathParams, PathParamRef } from "./PathParams";
 import { RequestCookies, ResponseCookies } from "./Cookies";
 import { HeaderRef, HeadersBag, RequestHeaders } from "./Headers"; // type-only if you want
+import { href as buildHref, type HrefQuery } from "./Href";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
@@ -109,6 +110,12 @@ export class HTTPContext {
   isWsRoute(): boolean {
     return this._wsContext != null;
   }
+
+  href(path: string, query?: HrefQuery): string {
+    // This is for building links in handlers/templates/components
+    return buildHref(path, query);
+  }
+
 
   ws(): WSContext {
     if (!this._wsContext) {
@@ -256,7 +263,7 @@ export class HTTPContext {
     return (this.data as any).requestId || "";
   }
 
-  redirect(path: string, status?: number): void;
+   redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
   redirect(
     path: string,
@@ -267,19 +274,20 @@ export class HTTPContext {
     this.ensureConfigurable();
 
     let status = 302;
-    let finalLocation = path;
+    let location = path;
 
     if (typeof arg2 === "number") {
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
       if (typeof arg3 === "number") status = arg3;
 
-      const params = new URLSearchParams();
+      // Keep your strict typing rules (only primitives), but now we delegate encoding/merging
+      const q: Record<string, string | number | boolean | null | undefined> = {};
       for (const [key, value] of Object.entries(arg2)) {
         if (value === undefined || value === null) continue;
         const t = typeof value;
         if (t === "string" || t === "number" || t === "boolean") {
-          params.append(key, String(value));
+          q[key] = value as any;
           continue;
         }
         throw new SystemErr(
@@ -288,24 +296,21 @@ export class HTTPContext {
         );
       }
 
-      const queryString = params.toString();
-      if (queryString.length > 0) {
-        const separator = finalLocation.includes("?") ? "&" : "?";
-        finalLocation += separator + queryString;
-      }
+      location = buildHref(path, q);
     }
 
-    if (/[\r\n]/.test(finalLocation)) {
+    if (/[\r\n]/.test(location)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
-        "Redirect location contains invalid characters (newlines). Did you forget encodeURIComponent()?",
+        "Redirect location contains invalid characters (newlines).",
       );
     }
 
     this.res.setStatus(status);
-    this.res.headers.set("Location", finalLocation);
+    this.res.headers.set("Location", location);
     this.finalize();
   }
+
 
   private assertReparseAllowed(nextMode: ParsedBodyMode) {
     if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
