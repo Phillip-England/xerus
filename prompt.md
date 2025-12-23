@@ -1,106 +1,60 @@
-Okay this seems weird..?
+Okay I have found and issue with this framework, specifically the way it deals with Injection versus Validation:
+
+Here is what I would like to make happen:
+
+I have notied that sometimes, I have something I am injecting into a Route which depends on Validated data.
+
+For examples, lets say I have a dependancy which depends on valdiated query parameters to do its job?
+
+Well, I would like to be able to attach validators WITHIN dependency injectors, making those validated data types also available in the main handlers. It might look something like this:
 
 ```ts
-class CustomRoute extends XerusRoute {
-  method = Method.GET;
-  path = "/vtypes/custom";
-
-  auth = Validator.Param(
-    Source.CUSTOM((c) => c.getHeader("X-Api-Key")),
-    ApiKeyValidator,
-  );
-
-  async handle(c: HTTPContext) {
-    c.json({ authorized: true, key: this.auth.key });
+class SomeQueryParam implements TypeValidator {
+  query: string
+  validate(c: HTTPContext) {
+    this.query = c.query("someQuery", "")
   }
 }
-```
 
-this line especially:
-
-```ts
-Source.CUSTOM((c) => c.getHeader("X-Api-Key")),
-```
-
-So, the reason it feels weird, is because the custom type should already have a
-validate function where they have access to c: HTTPContext look:
-
-```ts
-export class ApiKeyValidator implements TypeValidator {
-  key: string;
-  constructor(raw: any) {
-    this.key = raw;
-  }
-  async validate(c: HTTPContext) {
-    if (this.key !== "secret-123") {
-      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid API Key");
-    }
-  }
-}
-```
-
-Instead, to make this better, we should remove Source.CUSTOM from the framework
-and instead rely on Injection to access custom types in a route:
-
-```ts
-import { Xerus } from "../../src/Xerus";
-import { XerusRoute } from "../../src/XerusRoute";
-import { Method } from "../../src/Method";
-import { HTTPContext } from "../../src/HTTPContext";
-import { Inject, type InjectableStore } from "../../src/RouteFields";
-
-// 1. A Simple Data Service
 class UserService implements InjectableStore {
-  // Optional: unique key to store in context.store (defaults to class name)
-  storeKey = "UserService";
-
-  private users = ["Alice", "Bob"];
-
-  getUsers() {
-    return this.users;
+  someQueryParam: Validator.Ctx(SomeQueryParam)
+  init(c: HTTPContext) {
+    // do some work to inject data into the route
+    // WHILE having access to validated data
   }
 }
 
-// 2. A Service with Lifecycle (init)
-class MetricsService implements InjectableStore {
-  initialized = false;
-  startTime = 0;
-
-  // init() is called automatically by the framework *before* the route handler
-  async init(c: HTTPContext) {
-    this.initialized = true;
-    this.startTime = Date.now();
-  }
-
-  getUptime() {
-    return Date.now() - this.startTime;
-  }
-}
-
-class InjectionRoute extends XerusRoute {
-  method = Method.GET;
-  path = "/injection/test";
-
-  // 3. Inject dependencies into properties using the new pattern
-  userService = Inject(UserService);
-  metrics = Inject(MetricsService);
-
+class SomeRoute extends XerusRoute {
+  path: string = "/"
+  method: string = = "GET"
+  user: Inject(UserService) // UserService has access to SomeQueryParam under the hood
   async handle(c: HTTPContext) {
-    // Simulate tiny processing delay
-    await new Promise((r) => setTimeout(r, 1));
-
-    c.json({
-      users: this.userService.getUsers(),
-      serviceName: this.userService.storeKey,
-      initialized: this.metrics.initialized,
-      processingTime: this.metrics.getUptime(),
-    });
+    c.user.someQueryParam.query // access the query param
+    c.data(SomeQueryParam)
   }
-}
-
-export function injectionPattern(app: Xerus) {
-  app.mount(InjectionRoute);
 }
 ```
 
-so we need to remove SOURCE.CUSTOM and then rely on injection instead:
+In this way, Injectables can now declare their own validatable data which they need access to, which is then made accessible in the main handler.
+
+This requires us to be very clear about the order or events and it changes the role of route level injection.
+
+Xerus.inject() is to store things like config, db handlers, ect.
+
+But Inject() on a route is used to ensure data can be shared amoungst routes in a consistent manner, while ensuring validatable data is accesible at all layers of the processes.
+
+```ts
+Inject(UserService)
+```
+
+can now be attached to any route, and the route doesnt have to worry about any sort of validation logic, it just simply has access to the underlying data.
+
+The Injected service worries about its own validation.
+
+This isn't to say we can't validate at the route level, but allowing services to validate allows us to couple Services with their dependancies, thus reducing code in our actual route handlers.
+
+This allows us to inject data into routes, without worrying about the validation layer.
+
+the validation layer is handlers by validators and then that validated data can be further processed be injectors, which then return the final data to the route.
+
+Can you please make all the cahnges needed to make this happen? please return full files:

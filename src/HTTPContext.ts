@@ -10,8 +10,9 @@ import type { CookieRef, RequestCookieRef, ResponseCookieRef } from "./Cookies";
 import { URLQuery, URLQueryRef } from "./URLQuery";
 import { PathParams, PathParamRef } from "./PathParams";
 import { RequestCookies, ResponseCookies } from "./Cookies";
-import { HeaderRef, HeadersBag, RequestHeaders } from "./Headers"; // type-only if you want
+import { HeaderRef, HeadersBag, RequestHeaders } from "./Headers";
 import { href as buildHref, type HrefQuery } from "./Href";
+import { createDataBag, type DataBag } from "./DataBag";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
@@ -39,7 +40,6 @@ export class HTTPContext {
   route: string = "";
 
   private _segments: string[] | null = null;
-
   params: Record<string, string> = {};
 
   private _body?: unknown;
@@ -49,26 +49,30 @@ export class HTTPContext {
   public _wsMessage: string | Buffer | null = null;
   public _wsContext: WSContext | null = null;
 
-  data: Record<string, any> = {};
+  /**
+   * VALIDATED DATA BAG
+   * - Backwards compatible with old c.data["x"] / c.data.x
+   * - New: c.data(Type) or c.data("key")
+   */
+  data: DataBag;
+
+  /**
+   * STORE: per-request injection storage (existing behavior)
+   */
   store: Record<string, any> = {};
 
   private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
-
   public _isWS: boolean = false;
 
   private _reqHeaders: RequestHeaders | null = null;
-
-  /**
-   * NEW: global singleton registry attached by Xerus per-request.
-   */
   private _globals: Map<any, any> | null = null;
 
   constructor() {
     this.res = new MutResponse();
+    this.data = createDataBag();
   }
 
-  /** @internal */
   _setGlobals(map: Map<any, any> | null) {
     this._globals = map;
   }
@@ -85,18 +89,13 @@ export class HTTPContext {
         "Global registry not available on context (did Xerus attach it?)",
       );
     }
-
-    // primary lookup by ctor
     const byCtor = g.get(Type);
     if (byCtor) return byCtor as T;
-
-    // fallback lookup by name
     const name = (Type as any)?.name;
     if (name) {
       const byName = g.get(name);
       if (byName) return byName as T;
     }
-
     throw new SystemErr(
       SystemErrCode.INTERNAL_SERVER_ERR,
       `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,
@@ -112,10 +111,8 @@ export class HTTPContext {
   }
 
   href(path: string, query?: HrefQuery): string {
-    // This is for building links in handlers/templates/components
     return buildHref(path, query);
   }
-
 
   ws(): WSContext {
     if (!this._wsContext) {
@@ -144,11 +141,11 @@ export class HTTPContext {
     this._parsedBodyMode = "NONE";
 
     this.err = undefined;
-
     this._wsMessage = null;
     this._wsContext = null;
 
-    this.cleanObj(this.data);
+    // IMPORTANT: clear validated data + store
+    this.data.clear();
     this.cleanObj(this.store);
 
     this._isWS = false;
@@ -164,7 +161,6 @@ export class HTTPContext {
     this.route = `${this.method} ${this.path}`;
 
     this._reqHeaders = new RequestHeaders(req.headers);
-
     this.res.cookies.resetRequest(req.headers.get("Cookie"));
     this._reqCookiesView = null;
     this._resCookiesWriter = null;
@@ -250,12 +246,10 @@ export class HTTPContext {
       this.getHeader("x-forwarded-for").get() ||
       this.getHeader("X-Forwarded-For").get();
     if (xff) return xff.split(",")[0].trim();
-
     const xrip =
       this.getHeader("x-real-ip").get() ||
       this.getHeader("X-Real-IP").get();
     if (xrip) return xrip.trim();
-
     return "unknown";
   }
 
@@ -263,7 +257,7 @@ export class HTTPContext {
     return (this.data as any).requestId || "";
   }
 
-   redirect(path: string, status?: number): void;
+  redirect(path: string, status?: number): void;
   redirect(path: string, query: Record<string, any>, status?: number): void;
   redirect(
     path: string,
@@ -272,7 +266,6 @@ export class HTTPContext {
   ): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
-
     let status = 302;
     let location = path;
 
@@ -281,7 +274,6 @@ export class HTTPContext {
     } else if (arg2 && typeof arg2 === "object") {
       if (typeof arg3 === "number") status = arg3;
 
-      // Keep your strict typing rules (only primitives), but now we delegate encoding/merging
       const q: Record<string, string | number | boolean | null | undefined> = {};
       for (const [key, value] of Object.entries(arg2)) {
         if (value === undefined || value === null) continue;
@@ -310,7 +302,6 @@ export class HTTPContext {
     this.res.headers.set("Location", location);
     this.finalize();
   }
-
 
   private assertReparseAllowed(nextMode: ParsedBodyMode) {
     if (this._parsedBodyMode === "JSON" && nextMode === "FORM") {
@@ -349,7 +340,6 @@ export class HTTPContext {
 
   private enforceKnownTypeMismatch(expectedType: BodyType) {
     if (expectedType === BodyType.TEXT) return;
-
     const ct = this.contentType();
     const isJson = ct.includes("application/json");
     const isForm = ct.includes("application/x-www-form-urlencoded");
@@ -369,7 +359,6 @@ export class HTTPContext {
   private enforceStrictContentType(expectedType: BodyType, strict: boolean) {
     if (!strict) return;
     if (expectedType === BodyType.TEXT) return;
-
     const ct = this.contentType();
     if (expectedType === BodyType.JSON && !ct.includes("application/json")) {
       throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
@@ -413,17 +402,14 @@ export class HTTPContext {
   async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "multi" }): Promise<ParsedFormBodyMulti>;
   async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "params" }): Promise<URLSearchParams>;
   async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
-
   async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
-
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
     if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
       return this._body;
     }
-
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
@@ -444,18 +430,18 @@ export class HTTPContext {
           throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
         }
       }
-
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
         const params = new URLSearchParams(this._rawBody);
         if (mode === "params") return params;
-        const parsed = mode === "multi" ? this.parseFormMulti(this._rawBody) : this.parseFormLast(this._rawBody);
+        const parsed = mode === "multi"
+          ? this.parseFormMulti(this._rawBody)
+          : this.parseFormLast(this._rawBody);
         this._body = parsed;
         this._parsedBodyMode = "FORM";
         return parsed;
       }
-
       if (expectedType === BodyType.TEXT) {
         this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;
@@ -475,9 +461,10 @@ export class HTTPContext {
     }
 
     this.assertReparseAllowed(
-      expectedType === BodyType.TEXT ? "TEXT" :
-      expectedType === BodyType.JSON ? "JSON" :
-      expectedType === BodyType.FORM ? "FORM" : "TEXT",
+      expectedType === BodyType.TEXT ? "TEXT"
+        : expectedType === BodyType.JSON ? "JSON"
+        : expectedType === BodyType.FORM ? "FORM"
+        : "TEXT",
     );
 
     const text = await this.req.text();
@@ -487,7 +474,6 @@ export class HTTPContext {
       this._parsedBodyMode = "TEXT";
       return text;
     }
-
     if (expectedType === BodyType.JSON) {
       try {
         const parsed = JSON.parse(text);
@@ -498,7 +484,6 @@ export class HTTPContext {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
       }
     }
-
     if (expectedType === BodyType.FORM) {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
@@ -601,6 +586,7 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
+
     const file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
@@ -697,7 +683,7 @@ export class HTTPContext {
   }
 
   cookie(name: string) {
-    return this.getCookie(name); // your existing combined CookieRef
+    return this.getCookie(name);
   }
 
   header(name: string) {

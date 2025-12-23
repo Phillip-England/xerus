@@ -20,6 +20,7 @@ import { validatorTypes } from "./17_validatorTypes";
 import { injectionPattern } from "./19_injection";
 import { hardening } from "./20_hardening"; // Updated
 import { dataIntegrity } from "./21_data_integrity"; // New
+import { injectorValidators } from "./22_injector_validators"; // ✅ add
 
 const app = new Xerus();
 
@@ -44,5 +45,6 @@ validatorTypes(app);
 injectionPattern(app);
 hardening(app);
 dataIntegrity(app); // New Mount
+injectorValidators(app); // ✅ add
 
 app.listen(8080);

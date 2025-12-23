@@ -17,10 +17,6 @@ export interface InjectableStore {
   init?(c: HTTPContext): Promise<void>;
 }
 
-/**
- * NEW: Global singleton injectable (created once at startup).
- * - `init(app)` runs once when registered (optional).
- */
 export interface InjectableGlobal {
   storeKey?: string;
   init?(app: any): Promise<void> | void;
@@ -54,9 +50,7 @@ export function isRouteField(x: any): x is AnyRouteField {
   return !!x && typeof x === "object" && x[XERUS_FIELD] === true;
 }
 
-export function isRouteFieldValidator(
-  x: any,
-): x is RouteFieldValidator<any> {
+export function isRouteFieldValidator(x: any): x is RouteFieldValidator<any> {
   return isRouteField(x) && x.kind === "validator";
 }
 
