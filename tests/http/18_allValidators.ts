@@ -10,6 +10,7 @@ import type { TypeValidator } from "../../src/TypeValidator";
 import { clientIP, header, param, query, ws } from "../../src/std/Request";
 import { parseBody } from "../../src/std/Body";
 import { json } from "../../src/std/Response";
+import { Validator } from "../../src/Validator";
 
 export class QueryFilter implements TypeValidator {
   status!: string;
