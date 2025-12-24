@@ -1,10 +1,10 @@
-// --- START FILE: src/WSContext.ts ---
 import type { ServerWebSocket } from "bun";
 import type { HTTPContext } from "./HTTPContext";
 
 export class WSContext {
   ws: ServerWebSocket<HTTPContext>;
   http: HTTPContext;
+
   message: string | Buffer | "";
   code: number;
   reason: string;
@@ -77,17 +77,4 @@ export class WSContext {
     if (typeof (this.ws as any).publish !== "function") return;
     (this.ws as any).publish(topic, data);
   }
-
-  /**
-   * Store APIs are canonical on HTTPContext now.
-   * These are forwarded for convenience/back-compat.
-   */
-  setStore(key: string, value: any): void {
-    this.http.setStore(key, value);
-  }
-
-  getStore<TVal = any>(key: string): TVal {
-    return this.http.getStore<TVal>(key);
-  }
 }
-// --- END FILE: src/WSContext.ts ---

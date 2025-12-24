@@ -1,0 +1,1 @@
+okay right now Users can derive data within routes from multiple destination, but the only two I think should exist are HTTPContext.global for globally injected data, and then HTTPContext.service() for dervice data. make sure those are the only two ways we can derive data from the HTTP context.

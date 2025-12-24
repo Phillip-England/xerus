@@ -1,4 +1,3 @@
-// --- START FILE: src/HTTPContext.ts ---
 import { MutResponse } from "./MutResponse";
 import { ContextState } from "./ContextState";
 import { SystemErr } from "./SystemErr";
@@ -9,26 +8,15 @@ import { createDataBag, type DataBag } from "./DataBag";
 import type { WSContext } from "./WSContext";
 
 export type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
-
 type Ctor<T> = new (...args: any[]) => T;
 
 export class HTTPContext {
   req!: Request;
   res: MutResponse;
 
-  /**
-   * Per-request scope data bag (validators/services/etc).
-   * Consider this internal; prefer c.service(Type) for resolved services.
-   */
-  data: DataBag;
-
-  /**
-   * Preferred alias for “scoped per-request instances”
-   * (keeps old `data` but gives you a nicer public name)
-   */
-  get scoped(): DataBag {
-    return this.data;
-  }
+  // NOTE: This is internal storage for request-scoped resolved instances.
+  // Users must access via c.service(Type) only.
+  private _services: DataBag;
 
   path: string = "/";
   method: string = "GET";
@@ -52,20 +40,39 @@ export class HTTPContext {
 
   _state: ContextState = ContextState.OPEN;
 
-  _store: Map<string, any> = new Map();
-
-  /**
-   * Global registry injected by Xerus (app singletons, etc.)
-   */
+  // Attached by Xerus. Used only by c.global().
   _globals: Map<any, any> | null = null;
 
   public err: Error | undefined | string;
+
   public __timeoutSent?: boolean;
   public __holdRelease?: Promise<void>;
 
   constructor() {
     this.res = new MutResponse();
-    this.data = createDataBag();
+    this._services = createDataBag();
+  }
+
+  /**
+   * @internal Framework hook — get a request-scoped instance.
+   * Users must NOT use this directly; use c.service(Type).
+   */
+  _getServiceCtor<T>(Type: Ctor<T>): T | undefined {
+    return this._services.getCtor(Type);
+  }
+
+  /**
+   * @internal Framework hook — set a request-scoped instance.
+   */
+  _setServiceCtor<T>(Type: Ctor<T>, value: T): void {
+    this._services.setCtor(Type, value);
+  }
+
+  /**
+   * @internal Framework hook — clear request-scoped instances.
+   */
+  _clearServices(): void {
+    this._services.clear();
   }
 
   reset(req: Request, params: Record<string, string> = {}) {
@@ -75,6 +82,7 @@ export class HTTPContext {
 
     this._url = null;
     this._segments = null;
+
     this.params = params;
 
     this._body = undefined;
@@ -85,9 +93,8 @@ export class HTTPContext {
     this._wsMessage = null;
     this._wsContext = null;
 
-    // per-request scope
-    this.data.clear();
-    this._store.clear();
+    // Clear request-scoped instances.
+    this._clearServices();
 
     this._isWS = false;
 
@@ -101,39 +108,30 @@ export class HTTPContext {
 
     this._reqHeaders = new RequestHeaders(req.headers);
 
-    // reset cookie jar request header for this request
     this.res.cookies.resetRequest(req.headers.get("Cookie"));
     this._reqCookiesView = null;
     this._resCookiesWriter = null;
   }
 
   /**
-   * Clears per-request/per-event scope WITHOUT touching req/url/path/params.
-   * Use this for WS events to avoid stale state with pooled contexts.
+   * Clears per-message/request scope state (services + body parsing state).
+   * Used for WS messages, or if you want to manually reset scope mid-chain.
    */
   resetScope(): void {
-    this.data.clear();
-    this._store.clear();
+    this._clearServices();
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
   }
 
-  /**
-   * Resets everything that should be fresh for each WS event
-   * while keeping the underlying upgrade Request + path.
-   */
   resetForWSEvent(wsMethod: string): void {
-    // response + lifecycle bits
     this.clearResponse();
     this.err = undefined;
     this.__timeoutSent = undefined;
     this.__holdRelease = undefined;
 
-    // per-event scope safety
     this.resetScope();
 
-    // Update method/route for logging + route string correctness
     this.method = wsMethod;
     this.route = `${this.method} ${this.path}`;
   }
@@ -155,53 +153,6 @@ export class HTTPContext {
     this._state = ContextState.OPEN;
   }
 
-  /**
-   * Canonical store API (replaces WSContext-only access).
-   */
-  getStore<TVal = any>(key: string): TVal {
-    return this._store.get(key) as TVal;
-  }
-
-  setStore(key: string, value: any): void {
-    this._store.set(key, value);
-  }
-
-  deleteStore(key: string): void {
-    this._store.delete(key);
-  }
-
-  clearStore(): void {
-    this._store.clear();
-  }
-
-  /**
-   * Ergonomic store surface:
-   *   c.store.get("x")
-   *   c.store.set("x", 123)
-   */
-  get store() {
-    const c = this;
-    return {
-      get<TVal = any>(key: string): TVal {
-        return c.getStore<TVal>(key);
-      },
-      set(key: string, value: any): void {
-        c.setStore(key, value);
-      },
-      delete(key: string): void {
-        c.deleteStore(key);
-      },
-      clear(): void {
-        c.clearStore();
-      },
-    };
-  }
-
-  /**
-   * Canonical cookies surface:
-   *   c.cookies.request.get(...)
-   *   c.cookies.response.set(...)
-   */
   get cookies() {
     if (!this._reqCookiesView) this._reqCookiesView = new RequestCookies(this.res.cookies);
     if (!this._resCookiesWriter) this._resCookiesWriter = new ResponseCookies(this.res.cookies);
@@ -212,11 +163,11 @@ export class HTTPContext {
   }
 
   /**
-   * Request-scoped service accessor.
-   * This requires the Type to have been resolved into this request scope.
+   * Resolve request-scoped injected/validated instances.
+   * This is the ONLY supported per-request derivation API for users.
    */
   service<T>(Type: Ctor<T>): T {
-    const v = this.data.getCtor(Type);
+    const v = this._getServiceCtor(Type);
     if (!v) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -227,8 +178,8 @@ export class HTTPContext {
   }
 
   /**
-   * App-global singleton accessor.
-   * Xerus attaches `_globals` when handling requests / upgrading websockets.
+   * Resolve globally provided singletons.
+   * This is the ONLY supported global derivation API for users.
    */
   global<T>(Type: Ctor<T>): T {
     const g = this._globals;
@@ -277,4 +228,3 @@ export class HTTPContext {
     }
   }
 }
-// --- END FILE: src/HTTPContext.ts ---
