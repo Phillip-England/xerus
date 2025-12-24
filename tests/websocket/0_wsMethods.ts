@@ -37,7 +37,8 @@ class WSChatOpen extends XerusRoute {
 
   async handle(c: HTTPContext) {
     let ws = c.ws();
-    const auth = c.getResHeader("X-Group-Auth");
+    // FIX: Call .get() on the HeaderRef
+    const auth = c.getResHeader("X-Group-Auth").get();
     ws.send(`auth-${auth}`);
   }
 }

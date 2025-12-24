@@ -15,12 +15,11 @@ function isCtor(x: any): x is new (...args: any[]) => any {
 export abstract class XerusRoute {
   abstract method: Method;
   abstract path: string;
-  // Validators removed from property list as they are handled via class fields now
   public _middlewares: XerusMiddleware[] = [];
   public _errHandler?: HTTPErrorHandlerFunc;
+  public inject: any[] = [];
 
   onMount(): void {}
-
   async validate(_c: HTTPContext): Promise<void> {}
   async preHandle(_c: HTTPContext): Promise<void> {}
   async postHandle(_c: HTTPContext): Promise<void> {}

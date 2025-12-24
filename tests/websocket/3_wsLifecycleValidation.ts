@@ -20,7 +20,9 @@ const closeSchema = z.object({
 class HeaderClientValidator implements TypeValidator {
   client!: string;
   async validate(c: HTTPContext) {
-    this.client = c.getHeader("X-Client") ?? "";
+    // FIX: Call .get() on the HeaderRef
+    this.client = c.getHeader("X-Client").get() ?? "";
+    
     if (this.client.length === 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,

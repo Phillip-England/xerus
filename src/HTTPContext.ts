@@ -1,4 +1,3 @@
-// --- START FILE: src/HTTPContext.ts ---
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -31,14 +30,12 @@ export class HTTPContext {
   private _url: URL | null = null;
   private _urlQuery: URLQuery | null = null;
   private _pathParams: PathParams | null = null;
-
   private _reqCookiesView: RequestCookies | null = null;
   private _resCookiesWriter: ResponseCookies | null = null;
 
   path: string = "/";
   method: string = "GET";
   route: string = "";
-
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
 
@@ -49,19 +46,10 @@ export class HTTPContext {
   public _wsMessage: string | Buffer | null = null;
   public _wsContext: WSContext | null = null;
 
-  /**
-   * VALIDATED DATA BAG
-   * - Backwards compatible with old c.data["x"] / c.data.x
-   * - New: c.data(Type) or c.data("key")
-   */
   data: DataBag;
-
-  /**
-   * STORE: per-request injection storage (existing behavior)
-   */
   store: Record<string, any> = {};
-
   private err: Error | undefined | string;
+
   private _state: ContextState = ContextState.OPEN;
   public _isWS: boolean = false;
 
@@ -101,6 +89,10 @@ export class HTTPContext {
       `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,
     );
   }
+  
+  service<T>(Type: new (...args: any[]) => T): T {
+    return this.data.getCtor(Type) as T;
+  }
 
   private cleanObj(obj: Record<string, any>) {
     for (const key in obj) delete obj[key];
@@ -128,26 +120,19 @@ export class HTTPContext {
     this.req = req;
     this.res.reset();
     this._state = ContextState.OPEN;
-
     this._url = null;
     this._urlQuery = null;
     this._pathParams = null;
     this._segments = null;
-
     this.params = params;
-
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
-
     this.err = undefined;
     this._wsMessage = null;
     this._wsContext = null;
-
-    // IMPORTANT: clear validated data + store
     this.data.clear();
     this.cleanObj(this.store);
-
     this._isWS = false;
 
     const urlIndex = req.url.indexOf("/", 8);
@@ -246,10 +231,12 @@ export class HTTPContext {
       this.getHeader("x-forwarded-for").get() ||
       this.getHeader("X-Forwarded-For").get();
     if (xff) return xff.split(",")[0].trim();
+
     const xrip =
       this.getHeader("x-real-ip").get() ||
       this.getHeader("X-Real-IP").get();
     if (xrip) return xrip.trim();
+
     return "unknown";
   }
 
@@ -266,6 +253,7 @@ export class HTTPContext {
   ): void {
     if (this._timedOut) return;
     this.ensureConfigurable();
+
     let status = 302;
     let location = path;
 
@@ -273,7 +261,6 @@ export class HTTPContext {
       status = arg2;
     } else if (arg2 && typeof arg2 === "object") {
       if (typeof arg3 === "number") status = arg3;
-
       const q: Record<string, string | number | boolean | null | undefined> = {};
       for (const [key, value] of Object.entries(arg2)) {
         if (value === undefined || value === null) continue;
@@ -287,7 +274,6 @@ export class HTTPContext {
           `Redirect query param "${key}" must be string/number/boolean (got ${t}).`,
         );
       }
-
       location = buildHref(path, q);
     }
 
@@ -360,6 +346,7 @@ export class HTTPContext {
     if (!strict) return;
     if (expectedType === BodyType.TEXT) return;
     const ct = this.contentType();
+
     if (expectedType === BodyType.JSON && !ct.includes("application/json")) {
       throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
     }
@@ -404,12 +391,14 @@ export class HTTPContext {
   async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
   async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
     const strict = !!opts.strict;
+
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
     if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
       return this._body;
     }
+
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
@@ -474,6 +463,7 @@ export class HTTPContext {
       this._parsedBodyMode = "TEXT";
       return text;
     }
+
     if (expectedType === BodyType.JSON) {
       try {
         const parsed = JSON.parse(text);
@@ -484,6 +474,7 @@ export class HTTPContext {
         throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
       }
     }
+
     if (expectedType === BodyType.FORM) {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
@@ -586,7 +577,6 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
-
     const file = Bun.file(path);
     if (!(await file.exists())) {
       throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
@@ -730,4 +720,3 @@ export class HTTPContext {
     return this.parseBody(BodyType.MULTIPART_FORM, opts);
   }
 }
-// --- END FILE: src/HTTPContext.ts ---

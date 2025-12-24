@@ -1,60 +1,82 @@
-Okay I have found and issue with this framework, specifically the way it deals with Injection versus Validation:
+Okay, I want to push the limits of the framework. I think I have found a very clear distinction that is important in this framework:
 
-Here is what I would like to make happen:
+Middleware and Injectable types/services are pretty much the same thing and have the same use-caes. Let me explain.
 
-I have notied that sometimes, I have something I am injecting into a Route which depends on Validated data.
+Right now, middleware in our framework is all about being able to alter the request context in an nice and orderly manner.
 
-For examples, lets say I have a dependancy which depends on valdiated query parameters to do its job?
+Injectable types can do the same thing, and they are more easily available in Route handlers after their work is completed because they are available directly as a property of the route.
 
-Well, I would like to be able to attach validators WITHIN dependency injectors, making those validated data types also available in the main handlers. It might look something like this:
+The only issue is that middleware's order can be dictated while injectable srvices cannot.
+
+Also, right now, injectable services only allow me to run code prior to a route being ran, but If I want injectable services to replace middleware outright, we need a way to them to run after a handler is done exectugin to. We need to give injectable services lifecycle methods, and then they can replace middleware.
+
+Also, we need a way to dictate the order in which injectable services run.
+
+Injectable services can already have their own validated data, which is great, now we just need to give users the ability to set lifecycle methods on injectable services and set the order they are carried out in.
+
+Then we can remove middleware alltogether and keep Routes very clear.
+
+Validators get your small bits of data and clean them up.
+Sevices use validators to make classes of data available for a class (and perform some action on the context if needed) and Route handlers take the data and package it up from response. Each layer has their own responsbility with data and they can all pass their data up the tree.
+
+Validators pipe into Injectables which pipe into Routes
+
+At the end of the day, Id like something like this:
 
 ```ts
-class SomeQueryParam implements TypeValidator {
-  query: string
-  validate(c: HTTPContext) {
-    this.query = c.query("someQuery", "")
+class SomeValidQuery implements TypeValidator {
+  value = ''
+  async validate(c: HTTPContext) {
+    this.value = c.query('someQuery', 'defaultValue')
   }
 }
 
-class UserService implements InjectableStore {
-  someQueryParam: Validator.Ctx(SomeQueryParam)
-  init(c: HTTPContext) {
-    // do some work to inject data into the route
-    // WHILE having access to validated data
+// CHANGED NAME OF INJECTABLE STORE TO XERUSSERVICE
+// WE CAN STILL INJECT SERVICES USING XERUS.INJECT
+// AT THE FRONT OF THE APP BUT THE IDEA IS INJECTED SERVICES
+// ARE NOW SIMPLY CALLED "SERVICES" OR XERUSSERVICE
+class SomeService implemnts XerusService {
+  someValidQuery: Validator.Ctx(SomeValidQuery)
+  cat = ''
+  // maybe change the name of init?
+  // since it is a lifecycle method that runs before the route (BUT AFTER VALIDATION AS SERVICES NEED ACCESS TO VALIDATED DATA)
+  // so maybe init is not the right name anymore
+  // i tried the name 'before' this time
+  async before(c: HTTPContext) {
+    // do some work setting up data for the handlerc
+    this.cat = 'meow'
+  }
+  // lifecycle method for after a handler is complete
+  async after(c: HTTPContext) {
+    console.log('I log after the route is executed')
   }
 }
+
 
 class SomeRoute extends XerusRoute {
-  path: string = "/"
-  method: string = = "GET"
-  user: Inject(UserService) // UserService has access to SomeQueryParam under the hood
+  path: "/"
+  method: Method.GET
+  inject: [
+    Inject(SomeService), 
+    Inject(AnotherService)
+  ] // the order here allows us to determine the order services execute
+  someValidatedData: Validator.Ctx(SomeValidatorClass) // this is still okay
   async handle(c: HTTPContext) {
-    c.user.someQueryParam.query // access the query param
-    c.data(SomeQueryParam)
+    // we need some way to get the data
+    let someService = c.service(SomeService)
+    let anotherService = c.service(AnotherService)
+    // we can also still directly access Validated data
+    // because the order of validated data does not matter
+    // but, Validation data still can live on Services too
+    // It should be able to live in both areas
+    console.log(this.someValidatedData) // console.logs the class 'SomeValidatedData"
+    c.html("<p>"+someService.cat+"</p>") // <p>meow!</p>
   }
 }
 ```
 
-In this way, Injectables can now declare their own validatable data which they need access to, which is then made accessible in the main handler.
+One thing needs to be really clear, from a user perspective, I should not be grabbing items using c.getStore.
 
-This requires us to be very clear about the order or events and it changes the role of route level injection.
+The only way A user should derive data in a route is through c.global for aquiring globally-available data like configuration or database handlers, or by calling c.service()
 
-Xerus.inject() is to store things like config, db handlers, ect.
-
-But Inject() on a route is used to ensure data can be shared amoungst routes in a consistent manner, while ensuring validatable data is accesible at all layers of the processes.
-
-```ts
-Inject(UserService)
-```
-
-can now be attached to any route, and the route doesnt have to worry about any sort of validation logic, it just simply has access to the underlying data.
-
-The Injected service worries about its own validation.
-
-This isn't to say we can't validate at the route level, but allowing services to validate allows us to couple Services with their dependancies, thus reducing code in our actual route handlers.
-
-This allows us to inject data into routes, without worrying about the validation layer.
-
-the validation layer is handlers by validators and then that validated data can be further processed be injectors, which then return the final data to the route.
-
-Can you please make all the cahnges needed to make this happen? please return full files:
+At the end of the day, validator's are used to validate pieces of data services are used to take validated data and orchestrated in some manner, and then services can be injected into routes where routes can finally make use of the data with each stage having its own purpose and intent thus making these services shareable amongst many different routes and giving them lifecycle methods enabling them to run after the route two then we can remove metal wire from the project altogether. Can you please help to make these coat changes as clean and smooth as possible, please can you please also return full files to me that would be amazing.

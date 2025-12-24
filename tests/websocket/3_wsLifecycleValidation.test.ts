@@ -39,30 +39,27 @@ function waitForMessage(ws: WebSocket, ms = 2000) {
 }
 
 test("WS: validated should be cleared per-event (OPEN validator must not leak into MESSAGE)", async () => {
-  // Bun supports headers in WS constructor options
   const ws = await wsWithTimeout(`${WS_URL}/ws/lifecycle-validate`, {
     headers: { "X-Client": "tester" },
   });
 
-  // First message should be open-ok
   const first = await waitForMessage(ws);
   expect(first).toBe("open-ok");
 
-  // Then send a message, server responds "cleared" if ClientHeader is NOT present anymore
+  // FIX: Start listening BEFORE sending to avoid race condition
+  const secondProm = waitForMessage(ws);
   ws.send("hi");
-  const second = await waitForMessage(ws);
-  expect(second).toBe("cleared");
+  const second = await secondProm;
 
+  expect(second).toBe("cleared");
   ws.close();
 });
 
 test("WS: close validator should capture code + reason via Source.WS_CLOSE", async () => {
   const ws = await wsWithTimeout(`${WS_URL}/ws/close-validate`);
-
-  // close with explicit code/reason
   ws.close(4000, "bye");
 
-  // allow close event to propagate server-side
+  // Give server a moment to process the close event
   await new Promise((r) => setTimeout(r, 150));
 
   const res = await fetch(`${BaseURL}/ws-close-stats`);

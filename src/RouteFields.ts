@@ -1,4 +1,3 @@
-// --- START FILE: src/RouteFields.ts ---
 import type { HTTPContext } from "./HTTPContext";
 import type { TypeValidator } from "./TypeValidator";
 
@@ -15,6 +14,8 @@ export type AnyRouteField =
 export interface InjectableStore {
   storeKey?: string;
   init?(c: HTTPContext): Promise<void>;
+  before?(c: HTTPContext): Promise<void>;
+  after?(c: HTTPContext): Promise<void>;
 }
 
 export interface InjectableGlobal {
@@ -64,4 +65,3 @@ export function Inject<T extends InjectableStore = any>(
 ): T {
   return new RouteFieldInject(Type, storeKey) as unknown as T;
 }
-// --- END FILE: src/RouteFields.ts ---

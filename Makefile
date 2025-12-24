@@ -29,3 +29,6 @@ bench-http-json:
 	@echo 'wrk.method = "POST"; wrk.body = "{\"name\": \"Benchmark Item\"}"; wrk.headers["Content-Type"] = "application/json"' > temp_post.lua
 	wrk -t12 -c400 -d30s -s temp_post.lua http://localhost:8080/items
 	@rm temp_post.lua
+
+docs:
+	bun run --hot ./www/index.ts
