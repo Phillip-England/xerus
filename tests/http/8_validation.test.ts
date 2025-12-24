@@ -14,7 +14,6 @@ test("Validator: JSON - Valid payload should pass", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.user.name).toBe("xerus_dev");
@@ -27,16 +26,13 @@ test("Validator: JSON - Invalid payload should fail", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   expect(res.status).toBe(400);
-
   const body = await readMaybeError(res);
   if (typeof body === "string") {
     expect(body).toContain("Validation");
   } else {
     const err = body?.error ?? body;
     expect(err?.code).toBeTruthy();
-    // many implementations: VALIDATION_FAILED
     expect(String(err?.code)).toContain("VALIDATION");
   }
 });
@@ -44,7 +40,6 @@ test("Validator: JSON - Invalid payload should fail", async () => {
 test("Validator: QUERY - Valid params should pass", async () => {
   const res = await fetch(`${BaseURL}/validation/search?q=bun&limit=50`);
   const json = await res.json();
-
   expect(res.status).toBe(200);
   expect(json.search.q).toBe("bun");
   expect(json.search.limit).toBe(50);
@@ -52,9 +47,7 @@ test("Validator: QUERY - Valid params should pass", async () => {
 
 test("Validator: QUERY - Missing required param should fail", async () => {
   const res = await fetch(`${BaseURL}/validation/search?limit=50`);
-
   expect(res.status).toBe(400);
-
   const body = await readMaybeError(res);
   if (typeof body === "string") {
     expect(body).toContain("Search query is required");
@@ -72,7 +65,6 @@ test("Validator: FORM - Valid url-encoded form should pass", async () => {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "username=admin&password=secretpassword",
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.msg).toBe("Welcome admin");
@@ -84,16 +76,12 @@ test("Validator: FORM - Invalid content type (sending JSON instead of FORM) shou
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: "admin", password: "password" }),
   });
-
   expect(res.status).toBe(400);
-
   const body = await readMaybeError(res);
   if (typeof body === "string") {
     expect(body).toContain("Unexpected JSON data");
   } else {
     const err = body?.error ?? body;
-    expect(String(err?.message ?? err?.detail ?? "")).toContain(
-      "Unexpected JSON",
-    );
+    expect(String(err?.message ?? err?.detail ?? "")).toContain("Unexpected JSON");
   }
 });

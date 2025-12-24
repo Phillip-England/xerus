@@ -10,44 +10,40 @@ import type { TypeValidator } from "../../src/TypeValidator";
 import { clientIP, header, param, query, ws } from "../../src/std/Request";
 import { parseBody } from "../../src/std/Body";
 import { json } from "../../src/std/Response";
-import { Validator } from "../../src/Validator";
 
 export class QueryFilter implements TypeValidator {
-  status!: string;
   async validate(c: HTTPContext) {
-    this.status = query(c, "status") || "active";
-    if (!["active", "archived"].includes(this.status)) {
-      throw new SystemErr(
-        SystemErrCode.VALIDATION_FAILED,
-        "Invalid status query",
-      );
+    const status = query(c, "status") || "active";
+    if (!["active", "archived"].includes(status)) {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid status query");
     }
+    return { status };
   }
 }
 
 export class UserIdParam implements TypeValidator {
-  id!: number;
   async validate(c: HTTPContext) {
-    this.id = Number(param(c, "id"));
-    if (!Number.isFinite(this.id) || this.id <= 0) {
+    const id = Number(param(c, "id"));
+    if (!Number.isFinite(id) || id <= 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Invalid User ID path param",
       );
     }
+    return { id };
   }
 }
 
 export class ApiKeyHeader implements TypeValidator {
-  key!: string;
   async validate(c: HTTPContext) {
-    this.key = header(c, "X-Api-Key") ?? "";
-    if (this.key !== "xerus-secret-123") {
+    const key = header(c, "X-Api-Key") ?? "";
+    if (key !== "xerus-secret-123") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Invalid API Key Header",
       );
     }
+    return { key };
   }
 }
 
@@ -57,11 +53,11 @@ const userSchema = z.object({
 });
 
 export class CreateUserJson implements TypeValidator {
-  data!: z.infer<typeof userSchema>;
   async validate(c: HTTPContext) {
     try {
       const raw = await parseBody(c, BodyType.JSON);
-      this.data = await userSchema.parseAsync(raw);
+      const data = await userSchema.parseAsync(raw);
+      return { data };
     } catch (e: any) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -72,49 +68,49 @@ export class CreateUserJson implements TypeValidator {
 }
 
 export class IpValidator implements TypeValidator {
-  ip!: string;
   async validate(c: HTTPContext) {
-    this.ip = clientIP(c);
-    if (this.ip === "unknown") {
+    const ip = clientIP(c);
+    if (ip === "unknown") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Could not determine IP",
       );
     }
+    return { ip };
   }
 }
 
 export class WsPingValidator implements TypeValidator {
-  content!: string;
   async validate(c: HTTPContext) {
-    this.content = String(ws(c).message);
-    if (this.content !== "PING") {
-      throw new SystemErr(
-        SystemErrCode.VALIDATION_FAILED,
-        "Expected PING message",
-      );
+    const content = String(ws(c).message);
+    if (content !== "PING") {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected PING message");
     }
+    return { content };
   }
 }
 
 class AllValidatorsRoute extends XerusRoute {
   method = Method.POST;
   path = "/showcase/all/:id";
-  userId = Validator.Ctx(UserIdParam);
-  query = Validator.Ctx(QueryFilter);
-  apiKey = Validator.Ctx(ApiKeyHeader);
-  body = Validator.Ctx(CreateUserJson);
-  ip = Validator.Ctx(IpValidator);
+  validators = [UserIdParam, QueryFilter, ApiKeyHeader, CreateUserJson, IpValidator];
+
   async handle(c: HTTPContext) {
+    const { id } = c.validated(UserIdParam);
+    const { status } = c.validated(QueryFilter);
+    const { key } = c.validated(ApiKeyHeader);
+    const { data } = c.validated(CreateUserJson);
+    const { ip } = c.validated(IpValidator);
+
     json(c, {
       success: true,
       resolved: {
-        id: this.userId.id,
-        status: this.query.status,
-        key_masked: this.apiKey.key.slice(0, 5) + "...",
-        username: this.body.data.username,
-        role: this.body.data.role,
-        ip: this.ip.ip,
+        id,
+        status,
+        key_masked: key.slice(0, 5) + "...",
+        username: data.username,
+        role: data.role,
+        ip,
       },
     });
   }
@@ -123,10 +119,12 @@ class AllValidatorsRoute extends XerusRoute {
 class WsShowcaseRoute extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/showcase/ws";
-  msg = Validator.Ctx(WsPingValidator);
+  validators = [WsPingValidator];
+
   async handle(c: HTTPContext) {
-    let socket = ws(c);
-    socket.send(`PONG-${this.msg.content}`);
+    const { content } = c.validated(WsPingValidator);
+    const socket = ws(c);
+    socket.send(`PONG-${content}`);
   }
 }
 

@@ -1,11 +1,9 @@
-// /Users/phillipengland/src/xerus/tests/http/22_injector_validators.test.ts
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
 
 test("Injector+Validators: injected service should share the same validator instance as c.data(Type)", async () => {
   const res = await fetch(`${BaseURL}/injector-validator?q=hello`);
   const j = await res.json();
-
   expect(res.status).toBe(200);
   expect(j.fromSvc).toBe("hello");
   expect(j.fromData).toBe("hello");
@@ -30,7 +28,6 @@ test("Injector+Validators: should not leak across requests (computed should trac
 test("Injector+Validators: missing query param should default via c.query fallback", async () => {
   const res = await fetch(`${BaseURL}/injector-validator`);
   const j = await res.json();
-
   expect(res.status).toBe(200);
   expect(j.fromSvc).toBe("");
   expect(j.fromData).toBe("");

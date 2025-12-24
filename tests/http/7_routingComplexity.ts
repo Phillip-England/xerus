@@ -49,11 +49,5 @@ class DocsWildcard extends XerusRoute {
 }
 
 export function routingComplexity(app: Xerus) {
-  app.mount(
-    UsersMe,
-    UsersParam,
-    OrgProject,
-    PublicWildcard,
-    DocsWildcard,
-  );
+  app.mount(UsersMe, UsersParam, OrgProject, PublicWildcard, DocsWildcard);
 }

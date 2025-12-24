@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Inject, type InjectableStore } from "../../src/RouteFields";
+import type { InjectableStore } from "../../src/RouteFields";
 import { json, setHeader, stream, text } from "../../src/std/Response";
 
 class PollutionStore implements InjectableStore {
@@ -13,9 +13,11 @@ class PollutionStore implements InjectableStore {
 class PollutionSet extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/set";
-  store = Inject(PollutionStore);
+  services = [PollutionStore];
+
   async handle(c: HTTPContext) {
-    this.store.value = "I should be cleaned up";
+    const store = c.service(PollutionStore);
+    store.value = "I should be cleaned up";
     json(c, { set: true });
   }
 }
@@ -23,9 +25,11 @@ class PollutionSet extends XerusRoute {
 class PollutionCheck extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/check";
-  store = Inject(PollutionStore);
+  services = [PollutionStore];
+
   async handle(c: HTTPContext) {
-    const val = this.store.value;
+    const store = c.service(PollutionStore);
+    const val = store.value;
     json(c, { polluted: !!val, value: val });
   }
 }
@@ -40,7 +44,8 @@ class BrokenService implements InjectableStore {
 class BrokenServiceRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/service-fail";
-  inject = [Inject(BrokenService)];
+  services = [BrokenService];
+
   async handle(c: HTTPContext) {
     text(c, "Should not reach here");
   }
@@ -49,6 +54,7 @@ class BrokenServiceRoute extends XerusRoute {
 class LateHeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/late-header";
+
   async handle(c: HTTPContext) {
     json(c, { ok: true });
     setHeader(c, "X-Late", "Too late");
@@ -58,6 +64,7 @@ class LateHeaderRoute extends XerusRoute {
 class StreamSafetyRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/stream-safety";
+
   async handle(c: HTTPContext) {
     const s = new ReadableStream({
       start(ctrl) {
@@ -66,9 +73,11 @@ class StreamSafetyRoute extends XerusRoute {
       },
     });
     stream(c, s);
+
     try {
       setHeader(c, "X-Fail", "True");
     } catch {
+      // expected: headers immutable after streaming begins
     }
   }
 }

@@ -5,12 +5,10 @@ import type { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
-import { Inject } from "../../src/RouteFields";
 import type { TypeValidator } from "../../src/TypeValidator";
 import type { ServiceLifecycle } from "../../src/RouteFields";
 import { json, setHeader, text } from "../../src/std/Response";
 import { parseBody } from "../../src/std/Body";
-import { Validator } from "../../src/Validator";
 
 export class GroupHeaderService implements ServiceLifecycle {
   async before(c: HTTPContext) {
@@ -19,15 +17,15 @@ export class GroupHeaderService implements ServiceLifecycle {
 }
 
 class AnyJsonBody implements TypeValidator {
-  data: any;
   async validate(c: HTTPContext) {
-    this.data = await parseBody(c, BodyType.JSON);
-    if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) {
+    const data = await parseBody(c, BodyType.JSON);
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Expected JSON object body",
       );
     }
+    return data;
   }
 }
 
@@ -42,16 +40,19 @@ class ApiV1 extends XerusRoute {
 class ApiEcho extends XerusRoute {
   method = Method.POST;
   path = "/api/echo";
-  body = Validator.Ctx(AnyJsonBody);
+  validators = [AnyJsonBody];
+
   async handle(c: HTTPContext) {
-    json(c, { received: this.body.data });
+    const received = c.validated(AnyJsonBody);
+    json(c, { received });
   }
 }
 
 class AdminDashboard extends XerusRoute {
   method = Method.GET;
   path = "/admin/dashboard";
-  inject = [Inject(GroupHeaderService)];
+  services = [GroupHeaderService];
+
   async handle(c: HTTPContext) {
     text(c, "Welcome to the Dashboard");
   }
@@ -60,7 +61,8 @@ class AdminDashboard extends XerusRoute {
 class AdminSettings extends XerusRoute {
   method = Method.DELETE;
   path = "/admin/settings";
-  inject = [Inject(GroupHeaderService)];
+  services = [GroupHeaderService];
+
   async handle(c: HTTPContext) {
     json(c, { deleted: true });
   }

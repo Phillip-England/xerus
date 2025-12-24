@@ -7,20 +7,25 @@ import { SystemErrCode } from "../../src/SystemErrCode";
 import { BodyType } from "../../src/BodyType";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { parseBody } from "../../src/std/Body";
-import { json, redirect, setHeader, setStatus, text } from "../../src/std/Response";
-import { Validator } from "../../src/Validator";
+import {
+  json,
+  redirect,
+  setHeader,
+  setStatus,
+  text,
+} from "../../src/std/Response";
 import { header, query } from "../../src/std/Request";
 
 class JsonObjectBody implements TypeValidator {
-  body: any;
   async validate(c: HTTPContext) {
-    this.body = await parseBody(c, BodyType.JSON);
-    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
+    const body = await parseBody(c, BodyType.JSON);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Expected JSON object body",
       );
     }
+    return body;
   }
 }
 
@@ -35,19 +40,21 @@ class Root extends XerusRoute {
 class CreateItem extends XerusRoute {
   method = Method.POST;
   path = "/items";
-  jsonObj = Validator.Ctx(JsonObjectBody);
+  validators = [JsonObjectBody];
   async handle(c: HTTPContext) {
+    const body = c.validated(JsonObjectBody);
     setStatus(c, 201);
-    json(c, { message: "Item created", data: this.jsonObj.body });
+    json(c, { message: "Item created", data: body });
   }
 }
 
 class UpdateItem extends XerusRoute {
   method = Method.PUT;
   path = "/items/1";
-  jsonObj = Validator.Ctx(JsonObjectBody);
+  validators = [JsonObjectBody];
   async handle(c: HTTPContext) {
-    json(c, { message: "Item 1 updated", data: this.jsonObj.body });
+    const body = c.validated(JsonObjectBody);
+    json(c, { message: "Item 1 updated", data: body });
   }
 }
 

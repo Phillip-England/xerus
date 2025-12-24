@@ -1,3 +1,4 @@
+// --- START FILE: src/Xerus.ts ---
 import type { Server, ServerWebSocket } from "bun";
 import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { HTTPContext } from "./HTTPContext";
@@ -9,22 +10,25 @@ import { join, resolve } from "path";
 import { ObjectPool } from "./ObjectPool";
 import { XerusRoute } from "./XerusRoute";
 import { Method } from "./Method";
-import {
-  type ServiceLifecycle,
-  isRouteFieldInject,
-  isRouteFieldValidator,
-} from "./RouteFields";
+import type { ServiceLifecycle } from "./RouteFields";
+import type { TypeValidator } from "./TypeValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
+
+const LEGACY_FIELD = Symbol.for("xerus:routefield");
+const INIT_PROMISE = Symbol.for("xerus:service_init_promise");
+
+type ServiceCtor<T extends ServiceLifecycle = any> = new () => T;
+type ValidatorCtor<T extends TypeValidator<any> = any> = new () => T;
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
-  private globalServices: Array<new () => ServiceLifecycle> = []; // per-request services
+
+  private globalServices: ServiceCtor[] = []; // per-request services
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
 
-  // Route finding cache (method + path -> resolved params & handler)
   private resolvedRoutes = new Map<
     string,
     { blueprint?: RouteBlueprint; params: Record<string, string> }
@@ -33,6 +37,7 @@ export class Xerus {
 
   private contextPool: ObjectPool<HTTPContext>;
   private globals = new Map<any, any>();
+
   private freezeValidators: boolean = true;
 
   constructor() {
@@ -48,15 +53,14 @@ export class Xerus {
     return this;
   }
 
-  use(...serviceCtors: Array<new () => ServiceLifecycle>) {
+  use(...serviceCtors: ServiceCtor[]) {
     this.globalServices.push(...serviceCtors);
   }
 
-  usePre(...serviceCtors: Array<new () => ServiceLifecycle>) {
+  usePre(...serviceCtors: ServiceCtor[]) {
     this.use(...serviceCtors);
   }
 
-  // Provide a singleton/global instance for injection
   provide<T>(Type: new (...args: any[]) => T, instance: T, storeKey?: string) {
     const key = storeKey ?? (instance as any)?.storeKey ?? Type.name;
     this.globals.set(Type, instance);
@@ -64,15 +68,12 @@ export class Xerus {
     return this;
   }
 
-  // Instantiate and provide a global singleton
   async injectGlobal(...ctors: Array<new () => any>) {
     for (const Ctor of ctors) {
       const instance: any = new Ctor();
       const key = instance?.storeKey ?? Ctor.name;
       this.globals.set(Ctor, instance);
       this.globals.set(key, instance);
-
-      // Optional: global init lifecycle
       if (instance && typeof instance.initApp === "function") {
         await instance.initApp(this);
       }
@@ -80,16 +81,77 @@ export class Xerus {
     return this;
   }
 
+  private assertCtorList(name: string, arr: any, where: string) {
+    if (arr === undefined || arr === null) return;
+    if (!Array.isArray(arr)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `[XERUS] ${where}.${name} must be an array of constructors.`,
+      );
+    }
+    for (const item of arr) {
+      if (typeof item !== "function") {
+        throw new SystemErr(
+          SystemErrCode.INTERNAL_SERVER_ERR,
+          `[XERUS] ${where}.${name} must contain only constructors (classes/functions).`,
+        );
+      }
+      // reject legacy RouteField objects accidentally placed into these arrays
+      if (item && typeof item === "object" && item[LEGACY_FIELD] === true) {
+        throw new SystemErr(
+          SystemErrCode.INTERNAL_SERVER_ERR,
+          `[XERUS] ${where}.${name} contains legacy RouteField objects. ` +
+            `Use ctor lists: ${name} = [MyCtor]`,
+        );
+      }
+    }
+  }
+
+  private assertNoLegacyFields(instance: any, where: string) {
+    // hard-enforce new UX:
+    // - no `inject = [Inject(...)]`
+    // - no property values that are legacy RouteField objects
+    if (Array.isArray(instance?.inject) && instance.inject.length > 0) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `[XERUS] Legacy "inject" is not supported.\n` +
+          `Use: services = [MyServiceCtor]\n` +
+          `Then access via: c.service(MyServiceCtor)`,
+      );
+    }
+
+    const props = Object.getOwnPropertyNames(instance);
+    for (const prop of props) {
+      const val = instance[prop];
+      if (val && typeof val === "object" && val[LEGACY_FIELD] === true) {
+        throw new SystemErr(
+          SystemErrCode.INTERNAL_SERVER_ERR,
+          `[XERUS] Legacy RouteField usage detected at ${where}.${prop}.\n` +
+            `Use: services = [A, B] and validators = [V1, V2]`,
+        );
+      }
+    }
+
+    // Also check arrays named validators/services for legacy elements.
+    this.assertCtorList("services", instance?.services, where);
+    this.assertCtorList("validators", instance?.validators, where);
+  }
+
   mount(...routeCtors: (new () => XerusRoute)[] | any[]) {
     for (const Ctor of routeCtors) {
       const instance = new Ctor();
-      // Allow route to configure itself before mounting
+
+      // allow onMount to mutate services/validators/path/etc
       instance.onMount();
 
-      // Capture props set during onMount or constructor
+      // enforce the new method early
+      this.assertNoLegacyFields(instance, Ctor?.name ?? "Route");
+
+      // capture mount-time props (excluding config fields we store explicitly)
       const props: Record<string, any> = {};
       for (const k of Object.getOwnPropertyNames(instance)) {
-        if (k === "_errHandler" || k === "validators" || k === "inject") continue;
+        if (k === "_errHandler" || k === "services" || k === "validators" || k === "inject")
+          continue;
         props[k] = (instance as any)[k];
       }
 
@@ -97,6 +159,8 @@ export class Xerus {
         Ctor,
         errHandler: instance._errHandler,
         mounted: { props },
+        services: (instance.services ?? []) as any,
+        validators: (instance.validators ?? []) as any,
       };
 
       this.register(instance.method, instance.path, blueprint);
@@ -126,11 +190,9 @@ export class Xerus {
         const lookupPath = c.path.substring(pathPrefix.length);
         const fileData =
           embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
-
         if (!fileData) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
         }
-
         setHeader(c, "Content-Type", fileData.type);
         let bodyData = fileData.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -138,6 +200,7 @@ export class Xerus {
         c.finalize();
       }
     }
+
     this.mount(EmbedRoute);
   }
 
@@ -149,19 +212,16 @@ export class Xerus {
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
 
       async handle(c: HTTPContext) {
-        // Strip prefix
         const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
         const finalPath = resolve(join(absRoot, relativePath));
-
-        // Security check
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
-
         await file(c, finalPath);
       }
     }
+
     this.mount(StaticRoute);
   }
 
@@ -221,9 +281,9 @@ export class Xerus {
         `Route ${method} ${path} has already been registered`,
       );
     }
+
     (node.handlers as any)[method] = blueprint;
 
-    // Optimization for static routes
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -237,14 +297,12 @@ export class Xerus {
     params: Record<string, string>,
   ): { blueprint?: RouteBlueprint; params: Record<string, string> } | null {
     if (index === parts.length) {
-      // Exact match found at this depth
       if ((node.handlers as any)[method]) {
         return { blueprint: (node.handlers as any)[method], params };
       }
       if ((node as any).wsHandler) {
         return { blueprint: (node as any).wsHandler, params };
       }
-      // Check for deep wildcard attached here
       if (node.wildcard) {
         const wcNode = node.wildcard;
         if ((wcNode.handlers as any)[method] || (wcNode as any).wsHandler) {
@@ -259,14 +317,12 @@ export class Xerus {
 
     const part = parts[index];
 
-    // 1. Exact match
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
       if (result) return result;
     }
 
-    // 2. Param match
     const paramNode = node.children[":param"];
     if (paramNode) {
       const newParams = { ...params };
@@ -275,7 +331,6 @@ export class Xerus {
       if (result) return result;
     }
 
-    // 3. Wildcard match (greedy)
     if (node.wildcard) {
       const wcNode = node.wildcard;
       if ((wcNode.handlers as any)[method] || (wcNode as any).wsHandler) {
@@ -296,15 +351,12 @@ export class Xerus {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
-    // Fast path: static routes
     if (this.routes[cacheKey]) {
       return { blueprint: this.routes[cacheKey], params: {} };
     }
 
-    // Check dynamic cache
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
-      // LRU-ish: move to end
       this.resolvedRoutes.delete(cacheKey);
       this.resolvedRoutes.set(cacheKey, cached);
       return cached;
@@ -317,13 +369,12 @@ export class Xerus {
         params: {},
       };
 
-    // Update cache
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
-    this.resolvedRoutes.set(cacheKey, result);
 
+    this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
 
@@ -344,13 +395,8 @@ export class Xerus {
     const isArray = Array.isArray(o);
     const isPlain = this.isPlainObject(o);
     const isClassInstance =
-      !isArray &&
-      !isPlain &&
-      typeof o === "object" &&
-      o.constructor &&
-      o.constructor !== Object;
+      !isArray && !isPlain && typeof o === "object" && o.constructor && o.constructor !== Object;
 
-    // Only freeze arrays, plain objects, and class instances (Services/Validators)
     if (!isArray && !isPlain && !isClassInstance) return obj;
 
     const keys = Object.getOwnPropertyNames(o);
@@ -358,14 +404,14 @@ export class Xerus {
       const v = o[k];
       if (!v || typeof v !== "object") continue;
 
-      // Skip internal Bun/Node types to avoid errors
       const ctorName = v?.constructor?.name;
       if (
         v instanceof Request ||
         v instanceof Response ||
         v instanceof URL ||
         v instanceof Headers ||
-        typeof (globalThis as any).FormData !== "undefined" && v instanceof (globalThis as any).FormData ||
+        (typeof (globalThis as any).FormData !== "undefined" &&
+          v instanceof (globalThis as any).FormData) ||
         ctorName === "Blob" ||
         ctorName === "File" ||
         ctorName === "ReadableStream" ||
@@ -375,161 +421,126 @@ export class Xerus {
       ) {
         continue;
       }
+
       this.deepFreeze(v, seen);
     }
 
     try {
       Object.freeze(o);
-    } catch {
-      // ignore freeze errors on certain built-ins
-    }
+    } catch {}
 
     return obj;
   }
 
-  private async resolveValidator(c: HTTPContext, Type: any): Promise<any> {
-    let existing: any = c._getServiceCtor(Type);
-    if (existing) return existing;
-
-    existing = new Type();
-    await existing.validate(c);
-
-    if (this.freezeValidators) {
-      this.deepFreeze(existing);
+  private async resolveValidatorValue(c: HTTPContext, Type: ValidatorCtor): Promise<any> {
+    if ((c as any)._hasValidatedCtor(Type)) {
+      return (c as any)._getValidatedCtor(Type);
     }
 
-    c._setServiceCtor(Type, existing);
-    return existing;
+    const inst: any = new Type();
+    const value = await inst.validate(c);
+
+    // Enforce: validated() returns ONLY what validate() returns.
+    // If validate() returns nothing, this is a bug (or a side-effect validator that must return something).
+    if (value === undefined) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `[XERUS] Validator ${Type?.name ?? "UnknownValidator"} did not return a value.\n` +
+          `Validators must return the validated value (this is what c.validated(...) returns).\n` +
+          `If you need access to raw input later, include it in your return value.`,
+      );
+    }
+
+    const stored = this.freezeValidators ? this.deepFreeze(value) : value;
+    (c as any)._setValidatedCtor(Type, stored);
+    return stored;
   }
 
-  private async resolveService(c: HTTPContext, Type: any): Promise<any> {
-    let existing: any = c._getServiceCtor(Type);
-    if (existing) return existing;
-
-    existing = new Type();
-    await this.resolveInstanceFields(c, existing);
-
-    if (typeof existing.init === "function") {
-      await existing.init(c);
+  private async resolveService(c: HTTPContext, Type: ServiceCtor): Promise<any> {
+    if ((c as any)._hasServiceCtor(Type)) {
+      const existing = (c as any)._getServiceCtor(Type);
+      const p = existing?.[INIT_PROMISE];
+      if (p && typeof p.then === "function") {
+        await p;
+      }
+      return existing;
     }
 
-    c._setServiceCtor(Type, existing);
-    return existing;
+    const inst: any = new Type();
+
+    // enforce no legacy fields inside services
+    this.assertNoLegacyFields(inst, Type?.name ?? "Service");
+
+    // store early to break cycles
+    (c as any)._setServiceCtor(Type, inst);
+
+    const initPromise = (async () => {
+      // resolve service deps (services can depend on other services)
+      const deps: ServiceCtor[] = Array.isArray(inst.services) ? inst.services : [];
+      this.assertCtorList("services", deps, Type?.name ?? "Service");
+      for (const Dep of deps) {
+        await this.resolveService(c, Dep);
+      }
+
+      // resolve validator deps (optional, but supported)
+      const vdeps: ValidatorCtor[] = Array.isArray(inst.validators) ? inst.validators : [];
+      this.assertCtorList("validators", vdeps, Type?.name ?? "Service");
+      for (const V of vdeps) {
+        await this.resolveValidatorValue(c, V);
+      }
+
+      if (typeof inst.init === "function") {
+        await inst.init(c);
+      }
+    })();
+
+    inst[INIT_PROMISE] = initPromise;
+    await initPromise;
+
+    return inst;
   }
 
-private async resolveInstanceFields(c: HTTPContext, instance: any) {
-    const props = Object.getOwnPropertyNames(instance);
-    const X_FIELD = Symbol.for("xerus:routefield");
+  /**
+   * Activate a set of services (including their dependency trees),
+   * returning an ordered unique list where dependencies run before dependents.
+   */
+  private async activateServices(c: HTTPContext, roots: ServiceCtor[]): Promise<ServiceLifecycle[]> {
+    const ordered: ServiceLifecycle[] = [];
+    const seen = new Set<any>();
 
-    for (const prop of props) {
-      const val = instance[prop];
-      
-      // Robust check for Validator Fields
-      if (val && typeof val === "object" && val["kind"] === "validator" && (val as any)[X_FIELD] === true) {
-        const Type = val.Type;
-        const v = await this.resolveValidator(c, Type);
-        
-        // Try direct assignment, fall back to defineProperty
-        try {
-          instance[prop] = v;
-        } catch {
-          Object.defineProperty(instance, prop, {
-            value: v,
-            writable: true,
-            enumerable: true,
-            configurable: true,
-          });
-        }
-        continue;
+    const visit = async (Type: ServiceCtor) => {
+      if (seen.has(Type)) return;
+      seen.add(Type);
+
+      const inst: any = await this.resolveService(c, Type);
+
+      const deps: ServiceCtor[] = Array.isArray(inst?.services) ? inst.services : [];
+      for (const Dep of deps) {
+        await visit(Dep);
       }
 
-      // Robust check for Inject Fields
-      if (val && typeof val === "object" && val["kind"] === "inject" && (val as any)[X_FIELD] === true) {
-        const { Type } = val;
-        const service = await this.resolveService(c, Type);
-        
-        try {
-          instance[prop] = service;
-        } catch {
-          Object.defineProperty(instance, prop, {
-            value: service,
-            writable: true,
-            enumerable: true,
-            configurable: true,
-          });
-        }
-      }
-    }
-  }
-  private async hydrateRouteValidatorsOnly(c: HTTPContext, routeInstance: any): Promise<void> {
-    const props = Object.getOwnPropertyNames(routeInstance);
-    for (const prop of props) {
-      const val = (routeInstance as any)[prop];
-      if (!isRouteFieldValidator(val)) continue;
+      ordered.push(inst);
+    };
 
-      const Type = val.Type;
-      const v = await this.resolveValidator(c, Type);
-      (routeInstance as any)[prop] = v;
+    for (const Root of roots) {
+      await visit(Root);
     }
+
+    return ordered;
   }
 
-  private async hydrateRouteServices(
-    c: HTTPContext,
-    routeInstance: any,
-  ): Promise<ServiceLifecycle[]> {
-    const services: ServiceLifecycle[] = [];
-    const processedTypes = new Set<any>();
-
-    // 1. Manual `inject` array (legacy support or explicit ordering)
-    if (Array.isArray(routeInstance.inject)) {
-      for (const field of routeInstance.inject) {
-        if (isRouteFieldInject(field)) {
-          const { Type } = field;
-          if (!processedTypes.has(Type)) {
-            const svc = await this.resolveService(c, Type);
-            services.push(svc);
-            processedTypes.add(Type);
-          }
-        }
-      }
+  private async runValidators(c: HTTPContext, validators: ValidatorCtor[], where: string) {
+    this.assertCtorList("validators", validators, where);
+    for (const V of validators) {
+      await this.resolveValidatorValue(c, V);
+      if (c.isDone) return;
     }
-
-    // 2. Instance properties decorated with Inject() or Validator.Ctx()
-    const props = Object.getOwnPropertyNames(routeInstance);
-    for (const prop of props) {
-      const val = (routeInstance as any)[prop];
-
-      // Validators are resolved in `hydrateRouteValidatorsOnly` BEFORE services
-      if (isRouteFieldValidator(val)) {
-        const Type = val.Type;
-        const instance = await this.resolveValidator(c, Type);
-        (routeInstance as any)[prop] = instance;
-        continue;
-      }
-
-      // Services
-      if (isRouteFieldInject(val)) {
-        const { Type } = val;
-        let svc: any;
-        // reuse if already resolved in inject array
-        if (processedTypes.has(Type)) {
-          svc = c.service(Type);
-        } else {
-          svc = await this.resolveService(c, Type);
-          services.push(svc);
-          processedTypes.add(Type);
-        }
-        (routeInstance as any)[prop] = svc;
-      }
-    }
-
-    return services;
   }
 
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext) {
     const routeInstance = new blueprint.Ctor();
 
-    // Copy props from mount time
+    // apply mount-time props
     const mounted = (blueprint as any).mounted;
     if (mounted?.props && typeof mounted.props === "object") {
       for (const [k, v] of Object.entries(mounted.props)) {
@@ -537,50 +548,49 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
       }
     }
 
-    // 1. Validate route-level validators (Top-level)
+    // enforce new UX on per-request instance too (in case user set legacy fields at runtime)
+    this.assertNoLegacyFields(routeInstance, blueprint.Ctor?.name ?? "Route");
+
+    // route-declared validators run first (so route.validate can read c.validated())
+    const routeValidators = (blueprint.validators ?? (routeInstance as any).validators ?? []) as ValidatorCtor[];
+    await this.runValidators(context, routeValidators, blueprint.Ctor?.name ?? "Route");
+    if (context.isDone) return;
+
+    // optional custom validation hook
     await routeInstance.validate(context);
     if (context.isDone) return;
 
-    // 2. Hydrate Route Validators (Fields) - Runs BEFORE services
-    // This ensures validators are ready if services need them via context,
-    // though services shouldn't access route fields directly.
-    await this.hydrateRouteValidatorsOnly(context, routeInstance);
-    if (context.isDone) return;
+    // activate services (global + route), including dependency trees
+    const serviceRoots: ServiceCtor[] = [
+      ...(this.globalServices ?? []),
+      ...(((blueprint.services ?? (routeInstance as any).services ?? []) as any[]) ?? []),
+    ] as ServiceCtor[];
 
-    const activeServices: ServiceLifecycle[] = [];
+    this.assertCtorList("services", serviceRoots, blueprint.Ctor?.name ?? "Route");
+
+    const activeServices = await this.activateServices(context, serviceRoots);
 
     try {
-      // 3. Global Services
-      for (const GlobalType of this.globalServices) {
-        const svc = await this.resolveService(context, GlobalType);
-        activeServices.push(svc);
-      }
-
-      // 4. Route Services (Injected fields)
-      const routeServices = await this.hydrateRouteServices(context, routeInstance);
-      activeServices.push(...routeServices);
-
-      // 5. Lifecycle: before()
+      // before hooks in order
       for (const svc of activeServices) {
         if (svc.before) await svc.before(context);
         if (context.isDone) return;
       }
 
-      // 6. Handler
       await routeInstance.preHandle(context);
       if (context.isDone) return;
 
       await routeInstance.handle(context);
 
-      // 7. Lifecycle: after() (Reverse order is often better but linear here)
       await routeInstance.postHandle(context);
 
+      // after hooks in reverse order
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
         if (svc.after) await svc.after(context);
       }
     } catch (err) {
-      // 8. Lifecycle: onError()
+      // onError hooks in reverse order
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
         if (svc.onError) {
@@ -603,7 +613,7 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
     const blueprint = found.blueprint;
     const params = found.params;
 
-    // WebSocket Upgrade Check
+    // WebSocket upgrade
     if (
       method === "GET" &&
       blueprint &&
@@ -616,7 +626,6 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
         (context as any)._globals = this.globals;
         context._isWS = true;
         (context as any)._wsBlueprints = blueprint;
-
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
 
@@ -630,6 +639,7 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
     }
 
     let context: HTTPContext | undefined;
+
     try {
       context = this.contextPool.acquire();
       context.reset(req, params);
@@ -642,13 +652,11 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
         return resp;
       }
 
-      // Not Found
       if (this.notFoundHandler) {
-        const activeServices: ServiceLifecycle[] = [];
-        // Run global services for 404 too
-        for (const GlobalType of this.globalServices) {
-          const svc = await this.resolveService(context, GlobalType);
-          activeServices.push(svc);
+        // run global services even on notFound
+        const activeServices = await this.activateServices(context, this.globalServices);
+
+        for (const svc of activeServices) {
           if (svc.before) await svc.before(context);
           if (context.isDone) {
             const resp = context.res.send();
@@ -674,11 +682,9 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
       (c as any)._globals = this.globals;
-
       c.clearResponse();
       c.err = e;
 
-      // Handle Validation Errors standard way
       const isValidationish =
         e &&
         typeof e === "object" &&
@@ -692,7 +698,6 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
         return resp;
       }
 
-      // Handle System Errors
       if (e instanceof SystemErr) {
         const errHandler = SystemErrRecord[e.typeOf];
         await errHandler(c, e);
@@ -701,7 +706,6 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
         return resp;
       }
 
-      // Route-specific error handler
       if (blueprint?.errHandler) {
         try {
           await blueprint.errHandler(c, e);
@@ -711,11 +715,9 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
         } catch (handlerErr: any) {
           c.clearResponse();
           c.err = handlerErr;
-          // Fallthrough to global
         }
       }
 
-      // Global error handler
       if (this.errHandler) {
         await this.errHandler(c, e);
         const resp = c.res.send();
@@ -725,15 +727,16 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
 
       console.warn(`[XERUS WARNING] Uncaught error on ${method} ${path}`);
       console.error(e);
+
       errorJSON(c, 500, SystemErrCode.INTERNAL_SERVER_ERR, "Internal Server Error", {
         detail: e?.message ?? "Unknown",
       });
+
       const resp = c.res.send();
       c.markSent();
       return resp;
     } finally {
       if (context) {
-        // Handle delayed release (e.g. for long-running async work not awaited)
         const hold = context.__holdRelease;
         if (hold && typeof (hold as any).then === "function") {
           const ctx = context;
@@ -787,10 +790,10 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
       const httpCtx = ws.data as HTTPContext;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
-
       if (!blueprint) return;
 
       httpCtx.resetForWSEvent(wsMethodFor(eventName));
+
       if (eventName === "message") {
         httpCtx._wsMessage = args[0] ?? null;
       } else {
@@ -805,6 +808,7 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
       } else {
         wsCtx = new WSContext(ws, httpCtx);
       }
+
       httpCtx._wsContext = wsCtx;
 
       try {
@@ -853,3 +857,4 @@ private async resolveInstanceFields(c: HTTPContext, instance: any) {
     console.log(`🚀 Server running on ${server.port}`);
   }
 }
+// --- END FILE ---

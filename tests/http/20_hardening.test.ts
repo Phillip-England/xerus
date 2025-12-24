@@ -37,7 +37,7 @@ test("Hardening: Duplicate route registration should throw at startup", async ()
   class A extends XerusRoute {
     method = Method.GET;
     path = "/duplicate";
-    async handle(c: any) {}
+    async handle(_c: any) {}
   }
   const app = new Xerus();
   app.mount(A);

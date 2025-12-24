@@ -1,55 +1,49 @@
 import type { TypeValidator } from "../../src/TypeValidator";
 import type { HTTPContext } from "../../src/HTTPContext";
 import { Method } from "../../src/Method";
-import { type InjectableStore, Inject } from "../../src/RouteFields";
+import type { InjectableStore } from "../../src/RouteFields";
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { query } from "../../src/std/Request";
 import { json } from "../../src/std/Response";
-import { Validator } from "../../src/Validator";
 
 class SomeQueryParam implements TypeValidator {
-  query: string = "";
-  async validate(c: HTTPContext): Promise<void> {
-    this.query = query(c, "q", "");
+  async validate(c: HTTPContext) {
+    const q = query(c, "q", "");
+    return { query: q };
   }
 }
 
 class UserService implements InjectableStore {
   storeKey = "UserService";
-  qp = Validator.Ctx(SomeQueryParam);
+
+  qp?: { query: string };
   computed: string = "";
 
   async init(c: HTTPContext): Promise<void> {
-    const fromSvc = c.service(SomeQueryParam);
-    if (!fromSvc || typeof fromSvc.query !== "string") {
-      throw new Error(
-        "Expected SomeQueryParam to exist in c.service(SomeQueryParam) before init()",
-      );
-    }
-    if (fromSvc !== this.qp) {
-      throw new Error(
-        "Expected service validator to be same instance as c.service(SomeQueryParam)",
-      );
-    }
-    this.computed = `computed:${this.qp.query}`;
+    // Pull from the validator cache (and/or trigger it if not run yet).
+    const qp = c.validated(SomeQueryParam);
+
+    this.qp = qp;
+    this.computed = `computed:${qp.query}`;
   }
 }
 
 class InjectorValidatorRoute extends XerusRoute {
   method = Method.GET;
   path = "/injector-validator";
-  user = Inject(UserService);
+  services = [UserService];
+  validators = [SomeQueryParam];
 
   async handle(c: HTTPContext): Promise<void> {
-    const fromSvc = this.user.qp.query;
-    const fromData = c.service(SomeQueryParam).query;
+    const user = c.service(UserService);
+    const qp = c.validated(SomeQueryParam);
 
     json(c, {
-      fromSvc,
-      fromData, // ✅ match test expectation
-      sameInstance: c.service(SomeQueryParam) === this.user.qp,
-      computed: this.user.computed,
+      fromSvc: user.qp?.query ?? "",
+      fromData: qp.query,
+      sameInstance: user.qp === qp,
+      computed: user.computed,
     });
   }
 }

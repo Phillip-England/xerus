@@ -23,6 +23,7 @@ const mockEmbeddedFiles = {
 export function staticFiles(app: Xerus) {
   app.embed("/static-site", mockEmbeddedFiles);
   app.embed("/assets", mockEmbeddedFiles);
+
   const srcPath = resolve("./src");
   app.static("/disk-src", srcPath);
 }

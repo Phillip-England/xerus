@@ -2,24 +2,28 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-import { Inject, type InjectableStore, type ServiceLifecycle } from "../../src/RouteFields";
+import type { InjectableStore, ServiceLifecycle } from "../../src/RouteFields";
 import { errorJSON, json, setHeader } from "../../src/std/Response";
-import { header, clientIP } from "../../src/std/Request"; // Added clientIP import
+import { header, clientIP, reqCookie } from "../../src/std/Request";
 
 class CsrfService implements InjectableStore, ServiceLifecycle {
   storeKey = "CsrfService";
   token: string = "";
+
   async before(c: HTTPContext) {
     const cookieName = "csrf_token";
-    const existing = c.res.cookies.get(cookieName); // Cookies accessed via MutResponse
+    const existing = reqCookie(c, cookieName);
+
     if (c.method === "GET") {
       const token = existing || "test-token-123";
       this.token = token;
+
       if (!existing) {
         c.res.cookies.set(cookieName, token);
       }
       return;
     }
+
     const headerToken = header(c, "x-csrf-token");
     if (!existing || existing !== headerToken) {
       errorJSON(c, 403, "CSRF_FAILED", "Invalid Token");
@@ -30,10 +34,11 @@ class CsrfService implements InjectableStore, ServiceLifecycle {
 class RequestIdService implements InjectableStore, ServiceLifecycle {
   storeKey = "RequestIdService";
   id: string = "";
-  async before(c: HTTPContext) {
+
+  async before(_c: HTTPContext) {
     const id = crypto.randomUUID();
     this.id = id;
-    setHeader(c, "X-Request-Id", id);
+    setHeader(_c, "X-Request-Id", id);
   }
 }
 
@@ -41,9 +46,10 @@ const rateLimitMap = new Map<string, number>();
 
 class RateLimitService implements ServiceLifecycle {
   async before(c: HTTPContext) {
-    const ip = clientIP(c); // Use actual IP (allows mocking via X-Forwarded-For)
+    const ip = clientIP(c);
     const count = (rateLimitMap.get(ip) || 0) + 1;
     rateLimitMap.set(ip, count);
+
     if (count > 2) {
       errorJSON(c, 429, "RATE_LIMITED", "Too many requests");
     }
@@ -53,13 +59,15 @@ class RateLimitService implements ServiceLifecycle {
 class TimeoutService implements InjectableStore, ServiceLifecycle {
   storeKey = "TimeoutService";
   start = 0;
+
   async before(_c: HTTPContext) {
     this.start = Date.now();
   }
+
   async after(c: HTTPContext) {
-    // Handler waits 100ms. If we check > 50ms, it should trigger.
     if (Date.now() - this.start > 50) {
-      if (!c.isDone) {
+      const done = (c as any).isDone ?? (c as any).done ?? false;
+      if (!done) {
         errorJSON(c, 504, "TIMEOUT", "Gateway Timeout");
       }
     }
@@ -69,7 +77,8 @@ class TimeoutService implements InjectableStore, ServiceLifecycle {
 class RequestIdRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/request-id";
-  inject = [Inject(RequestIdService)];
+  services = [RequestIdService];
+
   async handle(c: HTTPContext) {
     const svc = c.service(RequestIdService);
     json(c, { id: svc.id });
@@ -79,7 +88,8 @@ class RequestIdRoute extends XerusRoute {
 class RateLimitRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/limited";
-  inject = [Inject(RateLimitService)];
+  services = [RateLimitService];
+
   async handle(c: HTTPContext) {
     json(c, { ok: true });
   }
@@ -88,7 +98,8 @@ class RateLimitRoute extends XerusRoute {
 class CsrfGetRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/csrf";
-  inject = [Inject(CsrfService)];
+  services = [CsrfService];
+
   async handle(c: HTTPContext) {
     const csrf = c.service(CsrfService);
     json(c, { token: csrf.token });
@@ -98,7 +109,8 @@ class CsrfGetRoute extends XerusRoute {
 class CsrfPostRoute extends XerusRoute {
   method = Method.POST;
   path = "/patterns/csrf";
-  inject = [Inject(CsrfService)];
+  services = [CsrfService];
+
   async handle(c: HTTPContext) {
     json(c, { ok: true });
   }
@@ -107,7 +119,8 @@ class CsrfPostRoute extends XerusRoute {
 class TimeoutRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/timeout";
-  inject = [Inject(TimeoutService)];
+  services = [TimeoutService];
+
   async handle(_c: HTTPContext) {
     await new Promise((r) => setTimeout(r, 100));
   }

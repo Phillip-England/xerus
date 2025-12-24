@@ -13,7 +13,6 @@ test("Validator Pattern: Should fail validation logic defined in TypeValidator",
   const data = await res.json();
   expect(res.status).toBe(400);
   expect(data.error.code).toBe("VALIDATION_FAILED");
-  // Updated expectation to match actual SystemErr format
   expect(data.error.detail).toBe("VALIDATION_FAILED: Page must be >= 1");
 });
 

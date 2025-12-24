@@ -1,13 +1,20 @@
+// --- START FILE: src/DataBag.ts ---
 export type Ctor<T> = new (...args: any[]) => T;
 
+/**
+ * DataBag: ctor-keyed storage that supports storing `undefined` values.
+ *
+ * Important: Map.get() returns `undefined` both for "missing" and "stored undefined".
+ * So we must always consult `hasCtor()` for presence checks.
+ */
 export interface DataBag {
-  // Make DataBag callable: c.data(Type)
   <T>(Type: Ctor<T>): T | undefined;
-  
-  // Keep existing methods attached to the function
+
   setCtor<T>(Type: Ctor<T>, value: T): void;
   getCtor<T>(Type: Ctor<T>): T | undefined;
+
   requireCtor<T>(Type: Ctor<T>, errMsg?: string): T;
+
   hasCtor(Type: Ctor<any>): boolean;
   deleteCtor(Type: Ctor<any>): void;
   clear(): void;
@@ -16,12 +23,10 @@ export interface DataBag {
 export function createDataBag(): DataBag {
   const byCtor = new Map<any, any>();
 
-  // 1. Define the main function for c.data(Type)
   const bag = <T>(Type: Ctor<T>): T | undefined => {
     return byCtor.get(Type);
   };
 
-  // 2. Attach the methods to the function instance
   bag.setCtor = <T>(Type: Ctor<T>, value: T) => {
     byCtor.set(Type, value);
   };
@@ -31,8 +36,7 @@ export function createDataBag(): DataBag {
   };
 
   bag.requireCtor = <T>(Type: Ctor<T>, errMsg?: string): T => {
-    const v = byCtor.get(Type);
-    if (v !== undefined) return v as T;
+    if (byCtor.has(Type)) return byCtor.get(Type) as T;
     throw new Error(
       errMsg ??
         `DataBag missing instance for ctor: ${(Type as any)?.name ?? "UnknownType"}`,
@@ -51,6 +55,6 @@ export function createDataBag(): DataBag {
     byCtor.clear();
   };
 
-  // 3. Return as the DataBag interface
   return bag as DataBag;
 }
+// --- END FILE ---

@@ -6,17 +6,23 @@ import { RequestCookies, ResponseCookies } from "./Cookies";
 import { RequestHeaders } from "./Headers";
 import { createDataBag, type DataBag } from "./DataBag";
 import type { WSContext } from "./WSContext";
+import type { TypeValidator } from "./TypeValidator";
 
 export type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
+
 type Ctor<T> = new (...args: any[]) => T;
+
+type AnyValidatorCtor = new () => TypeValidator<any>;
+type ValidatedOut<TCtor extends AnyValidatorCtor> = Awaited<
+  ReturnType<InstanceType<TCtor>["validate"]>
+>;
 
 export class HTTPContext {
   req!: Request;
   res: MutResponse;
 
-  // NOTE: This is internal storage for request-scoped resolved instances.
-  // Users must access via c.service(Type) only.
   private _services: DataBag;
+  private _validated: DataBag;
 
   path: string = "/";
   method: string = "GET";
@@ -39,40 +45,42 @@ export class HTTPContext {
   _isWS: boolean = false;
 
   _state: ContextState = ContextState.OPEN;
-
-  // Attached by Xerus. Used only by c.global().
   _globals: Map<any, any> | null = null;
 
   public err: Error | undefined | string;
-
   public __timeoutSent?: boolean;
   public __holdRelease?: Promise<void>;
 
   constructor() {
     this.res = new MutResponse();
     this._services = createDataBag();
+    this._validated = createDataBag();
   }
 
-  /**
-   * @internal Framework hook — get a request-scoped instance.
-   * Users must NOT use this directly; use c.service(Type).
-   */
   _getServiceCtor<T>(Type: Ctor<T>): T | undefined {
     return this._services.getCtor(Type);
   }
-
-  /**
-   * @internal Framework hook — set a request-scoped instance.
-   */
   _setServiceCtor<T>(Type: Ctor<T>, value: T): void {
     this._services.setCtor(Type, value);
   }
-
-  /**
-   * @internal Framework hook — clear request-scoped instances.
-   */
+  _hasServiceCtor(Type: Ctor<any>): boolean {
+    return this._services.hasCtor(Type);
+  }
   _clearServices(): void {
     this._services.clear();
+  }
+
+  _getValidatedCtor<T>(Type: Ctor<T>): T | undefined {
+    return this._validated.getCtor(Type);
+  }
+  _setValidatedCtor<T>(Type: Ctor<T>, value: T): void {
+    this._validated.setCtor(Type, value);
+  }
+  _hasValidatedCtor(Type: Ctor<any>): boolean {
+    return this._validated.hasCtor(Type);
+  }
+  _clearValidated(): void {
+    this._validated.clear();
   }
 
   reset(req: Request, params: Record<string, string> = {}) {
@@ -82,7 +90,6 @@ export class HTTPContext {
 
     this._url = null;
     this._segments = null;
-
     this.params = params;
 
     this._body = undefined;
@@ -90,11 +97,12 @@ export class HTTPContext {
     this._parsedBodyMode = "NONE";
 
     this.err = undefined;
+
     this._wsMessage = null;
     this._wsContext = null;
 
-    // Clear request-scoped instances.
     this._clearServices();
+    this._clearValidated();
 
     this._isWS = false;
 
@@ -113,12 +121,9 @@ export class HTTPContext {
     this._resCookiesWriter = null;
   }
 
-  /**
-   * Clears per-message/request scope state (services + body parsing state).
-   * Used for WS messages, or if you want to manually reset scope mid-chain.
-   */
   resetScope(): void {
     this._clearServices();
+    this._clearValidated();
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
@@ -129,9 +134,7 @@ export class HTTPContext {
     this.err = undefined;
     this.__timeoutSent = undefined;
     this.__holdRelease = undefined;
-
     this.resetScope();
-
     this.method = wsMethod;
     this.route = `${this.method} ${this.path}`;
   }
@@ -162,25 +165,30 @@ export class HTTPContext {
     };
   }
 
-  /**
-   * Resolve request-scoped injected/validated instances.
-   * This is the ONLY supported per-request derivation API for users.
-   */
   service<T>(Type: Ctor<T>): T {
-    const v = this._getServiceCtor(Type);
-    if (!v) {
+    if (!this._hasServiceCtor(Type)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `Service not available on context: ${Type?.name ?? "UnknownType"}`,
       );
     }
-    return v as T;
+    return this._getServiceCtor(Type) as T;
   }
 
   /**
-   * Resolve globally provided singletons.
-   * This is the ONLY supported global derivation API for users.
+   * Returns ONLY the value returned by the validator's validate() method.
+   * If you want access to raw input, you must include/return it from validate().
    */
+  validated<TCtor extends AnyValidatorCtor>(Type: TCtor): ValidatedOut<TCtor> {
+    if (!this._hasValidatedCtor(Type as any)) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Validated value not available: ${(Type as any)?.name ?? "UnknownType"} (did you declare it in validators = [...]?)`,
+      );
+    }
+    return this._getValidatedCtor(Type as any) as ValidatedOut<TCtor>;
+  }
+
   global<T>(Type: Ctor<T>): T {
     const g = this._globals;
     if (!g) {
@@ -189,16 +197,13 @@ export class HTTPContext {
         "Global registry not available on context (did Xerus attach it?)",
       );
     }
-
     const byCtor = g.get(Type);
     if (byCtor) return byCtor as T;
-
     const name = (Type as any)?.name;
     if (name) {
       const byName = g.get(name);
       if (byName) return byName as T;
     }
-
     throw new SystemErr(
       SystemErrCode.INTERNAL_SERVER_ERR,
       `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,

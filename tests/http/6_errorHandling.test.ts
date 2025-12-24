@@ -18,9 +18,7 @@ test("Errors: GET /err/standard should be caught by app.onErr", async () => {
 test("Errors: GET /err/middleware should be caught by app.onErr", async () => {
   const res = await fetch(`${BaseURL}/err/middleware`);
   const data = await res.json();
-  
   expect(res.status).toBe(500);
-  // FIX: Updated expectation to match actual error thrown by Service
   expect(data.error.detail).toBe("Failure in Service");
 });
 

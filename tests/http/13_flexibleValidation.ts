@@ -8,39 +8,40 @@ import { SystemErrCode } from "../../src/SystemErrCode";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { header, param, query } from "../../src/std/Request";
 import { json } from "../../src/std/Response";
-import { Validator } from "../../src/Validator";
 
 class HeaderValidator implements TypeValidator {
-  val!: string;
   async validate(c: HTTPContext) {
-    this.val = header(c, "X-Secret") ?? "";
-    if (this.val !== "xerus-power") {
+    const val = header(c, "X-Secret") ?? "";
+    if (val !== "xerus-power") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid Secret");
     }
+    return { val };
   }
 }
 
 class IdParamValidator implements TypeValidator {
-  id!: number;
   async validate(c: HTTPContext) {
-    this.id = Number(param(c, "id"));
-    z.number().int().parse(this.id);
+    const id = Number(param(c, "id"));
+    z.number().int().parse(id);
+    return { id };
   }
 }
 
 class PageQueryValidator implements TypeValidator {
-  page!: number;
   async validate(c: HTTPContext) {
-    this.page = Number(query(c, "page"));
-    z.number().min(1).parse(this.page);
+    const page = Number(query(c, "page"));
+    z.number().min(1).parse(page);
+    return { page };
   }
 }
 
 class HeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/header";
-  secret = Validator.Ctx(HeaderValidator);
+  validators = [HeaderValidator];
+
   async handle(c: HTTPContext) {
+    c.validated(HeaderValidator);
     json(c, { status: "ok" });
   }
 }
@@ -48,18 +49,22 @@ class HeaderRoute extends XerusRoute {
 class ParamRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/param/:id";
-  params = Validator.Ctx(IdParamValidator);
+  validators = [IdParamValidator];
+
   async handle(c: HTTPContext) {
-    json(c, { id: this.params.id });
+    const { id } = c.validated(IdParamValidator);
+    json(c, { id });
   }
 }
 
 class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/query";
-  query = Validator.Ctx(PageQueryValidator);
+  validators = [PageQueryValidator];
+
   async handle(c: HTTPContext) {
-    json(c, { page: this.query.page });
+    const { page } = c.validated(PageQueryValidator);
+    json(c, { page });
   }
 }
 

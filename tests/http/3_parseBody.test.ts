@@ -14,7 +14,6 @@ function expectBodyParsingFailed(body: any) {
   }
   const err = body?.error ?? body;
   expect(err?.code).toBe("BODY_PARSING_FAILED");
-  // message/detail may vary by implementation
 }
 
 test("parseBody: JSON should parse valid object", async () => {
@@ -24,7 +23,6 @@ test("parseBody: JSON should parse valid object", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.data).toEqual(payload);
@@ -36,7 +34,6 @@ test("parseBody: JSON should fail on invalid syntax", async () => {
     headers: { "Content-Type": "application/json" },
     body: "{ invalid: json }",
   });
-
   expect(res.status).toBe(400);
   const body = await readMaybeError(res);
   expectBodyParsingFailed(body);
@@ -49,7 +46,6 @@ test("parseBody: TEXT should parse plain string", async () => {
     headers: { "Content-Type": "text/plain" },
     body: payload,
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.data).toBe(payload);
@@ -61,7 +57,6 @@ test("parseBody: FORM should parse URL-encoded data", async () => {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "username=jacex&role=admin",
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.data).toEqual({ username: "jacex", role: "admin" });
@@ -71,12 +66,10 @@ test("parseBody: MULTIPART should parse FormData", async () => {
   const formData = new FormData();
   formData.append("field1", "value1");
   formData.append("field2", "value2");
-
   const res = await fetch(`${BaseURL}/parse/multipart`, {
     method: "POST",
     body: formData,
   });
-
   const json = await res.json();
   expect(res.status).toBe(200);
   expect(json.data).toEqual({ field1: "value1", field2: "value2" });
@@ -88,17 +81,13 @@ test("parseBody: Should error if Content-Type does not match expectation", async
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ test: "data" }),
   });
-
   expect(res.status).toBe(400);
   const body = await readMaybeError(res);
-
   if (typeof body === "string") {
     expect(body).toContain("Unexpected JSON data");
   } else {
     const err = body?.error ?? body;
     expect(err?.code).toBeTruthy();
-    expect(String(err?.message ?? err?.detail ?? "")).toContain(
-      "Unexpected JSON",
-    );
+    expect(String(err?.message ?? err?.detail ?? "")).toContain("Unexpected JSON");
   }
 });

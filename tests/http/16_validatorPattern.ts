@@ -7,24 +7,25 @@ import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { query } from "../../src/std/Request";
 import { json } from "../../src/std/Response";
-import { Validator } from "../../src/Validator";
 
 export class QueryPageValidator implements TypeValidator {
-  page!: number;
   async validate(c: HTTPContext) {
-    this.page = Number(query(c, "page") || "1");
-    if (isNaN(this.page) || this.page < 1) {
+    const page = Number(query(c, "page") || "1");
+    if (isNaN(page) || page < 1) {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Page must be >= 1");
     }
+    return { page };
   }
 }
 
 class ValidatorRoute extends XerusRoute {
   method = Method.GET;
   path = "/validator/pattern";
-  query = Validator.Ctx(QueryPageValidator);
+  validators = [QueryPageValidator];
+
   async handle(c: HTTPContext) {
-    json(c, { page: this.query.page });
+    const { page } = c.validated(QueryPageValidator);
+    json(c, { page });
   }
 }
 

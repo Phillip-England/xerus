@@ -2,7 +2,6 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
 import { query } from "../../src/std/Request";
 import { json, setHeader, setStatus, text } from "../../src/std/Response";
@@ -10,10 +9,12 @@ import { json, setHeader, setStatus, text } from "../../src/std/Response";
 class PoolSet extends XerusRoute {
   method = Method.GET;
   path = "/pool/set";
-  store = Inject(TestStore);
+  services = [TestStore];
+
   async handle(c: HTTPContext) {
+    const store = c.service(TestStore);
     const val = query(c, "val");
-    this.store.test_val = val;
+    store.test_val = val;
     json(c, { value: val });
   }
 }
@@ -21,9 +22,11 @@ class PoolSet extends XerusRoute {
 class PoolGet extends XerusRoute {
   method = Method.GET;
   path = "/pool/get";
-  store = Inject(TestStore);
+  services = [TestStore];
+
   async handle(c: HTTPContext) {
-    const val = this.store.test_val;
+    const store = c.service(TestStore);
+    const val = store.test_val;
     json(c, { value: val });
   }
 }
@@ -41,7 +44,6 @@ class PoolCheckHeader extends XerusRoute {
   method = Method.GET;
   path = "/pool/check-header";
   async handle(c: HTTPContext) {
-    // Note: getResHeader is not in std, accessed via context directly as per internal API
     const leaked = c.res.getHeader("X-Leaked-Header");
     if (leaked) {
       setStatus(c, 500);

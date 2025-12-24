@@ -7,92 +7,90 @@ import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { json } from "../../src/std/Response";
-// Alias the import to avoid conflict with the exported function below
 import { parseBody as stdParseBody } from "../../src/std/Body";
-import { Validator } from "../../src/Validator";
 
 class JsonBody implements TypeValidator {
-  data: any;
   async validate(c: HTTPContext) {
-    this.data = await stdParseBody(c, BodyType.JSON);
-    if (
-      !this.data || typeof this.data !== "object" || Array.isArray(this.data)
-    ) {
+    const data: any = await stdParseBody(c, BodyType.JSON);
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Expected JSON object body",
       );
     }
+    return data;
   }
 }
 
 class TextBody implements TypeValidator {
-  content!: string;
   async validate(c: HTTPContext) {
-    this.content = await stdParseBody(c, BodyType.TEXT);
-    if (typeof this.content !== "string") {
-      throw new SystemErr(
-        SystemErrCode.VALIDATION_FAILED,
-        "Expected text body",
-      );
+    const content = await stdParseBody(c, BodyType.TEXT);
+    if (typeof content !== "string") {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected text body");
     }
+    return content;
   }
 }
 
 class FormBody implements TypeValidator {
-  data: any;
   async validate(c: HTTPContext) {
-    this.data = await stdParseBody(c, BodyType.FORM);
-    if (!this.data || typeof this.data !== "object") {
-      throw new SystemErr(
-        SystemErrCode.VALIDATION_FAILED,
-        "Expected FORM object",
-      );
+    const data: any = await stdParseBody(c, BodyType.FORM);
+    if (!data || typeof data !== "object") {
+      throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Expected FORM object");
     }
+    return data;
   }
 }
 
 class MultipartBody implements TypeValidator {
-  fd!: FormData;
   async validate(c: HTTPContext) {
-    this.fd = await stdParseBody(c, BodyType.MULTIPART_FORM);
+    const fd = await stdParseBody(c, BodyType.MULTIPART_FORM);
+    return fd;
   }
 }
 
 class ParseJson extends XerusRoute {
   method = Method.POST;
   path = "/parse/json";
-  body = Validator.Ctx(JsonBody);
+  validators = [JsonBody];
+
   async handle(c: HTTPContext) {
-    json(c, { status: "success", data: this.body.data });
+    const data = c.validated(JsonBody);
+    json(c, { status: "success", data });
   }
 }
 
 class ParseText extends XerusRoute {
   method = Method.POST;
   path = "/parse/text";
-  body = Validator.Ctx(TextBody);
+  validators = [TextBody];
+
   async handle(c: HTTPContext) {
-    json(c, { status: "success", data: this.body.content });
+    const data = c.validated(TextBody);
+    json(c, { status: "success", data });
   }
 }
 
 class ParseForm extends XerusRoute {
   method = Method.POST;
   path = "/parse/form";
-  body = Validator.Ctx(FormBody);
+  validators = [FormBody];
+
   async handle(c: HTTPContext) {
-    json(c, { status: "success", data: this.body.data });
+    const data = c.validated(FormBody);
+    json(c, { status: "success", data });
   }
 }
 
 class ParseMultipart extends XerusRoute {
   method = Method.POST;
   path = "/parse/multipart";
-  body = Validator.Ctx(MultipartBody);
+  validators = [MultipartBody];
+
   async handle(c: HTTPContext) {
+    const fd = c.validated(MultipartBody) as FormData;
     const result: Record<string, string> = {};
-    this.body.fd.forEach((value: FormDataEntryValue, key: string) => {
+    fd.forEach((value: FormDataEntryValue, key: string) => {
       if (typeof value === "string") result[key] = value;
     });
     json(c, { status: "success", data: result });

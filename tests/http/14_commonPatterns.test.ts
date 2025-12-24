@@ -12,18 +12,14 @@ test("RequestId: should return and echo X-Request-Id", async () => {
 });
 
 test("RateLimit: third request should 429", async () => {
-  // ✅ isolate this test from global rateLimitMap state
-  const ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`; // TEST-NET-3 range
+  const ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
   const headers = { "X-Forwarded-For": ip };
-
   const r1 = await fetch(`${BaseURL}/patterns/limited`, { headers });
   const r2 = await fetch(`${BaseURL}/patterns/limited`, { headers });
   const r3 = await fetch(`${BaseURL}/patterns/limited`, { headers });
-
   expect(r1.status).toBe(200);
   expect(r2.status).toBe(200);
   expect(r3.status).toBe(429);
-
   const j = await r3.json();
   expect(j.error.code).toBe("RATE_LIMITED");
 });
@@ -35,7 +31,7 @@ test("CSRF: should reject missing token and accept matching token", async () => 
   const setCookie = r1.headers.get("set-cookie") ?? "";
   expect(setCookie.length).toBeGreaterThan(0);
 
-  const cookiePair = setCookie.split(";")[0]; // csrf_token=...
+  const cookiePair = setCookie.split(";")[0];
   const token = cookiePair.split("=", 2)[1] ?? "";
   expect(token.length).toBeGreaterThan(0);
 

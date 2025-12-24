@@ -2,7 +2,7 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
+import type { ServiceLifecycle } from "../../src/RouteFields";
 import { json, setStatus } from "../../src/std/Response";
 
 class ErrorCatcherService implements ServiceLifecycle {
@@ -12,8 +12,8 @@ class ErrorCatcherService implements ServiceLifecycle {
       error: {
         code: "SERVICE_CAUGHT",
         message: "Service caught the error",
-        detail: err.message
-      }
+        detail: err?.message ?? String(err),
+      },
     });
   }
 }
@@ -21,8 +21,8 @@ class ErrorCatcherService implements ServiceLifecycle {
 class FailRoute extends XerusRoute {
   method = Method.GET;
   path = "/safeguard/fail";
-  inject = [Inject(ErrorCatcherService)];
-  async handle(c: HTTPContext) {
+  services = [ErrorCatcherService];
+  async handle(_c: HTTPContext) {
     throw new Error("Handler Failed");
   }
 }
