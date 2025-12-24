@@ -2,8 +2,9 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
+// 1. Import reqCookie
+import { reqCookie } from "../../src/std/Request";
 import { setCookie, clearCookie, json } from "../../src/std/Response";
-import { getCookie } from "../../src/std/Request";
 
 class SetCookie extends XerusRoute {
   method = Method.GET;
@@ -33,7 +34,8 @@ class GetCookie extends XerusRoute {
   method = Method.GET;
   path = "/cookies/get";
   async handle(c: HTTPContext) {
-    const theme = getCookie(c, "theme").get();
+    // 2. Use reqCookie(c, name) directly (no .get())
+    const theme = reqCookie(c, "theme");
     json(c, { theme });
   }
 }

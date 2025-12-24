@@ -1,3 +1,4 @@
+// --- START FILE: src/std/Response.ts ---
 import { HTTPContext } from "../HTTPContext";
 import { SystemErr } from "../SystemErr";
 import { SystemErrCode } from "../SystemErrCode";
@@ -18,8 +19,8 @@ export function setHeader(c: HTTPContext, name: string, value: string): void {
   c.ensureConfigurable();
   if (/[\r\n]/.test(value)) {
     throw new SystemErr(
-      SystemErrCode.INTERNAL_SERVER_ERR, 
-      `Attempted to set invalid header: ${name}`
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      `Attempted to set invalid header: ${name}`,
     );
   }
   c.res.headers.set(name, value);
@@ -29,8 +30,8 @@ export function appendHeader(c: HTTPContext, name: string, value: string): void 
   c.ensureConfigurable();
   if (/[\r\n]/.test(value)) {
     throw new SystemErr(
-      SystemErrCode.INTERNAL_SERVER_ERR, 
-      `Attempted to set invalid header: ${name}`
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      `Attempted to set invalid header: ${name}`,
     );
   }
   c.res.headers.append(name, value);
@@ -63,29 +64,32 @@ export function json(c: HTTPContext, data: any, code?: number): void {
 }
 
 export function errorJSON(
-  c: HTTPContext, 
-  status: number, 
-  code: string, 
-  message: string, 
-  extra?: Record<string, any>
+  c: HTTPContext,
+  status: number,
+  code: string,
+  message: string,
+  extra?: Record<string, any>,
 ): void {
   c.ensureBodyModifiable();
   setHeader(c, "Content-Type", "application/json");
   c.res.setStatus(status);
-  c.res.body(JSON.stringify({
-    error: { code, message, ...(extra ?? {}) },
-  }));
+  c.res.body(
+    JSON.stringify({
+      error: { code, message, ...(extra ?? {}) },
+    }),
+  );
   c.finalize();
 }
 
 export function redirect(
-  c: HTTPContext, 
-  path: string, 
-  query?: Record<string, any>, 
-  status: number = 302
+  c: HTTPContext,
+  path: string,
+  query?: Record<string, any>,
+  status: number = 302,
 ): void {
   c.ensureConfigurable();
   let location = path;
+
   if (query) {
     const q: Record<string, string | number | boolean | null | undefined> = {};
     for (const [key, value] of Object.entries(query)) {
@@ -126,12 +130,25 @@ export async function file(c: HTTPContext, path: string): Promise<void> {
   c.finalize();
 }
 
-export function setCookie(c: HTTPContext, name: string, value: string, options?: CookieOptions): void {
+/**
+ * Canonical cookie writers (go through c.cookies.response).
+ */
+export function setCookie(
+  c: HTTPContext,
+  name: string,
+  value: string,
+  options?: CookieOptions,
+): void {
   c.ensureConfigurable();
-  c.res.cookies.set(name, value, options);
+  c.cookies.response.set(name, value, options ?? {});
 }
 
-export function clearCookie(c: HTTPContext, name: string, options?: { path?: string; domain?: string }): void {
+export function clearCookie(
+  c: HTTPContext,
+  name: string,
+  options?: { path?: string; domain?: string },
+): void {
   c.ensureConfigurable();
-  c.res.cookies.clear(name, options);
+  c.cookies.response.clear(name, options);
 }
+// --- END FILE: src/std/Response.ts ---

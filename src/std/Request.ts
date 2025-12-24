@@ -1,9 +1,9 @@
+// --- START FILE: src/std/Request.ts ---
 import { HTTPContext } from "../HTTPContext";
 import { RequestHeaders } from "../Headers";
 import { SystemErr } from "../SystemErr";
 import { SystemErrCode } from "../SystemErrCode";
 import { WSContext } from "../WSContext";
-import { type CookieRef } from "../Cookies";
 
 export function url(c: HTTPContext): URL {
   if (!c._url) c._url = new URL(c.req.url);
@@ -38,7 +38,7 @@ export function header(c: HTTPContext, name: string): string | null {
 }
 
 export function headers(c: HTTPContext): RequestHeaders {
-  if(!c._reqHeaders) c._reqHeaders = new RequestHeaders(c.req.headers);
+  if (!c._reqHeaders) c._reqHeaders = new RequestHeaders(c.req.headers);
   return c._reqHeaders;
 }
 
@@ -51,19 +51,23 @@ export function clientIP(c: HTTPContext): string {
 }
 
 export function ws(c: HTTPContext): WSContext {
-    if (!c._wsContext) {
-      throw new SystemErr(
-        SystemErrCode.INTERNAL_SERVER_ERR,
-        "WebSocket context is not available. Are you calling ws(c) from a non-WS route?",
-      );
-    }
-    return c._wsContext;
+  if (!c._wsContext) {
+    throw new SystemErr(
+      SystemErrCode.INTERNAL_SERVER_ERR,
+      "WebSocket context is not available. Are you calling ws(c) from a non-WS route?",
+    );
+  }
+  return c._wsContext;
 }
 
 export function isWs(c: HTTPContext): boolean {
-    return c._wsContext != null;
+  return c._wsContext != null;
 }
 
-export function getCookie(c: HTTPContext, name: string): CookieRef {
-  return c.res.cookies.ref(name);
+/**
+ * Request cookie read helper (canonical: c.cookies.request.get()).
+ */
+export function reqCookie(c: HTTPContext, name: string): string | undefined {
+  return c.cookies.request.get(name);
 }
+// --- END FILE: src/std/Request.ts ---

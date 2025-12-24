@@ -1,3 +1,4 @@
+// --- START FILE: src/Xerus.ts ---
 import type { Server, ServerWebSocket } from "bun";
 import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { HTTPContext } from "./HTTPContext";
@@ -41,9 +42,6 @@ export class Xerus {
     this.contextPool.resize(size);
   }
 
-  /**
-   * Register per-request services (constructed + resolved on demand per context).
-   */
   use(...serviceCtors: Array<new () => ServiceLifecycle>) {
     this.globalServices.push(...serviceCtors);
   }
@@ -52,36 +50,19 @@ export class Xerus {
     this.use(...serviceCtors);
   }
 
-  /**
-   * Provide a singleton (global registry).
-   * Accessible via c.global(Type).
-   */
-  provide<T>(
-    Type: new (...args: any[]) => T,
-    instance: T,
-    storeKey?: string,
-  ) {
+  provide<T>(Type: new (...args: any[]) => T, instance: T, storeKey?: string) {
     const key = storeKey ?? (instance as any)?.storeKey ?? Type.name;
     this.globals.set(Type, instance);
     this.globals.set(key, instance);
     return this;
   }
 
-  /**
-   * Create + register singleton services, and call initApp(app) once.
-   *
-   * IMPORTANT:
-   * - This is app-level, NOT per-request.
-   * - We do NOT call init(c) here, because there is no HTTPContext.
-   */
   async injectGlobal(...ctors: Array<new () => any>) {
     for (const Ctor of ctors) {
       const instance: any = new Ctor();
       const key = instance?.storeKey ?? Ctor.name;
-
       this.globals.set(Ctor, instance);
       this.globals.set(key, instance);
-
       if (instance && typeof instance.initApp === "function") {
         await instance.initApp(this);
       }
@@ -94,7 +75,6 @@ export class Xerus {
       const instance = new Ctor();
       instance.onMount();
 
-      // capture mount-time props so the route can be re-instantiated per request
       const props: Record<string, any> = {};
       for (const k of Object.getOwnPropertyNames(instance)) {
         if (k === "_errHandler" || k === "validators" || k === "inject") continue;
@@ -121,27 +101,18 @@ export class Xerus {
 
   embed(
     pathPrefix: string,
-    embeddedFiles: Record<
-      string,
-      { content: string | Buffer | Uint8Array | number[]; type: string }
-    >,
+    embeddedFiles: Record<string, { content: string | Buffer | Uint8Array | number[]; type: string }>,
   ) {
     class EmbedRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix + "/*";
-
       async handle(c: HTTPContext) {
         const lookupPath = c.path.substring(pathPrefix.length);
         const fileData =
           embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
-
         if (!fileData) {
-          throw new SystemErr(
-            SystemErrCode.FILE_NOT_FOUND,
-            `Asset ${lookupPath} not found`,
-          );
+          throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
         }
-
         setHeader(c, "Content-Type", fileData.type);
         let bodyData = fileData.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -149,32 +120,24 @@ export class Xerus {
         c.finalize();
       }
     }
-
     this.mount(EmbedRoute);
   }
 
   static(pathPrefix: string, rootDir: string) {
     const absRoot = resolve(rootDir);
-
     class StaticRoute extends XerusRoute {
       method = Method.GET;
       path = pathPrefix === "/" ? "/*" : pathPrefix.replace(/\/+$/, "") + "/*";
-
       async handle(c: HTTPContext) {
-        const urlPath = c.path.substring(
-          pathPrefix.length === 1 ? 0 : pathPrefix.length,
-        );
+        const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
         const finalPath = resolve(join(absRoot, relativePath));
-
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
-
         await file(c, finalPath);
       }
     }
-
     this.mount(StaticRoute);
   }
 
@@ -236,7 +199,6 @@ export class Xerus {
     }
 
     (node.handlers as any)[method] = blueprint;
-
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -260,8 +222,7 @@ export class Xerus {
         const wcNode = node.wildcard;
         if ((wcNode.handlers as any)[method] || (wcNode as any).wsHandler) {
           return {
-            blueprint:
-              (wcNode.handlers as any)[method] ?? (wcNode as any).wsHandler,
+            blueprint: (wcNode.handlers as any)[method] ?? (wcNode as any).wsHandler,
             params,
           };
         }
@@ -298,10 +259,7 @@ export class Xerus {
     return null;
   }
 
-  find(
-    method: string,
-    path: string,
-  ): { blueprint?: RouteBlueprint | any; params: Record<string, string> } {
+  find(method: string, path: string): { blueprint?: RouteBlueprint | any; params: Record<string, string> } {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
 
@@ -317,11 +275,7 @@ export class Xerus {
     }
 
     const parts = normalizedPath.split("/").filter(Boolean);
-    const result =
-      this.search(this.root, parts, 0, method, {}) ?? {
-        blueprint: undefined,
-        params: {},
-      };
+    const result = this.search(this.root, parts, 0, method, {}) ?? { blueprint: undefined, params: {} };
 
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
@@ -349,7 +303,6 @@ export class Xerus {
 
   private async resolveInstanceFields(c: HTTPContext, instance: any) {
     const props = Object.getOwnPropertyNames(instance);
-
     for (const prop of props) {
       const val = instance[prop];
 
@@ -372,10 +325,7 @@ export class Xerus {
     }
   }
 
-  private async hydrateRouteServices(
-    c: HTTPContext,
-    routeInstance: any,
-  ): Promise<ServiceLifecycle[]> {
+  private async hydrateRouteServices(c: HTTPContext, routeInstance: any): Promise<ServiceLifecycle[]> {
     const services: ServiceLifecycle[] = [];
     const processedTypes = new Set<any>();
 
@@ -393,7 +343,6 @@ export class Xerus {
     }
 
     const props = Object.getOwnPropertyNames(routeInstance);
-
     for (const prop of props) {
       const val = (routeInstance as any)[prop];
 
@@ -409,7 +358,6 @@ export class Xerus {
       if (isRouteFieldInject(val)) {
         const { Type } = val;
         let svc: any;
-
         if (processedTypes.has(Type)) {
           svc = c.service(Type);
         } else {
@@ -417,7 +365,6 @@ export class Xerus {
           services.push(svc);
           processedTypes.add(Type);
         }
-
         (routeInstance as any)[prop] = svc;
       }
     }
@@ -428,7 +375,6 @@ export class Xerus {
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext) {
     const routeInstance = new blueprint.Ctor();
 
-    // restore mount-time props
     const mounted = (blueprint as any).mounted;
     if (mounted?.props && typeof mounted.props === "object") {
       for (const [k, v] of Object.entries(mounted.props)) {
@@ -439,17 +385,14 @@ export class Xerus {
     const activeServices: ServiceLifecycle[] = [];
 
     try {
-      // Resolve per-request global services
       for (const GlobalType of this.globalServices) {
         const svc = await this.resolveService(context, GlobalType);
         activeServices.push(svc);
       }
 
-      // Resolve route-scoped injected services/validators
       const routeServices = await this.hydrateRouteServices(context, routeInstance);
       activeServices.push(...routeServices);
 
-      // before hooks
       for (const svc of activeServices) {
         if (svc.before) await svc.before(context);
         if (context.isDone) return;
@@ -462,13 +405,11 @@ export class Xerus {
 
       await routeInstance.postHandle(context);
 
-      // after hooks (reverse)
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
         if (svc.after) await svc.after(context);
       }
     } catch (err) {
-      // onError hooks (reverse)
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
         if (svc.onError) {
@@ -491,7 +432,7 @@ export class Xerus {
     const blueprint = found.blueprint;
     const params = found.params;
 
-    // WebSocket upgrade
+    // WS upgrade
     if (
       method === "GET" &&
       blueprint &&
@@ -533,13 +474,10 @@ export class Xerus {
 
       if (this.notFoundHandler) {
         const activeServices: ServiceLifecycle[] = [];
-
         for (const GlobalType of this.globalServices) {
           const svc = await this.resolveService(context, GlobalType);
           activeServices.push(svc);
-
           if (svc.before) await svc.before(context);
-
           if (context.isDone) {
             const resp = context.res.send();
             context.markSent();
@@ -652,6 +590,19 @@ export class Xerus {
       } catch {}
     };
 
+    const wsMethodFor = (eventName: "open" | "message" | "close" | "drain"): string => {
+      switch (eventName) {
+        case "open":
+          return Method.WS_OPEN;
+        case "message":
+          return Method.WS_MESSAGE;
+        case "close":
+          return Method.WS_CLOSE;
+        case "drain":
+          return Method.WS_DRAIN;
+      }
+    };
+
     const runWS = async (
       eventName: "open" | "message" | "close" | "drain",
       ws: ServerWebSocket<any>,
@@ -662,10 +613,8 @@ export class Xerus {
       const blueprint = container?.[eventName];
       if (!blueprint) return;
 
-      httpCtx.clearResponse();
-      httpCtx.err = undefined;
-      httpCtx.__timeoutSent = undefined;
-      httpCtx.__holdRelease = undefined;
+      // ✅ critical safety: no stale state per WS event
+      httpCtx.resetForWSEvent(wsMethodFor(eventName));
 
       if (eventName === "message") {
         httpCtx._wsMessage = args[0] ?? null;
@@ -730,3 +679,4 @@ export class Xerus {
     console.log(`🚀 Server running on ${server.port}`);
   }
 }
+// --- END FILE: src/Xerus.ts ---

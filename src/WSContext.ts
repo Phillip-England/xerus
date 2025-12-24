@@ -1,3 +1,4 @@
+// --- START FILE: src/WSContext.ts ---
 import type { ServerWebSocket } from "bun";
 import type { HTTPContext } from "./HTTPContext";
 
@@ -72,21 +73,21 @@ export class WSContext {
     (this.ws as any).unsubscribe(topic);
   }
 
-  publish(
-    topic: string,
-    data: string | Buffer | Uint8Array | ArrayBuffer,
-  ): void {
+  publish(topic: string, data: string | Buffer | Uint8Array | ArrayBuffer): void {
     if (typeof (this.ws as any).publish !== "function") return;
     (this.ws as any).publish(topic, data);
   }
 
-  // FIXED: Access _store directly
+  /**
+   * Store APIs are canonical on HTTPContext now.
+   * These are forwarded for convenience/back-compat.
+   */
   setStore(key: string, value: any): void {
-    this.http._store.set(key, value);
+    this.http.setStore(key, value);
   }
 
-  // FIXED: Access _store directly
   getStore<TVal = any>(key: string): TVal {
-    return this.http._store.get(key) as TVal;
+    return this.http.getStore<TVal>(key);
   }
 }
+// --- END FILE: src/WSContext.ts ---
