@@ -13,7 +13,7 @@ A tiny HTTP + WebSocket framework for Bun with:
 ## Install
 
 ```bash
-bun add github:phillip-england/xerus#v0.0.68
+bun add github:phillip-england/xerus#v0.0.69
 ```
 
 ---
