@@ -33,7 +33,7 @@ class HomeRoute extends XerusRoute {
     Inject(BasicService)
   ]
   async handle(c: HTTPContext) {
-    let basicService = c.data(BasicService)
+    let basicService = c.service(BasicService)
     console.log(basicService.querySearch.value) // again!
     c.html("<p>Hello, World!</p>")
   }

@@ -1,3 +1,4 @@
+// --- START FILE: src/HTTPContext.ts ---
 import { MutResponse } from "./MutResponse";
 import { BodyType } from "./BodyType";
 import { SystemErr } from "./SystemErr";
@@ -14,10 +15,8 @@ import { href as buildHref, type HrefQuery } from "./Href";
 import { createDataBag, type DataBag } from "./DataBag";
 
 type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
-
 export type ParsedFormBodyLast = Record<string, string>;
 export type ParsedFormBodyMulti = Record<string, string | string[]>;
-
 export type ParseBodyOptions = {
   strict?: boolean;
   formMode?: "last" | "multi" | "params";
@@ -36,6 +35,7 @@ export class HTTPContext {
   path: string = "/";
   method: string = "GET";
   route: string = "";
+
   private _segments: string[] | null = null;
   params: Record<string, string> = {};
 
@@ -47,14 +47,19 @@ export class HTTPContext {
   public _wsContext: WSContext | null = null;
 
   data: DataBag;
-  store: Record<string, any> = {};
-  private err: Error | undefined | string;
 
+  // ✅ Legacy key/value store (kept for compatibility with existing middleware/tests)
+  private _store: Map<string, any> = new Map();
+
+  private err: Error | undefined | string;
   private _state: ContextState = ContextState.OPEN;
   public _isWS: boolean = false;
 
   private _reqHeaders: RequestHeaders | null = null;
   private _globals: Map<any, any> | null = null;
+
+  public __timeoutSent?: boolean;
+  public __holdRelease?: Promise<void>;
 
   constructor() {
     this.res = new MutResponse();
@@ -79,23 +84,52 @@ export class HTTPContext {
     }
     const byCtor = g.get(Type);
     if (byCtor) return byCtor as T;
+
     const name = (Type as any)?.name;
     if (name) {
       const byName = g.get(name);
       if (byName) return byName as T;
     }
+
     throw new SystemErr(
       SystemErrCode.INTERNAL_SERVER_ERR,
       `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,
     );
   }
-  
+
   service<T>(Type: new (...args: any[]) => T): T {
-    return this.data.getCtor(Type) as T;
+    const v = this.data.getCtor(Type);
+    if (!v) {
+      throw new SystemErr(
+        SystemErrCode.INTERNAL_SERVER_ERR,
+        `Service not available on context: ${Type?.name ?? "UnknownType"}`,
+      );
+    }
+    return v as T;
   }
 
-  private cleanObj(obj: Record<string, any>) {
-    for (const key in obj) delete obj[key];
+  /**
+   * ✅ Legacy string-key store (back-compat).
+   * Prefer c.data.setCtor / c.service(Type) for new code.
+   */
+  setStore(key: string, value: any): void {
+    this._store.set(key, value);
+  }
+
+  getStore<TVal = any>(key: string): TVal {
+    return this._store.get(key) as TVal;
+  }
+
+  hasStore(key: string): boolean {
+    return this._store.has(key);
+  }
+
+  deleteStore(key: string): void {
+    this._store.delete(key);
+  }
+
+  clearStore(): void {
+    this._store.clear();
   }
 
   isWsRoute(): boolean {
@@ -120,28 +154,35 @@ export class HTTPContext {
     this.req = req;
     this.res.reset();
     this._state = ContextState.OPEN;
+
     this._url = null;
     this._urlQuery = null;
     this._pathParams = null;
     this._segments = null;
+
     this.params = params;
+
     this._body = undefined;
     this._rawBody = null;
     this._parsedBodyMode = "NONE";
+
     this.err = undefined;
+
     this._wsMessage = null;
     this._wsContext = null;
+
     this.data.clear();
-    this.cleanObj(this.store);
+
+    // ✅ reset legacy store too
+    this._store.clear();
+
     this._isWS = false;
 
-    const urlIndex = req.url.indexOf("/", 8);
-    const queryIndex = req.url.indexOf("?", urlIndex);
-    const pathStr = queryIndex === -1
-      ? req.url.substring(urlIndex)
-      : req.url.substring(urlIndex, queryIndex);
+    this.__timeoutSent = undefined;
+    this.__holdRelease = undefined;
 
-    this.path = pathStr.replace(/\/+$/, "") || "/";
+    const u = new URL(req.url);
+    this.path = u.pathname.replace(/\/+$/, "") || "/";
     this.method = this.req.method;
     this.route = `${this.method} ${this.path}`;
 
@@ -175,12 +216,13 @@ export class HTTPContext {
   }
 
   private get _timedOut(): boolean {
-    return !!(this.data as any).__timeoutSent;
+    return !!this.__timeoutSent;
   }
 
   private ensureConfigurable() {
     if (this._timedOut) return;
     if (this._state === ContextState.SENT) return;
+
     if (this._state === ContextState.STREAMING) {
       throw new SystemErr(
         SystemErrCode.HEADERS_ALREADY_SENT,
@@ -205,6 +247,7 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureConfigurable();
     if (this._state === ContextState.SENT) return;
+
     if (this._state === ContextState.WRITTEN) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -238,10 +281,6 @@ export class HTTPContext {
     if (xrip) return xrip.trim();
 
     return "unknown";
-  }
-
-  getRequestId(): string {
-    return (this.data as any).requestId || "";
   }
 
   redirect(path: string, status?: number): void;
@@ -326,37 +365,56 @@ export class HTTPContext {
 
   private enforceKnownTypeMismatch(expectedType: BodyType) {
     if (expectedType === BodyType.TEXT) return;
+
     const ct = this.contentType();
     const isJson = ct.includes("application/json");
     const isForm = ct.includes("application/x-www-form-urlencoded");
     const isMultipart = ct.includes("multipart/form-data");
 
     if (isJson && expectedType !== BodyType.JSON) {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Unexpected JSON data",
+      );
     }
     if (isForm && expectedType !== BodyType.FORM) {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected FORM data");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Unexpected FORM data",
+      );
     }
     if (isMultipart && expectedType !== BodyType.MULTIPART_FORM) {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Unexpected MULTIPART_FORM data",
+      );
     }
   }
 
   private enforceStrictContentType(expectedType: BodyType, strict: boolean) {
     if (!strict) return;
     if (expectedType === BodyType.TEXT) return;
-    const ct = this.contentType();
 
+    const ct = this.contentType();
     if (expectedType === BodyType.JSON && !ct.includes("application/json")) {
-      throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Expected Content-Type application/json");
+      throw new SystemErr(
+        SystemErrCode.BODY_PARSING_FAILED,
+        "Expected Content-Type application/json",
+      );
     }
-    if (expectedType === BodyType.FORM && !ct.includes("application/x-www-form-urlencoded")) {
+    if (
+      expectedType === BodyType.FORM &&
+      !ct.includes("application/x-www-form-urlencoded")
+    ) {
       throw new SystemErr(
         SystemErrCode.BODY_PARSING_FAILED,
         "Expected Content-Type application/x-www-form-urlencoded",
       );
     }
-    if (expectedType === BodyType.MULTIPART_FORM && !ct.includes("multipart/form-data")) {
+    if (
+      expectedType === BodyType.MULTIPART_FORM &&
+      !ct.includes("multipart/form-data")
+    ) {
       throw new SystemErr(
         SystemErrCode.BODY_PARSING_FAILED,
         "Expected Content-Type multipart/form-data",
@@ -380,29 +438,49 @@ export class HTTPContext {
     return out;
   }
 
-  async parseBody(expectedType: BodyType.TEXT, opts?: ParseBodyOptions): Promise<string>;
-  async parseBody(expectedType: BodyType.MULTIPART_FORM, opts?: ParseBodyOptions): Promise<FormData>;
+  async parseBody(
+    expectedType: BodyType.TEXT,
+    opts?: ParseBodyOptions,
+  ): Promise<string>;
+  async parseBody(
+    expectedType: BodyType.MULTIPART_FORM,
+    opts?: ParseBodyOptions,
+  ): Promise<FormData>;
   async parseBody(
     expectedType: BodyType.FORM,
     opts?: ParseBodyOptions & { formMode?: "last" | undefined },
   ): Promise<ParsedFormBodyLast>;
-  async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "multi" }): Promise<ParsedFormBodyMulti>;
-  async parseBody(expectedType: BodyType.FORM, opts: ParseBodyOptions & { formMode: "params" }): Promise<URLSearchParams>;
-  async parseBody<J = any>(expectedType: BodyType.JSON, opts?: ParseBodyOptions): Promise<J>;
-  async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
+  async parseBody(
+    expectedType: BodyType.FORM,
+    opts: ParseBodyOptions & { formMode: "multi" },
+  ): Promise<ParsedFormBodyMulti>;
+  async parseBody(
+    expectedType: BodyType.FORM,
+    opts: ParseBodyOptions & { formMode: "params" },
+  ): Promise<URLSearchParams>;
+  async parseBody<J = any>(
+    expectedType: BodyType.JSON,
+    opts?: ParseBodyOptions,
+  ): Promise<J>;
+  async parseBody(expectedType: BodyType, opts: ParseBodyOptions = {}) {
     const strict = !!opts.strict;
-
     this.enforceStrictContentType(expectedType, strict);
     this.enforceKnownTypeMismatch(expectedType);
 
-    if (expectedType === BodyType.JSON && this._body !== undefined && this._parsedBodyMode === "JSON") {
+    if (
+      expectedType === BodyType.JSON &&
+      this._body !== undefined &&
+      this._parsedBodyMode === "JSON"
+    ) {
       return this._body;
     }
 
     if (
       expectedType === BodyType.TEXT &&
       this._rawBody !== null &&
-      (this._parsedBodyMode === "TEXT" || this._parsedBodyMode === "JSON" || this._parsedBodyMode === "FORM")
+      (this._parsedBodyMode === "TEXT" ||
+        this._parsedBodyMode === "JSON" ||
+        this._parsedBodyMode === "FORM")
     ) {
       return this._rawBody;
     }
@@ -416,23 +494,32 @@ export class HTTPContext {
           this._parsedBodyMode = "JSON";
           return parsed;
         } catch (err: any) {
-          throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+          throw new SystemErr(
+            SystemErrCode.BODY_PARSING_FAILED,
+            `JSON parsing failed: ${err.message}`,
+          );
         }
       }
+
       if (expectedType === BodyType.FORM) {
         this.assertReparseAllowed("FORM");
         const mode = opts.formMode ?? "last";
         const params = new URLSearchParams(this._rawBody);
         if (mode === "params") return params;
-        const parsed = mode === "multi"
-          ? this.parseFormMulti(this._rawBody)
-          : this.parseFormLast(this._rawBody);
+
+        const parsed =
+          mode === "multi"
+            ? this.parseFormMulti(this._rawBody)
+            : this.parseFormLast(this._rawBody);
+
         this._body = parsed;
         this._parsedBodyMode = "FORM";
         return parsed;
       }
+
       if (expectedType === BodyType.TEXT) {
-        this._parsedBodyMode = this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
+        this._parsedBodyMode =
+          this._parsedBodyMode === "NONE" ? "TEXT" : this._parsedBodyMode;
         return this._rawBody;
       }
     }
@@ -440,7 +527,10 @@ export class HTTPContext {
     const ct = this.contentType();
     if (ct.includes("multipart/form-data")) {
       if (expectedType !== BodyType.MULTIPART_FORM) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected MULTIPART_FORM data");
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          "Unexpected MULTIPART_FORM data",
+        );
       }
       this.assertReparseAllowed("MULTIPART");
       const fd = await this.req.formData();
@@ -450,10 +540,13 @@ export class HTTPContext {
     }
 
     this.assertReparseAllowed(
-      expectedType === BodyType.TEXT ? "TEXT"
-        : expectedType === BodyType.JSON ? "JSON"
-        : expectedType === BodyType.FORM ? "FORM"
-        : "TEXT",
+      expectedType === BodyType.TEXT
+        ? "TEXT"
+        : expectedType === BodyType.JSON
+          ? "JSON"
+          : expectedType === BodyType.FORM
+            ? "FORM"
+            : "TEXT",
     );
 
     const text = await this.req.text();
@@ -471,7 +564,10 @@ export class HTTPContext {
         this._parsedBodyMode = "JSON";
         return parsed;
       } catch (err: any) {
-        throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, `JSON parsing failed: ${err.message}`);
+        throw new SystemErr(
+          SystemErrCode.BODY_PARSING_FAILED,
+          `JSON parsing failed: ${err.message}`,
+        );
       }
     }
 
@@ -479,6 +575,7 @@ export class HTTPContext {
       const mode = opts.formMode ?? "last";
       const params = new URLSearchParams(text);
       if (mode === "params") return params;
+
       const parsed = mode === "multi" ? this.parseFormMulti(text) : this.parseFormLast(text);
       this._body = parsed;
       this._parsedBodyMode = "FORM";
@@ -577,36 +674,42 @@ export class HTTPContext {
     if (this._timedOut) return;
     this.ensureBodyModifiable();
     this.ensureConfigurable();
+
     const file = Bun.file(path);
     if (!(await file.exists())) {
-      throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `file does not exist at ${path}`);
+      throw new SystemErr(
+        SystemErrCode.FILE_NOT_FOUND,
+        `file does not exist at ${path}`,
+      );
     }
-    this.res.headers.set("Content-Type", file.type || "application/octet-stream");
+
+    this.res.headers.set(
+      "Content-Type",
+      file.type || "application/octet-stream",
+    );
     this.res.body(file);
     this.finalize();
-  }
-
-  setStore(key: string, value: any): void {
-    this.store[key] = value;
-  }
-
-  getStore<TVal = any>(key: string): TVal {
-    return this.store[key] as TVal;
   }
 
   getCookie(name: string): CookieRef {
     return this.res.cookies.ref(name);
   }
 
-  setCookie(name: string, value: string, options: CookieOptions = {}): CookieRef {
+  setCookie(
+    name: string,
+    value: string,
+    options: CookieOptions = {},
+  ): CookieRef {
     if (this._timedOut) return this.res.cookies.ref(name);
     this.ensureConfigurable();
+
     options.path ??= "/";
     options.httpOnly ??= true;
     options.sameSite ??= "Lax";
     if (options.secure === undefined) {
       options.secure = this.url.protocol === "https:";
     }
+
     this.res.cookies.set(name, value, options);
     return this.res.cookies.ref(name);
   }
@@ -657,11 +760,11 @@ export class HTTPContext {
   }
 
   get reqCookies(): RequestCookies {
-    return this._reqCookiesView ??= new RequestCookies(this.res.cookies);
+    return (this._reqCookiesView ??= new RequestCookies(this.res.cookies));
   }
 
   get resCookies(): ResponseCookies {
-    return this._resCookiesWriter ??= new ResponseCookies(this.res.cookies);
+    return (this._resCookiesWriter ??= new ResponseCookies(this.res.cookies));
   }
 
   reqCookie(name: string): RequestCookieRef {
@@ -704,19 +807,29 @@ export class HTTPContext {
     return this.parseBody<T>(BodyType.JSON, opts);
   }
 
-  formBodyLast(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyLast> {
+  formBodyLast(
+    opts?: Omit<ParseBodyOptions, "formMode">,
+  ): Promise<ParsedFormBodyLast> {
     return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "last" });
   }
 
-  formBodyMulti(opts?: Omit<ParseBodyOptions, "formMode">): Promise<ParsedFormBodyMulti> {
+  formBodyMulti(
+    opts?: Omit<ParseBodyOptions, "formMode">,
+  ): Promise<ParsedFormBodyMulti> {
     return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "multi" });
   }
 
-  formBodyParams(opts?: Omit<ParseBodyOptions, "formMode">): Promise<URLSearchParams> {
-    return this.parseBody(BodyType.FORM, { ...(opts ?? {}), formMode: "params" });
+  formBodyParams(
+    opts?: Omit<ParseBodyOptions, "formMode">,
+  ): Promise<URLSearchParams> {
+    return this.parseBody(BodyType.FORM, {
+      ...(opts ?? {}),
+      formMode: "params",
+    });
   }
 
   multipartBody(opts?: ParseBodyOptions): Promise<FormData> {
     return this.parseBody(BodyType.MULTIPART_FORM, opts);
   }
 }
+// --- END FILE: src/HTTPContext.ts ---

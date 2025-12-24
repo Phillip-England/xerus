@@ -1,3 +1,4 @@
+// src/RouteFields.ts
 import type { HTTPContext } from "./HTTPContext";
 import type { TypeValidator } from "./TypeValidator";
 
@@ -11,24 +12,26 @@ export type AnyRouteField =
   | RouteFieldValidator<any>
   | RouteFieldInject<any>;
 
-export interface InjectableStore {
+// This is now the replacement for Middleware
+export interface ServiceLifecycle {
   storeKey?: string;
-  init?(c: HTTPContext): Promise<void>;
+  // Runs immediately when resolved/instantiated
+  init?(c: HTTPContext): Promise<void>; 
+  // Runs before the route handler
   before?(c: HTTPContext): Promise<void>;
+  // Runs after the route handler (success only)
   after?(c: HTTPContext): Promise<void>;
+  // Runs if an error is thrown during handling
+  onError?(c: HTTPContext, err: unknown): Promise<void>; 
 }
 
-export interface InjectableGlobal {
-  storeKey?: string;
-  init?(app: any): Promise<void> | void;
-}
+export type InjectableStore = ServiceLifecycle; // Alias for backward compat
 
 export class RouteFieldValidator<T extends TypeValidator = any> {
   readonly kind = "validator" as const;
   readonly [XERUS_FIELD] = true as const;
   readonly Type: new () => T;
   readonly storeKey?: string;
-
   constructor(Type: new () => T, storeKey?: string) {
     this.Type = Type;
     this.storeKey = storeKey;
@@ -40,7 +43,6 @@ export class RouteFieldInject<T extends InjectableStore = any> {
   readonly [XERUS_FIELD] = true as const;
   readonly Type: Ctor<T>;
   readonly storeKey?: string;
-
   constructor(Type: Ctor<T>, storeKey?: string) {
     this.Type = Type;
     this.storeKey = storeKey;

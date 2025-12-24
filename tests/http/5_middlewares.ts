@@ -2,12 +2,11 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
+import { Inject, type InjectableStore, type ServiceLifecycle } from "../../src/RouteFields";
 
-// REFACTORED: Service Logic
 class ServiceOrderLogger implements ServiceLifecycle {
   name: string = "Unknown";
-  
+
   async before(c: HTTPContext) {
     const existing = c.getResHeader("X-Order").get() ?? "";
     c.setHeader(
@@ -31,21 +30,22 @@ class ServiceShortCircuit implements ServiceLifecycle {
   }
 }
 
-export const treasureKey = "secretKey" as const;
 export const treasureValue = "secretValue";
 
-class ServiceTreasure implements ServiceLifecycle {
-  async before(c: HTTPContext) {
-    c.setStore(treasureKey, treasureValue);
+class TreasureService implements InjectableStore, ServiceLifecycle {
+  storeKey = "TreasureService";
+  value: string = "";
+
+  async before(_c: HTTPContext) {
+    this.value = treasureValue;
   }
 }
 
 class OrderRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/order";
-  // REFACTORED: Inject services
   inject = [Inject(ServiceA), Inject(ServiceB)];
-  
+
   async handle(c: HTTPContext) {
     c.json({ message: "Handler reached" });
   }
@@ -54,7 +54,6 @@ class OrderRoute extends XerusRoute {
 class ShortRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/short-circuit";
-  // REFACTORED
   inject = [Inject(ServiceShortCircuit)];
 
   async handle(c: HTTPContext) {
@@ -65,12 +64,11 @@ class ShortRoute extends XerusRoute {
 class StoreRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/store";
-  // REFACTORED
-  inject = [Inject(ServiceTreasure)];
+  inject = [Inject(TreasureService)];
 
   async handle(c: HTTPContext) {
-    const value = c.getStore(treasureKey);
-    c.json({ storedValue: value });
+    const svc = c.service(TreasureService);
+    c.json({ storedValue: svc.value });
   }
 }
 

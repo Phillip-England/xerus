@@ -4,11 +4,18 @@ import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Inject, type InjectableStore } from "../../src/RouteFields";
 
+class PollutionStore implements InjectableStore {
+  storeKey = "PollutionStore";
+  value?: string;
+}
+
 class PollutionSet extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/set";
+  store = Inject(PollutionStore);
+
   async handle(c: HTTPContext) {
-    c.setStore("POLLUTION", "I should be cleaned up");
+    this.store.value = "I should be cleaned up";
     c.json({ set: true });
   }
 }
@@ -16,14 +23,17 @@ class PollutionSet extends XerusRoute {
 class PollutionCheck extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/check";
+  store = Inject(PollutionStore);
+
   async handle(c: HTTPContext) {
-    const val = c.getStore("POLLUTION");
+    const val = this.store.value;
     c.json({ polluted: !!val, value: val });
   }
 }
 
 class BrokenService implements InjectableStore {
-  async init(c: HTTPContext) {
+  storeKey = "BrokenService";
+  async init(_c: HTTPContext) {
     throw new Error("Database Connection Failed inside Service");
   }
 }
@@ -31,7 +41,8 @@ class BrokenService implements InjectableStore {
 class BrokenServiceRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/service-fail";
-  inject = [Inject(BrokenService)]; // Updated to array injection
+  inject = [Inject(BrokenService)];
+
   async handle(c: HTTPContext) {
     c.text("Should not reach here");
   }
@@ -40,6 +51,7 @@ class BrokenServiceRoute extends XerusRoute {
 class LateHeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/late-header";
+
   async handle(c: HTTPContext) {
     c.json({ ok: true });
     c.setHeader("X-Late", "Too late");
@@ -49,6 +61,7 @@ class LateHeaderRoute extends XerusRoute {
 class StreamSafetyRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/stream-safety";
+
   async handle(c: HTTPContext) {
     const stream = new ReadableStream({
       start(ctrl) {
@@ -61,8 +74,8 @@ class StreamSafetyRoute extends XerusRoute {
 
     try {
       c.setHeader("X-Fail", "True");
-    } catch (e) {
-      // Swallow error
+    } catch {
+      // expected: headers immutable after streaming begins
     }
   }
 }
