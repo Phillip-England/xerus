@@ -1,5 +1,3 @@
-// PATH: /home/jacex/src/xerus/servers/http/14_commonPatterns.test.ts
-
 import { expect, test } from "bun:test";
 import { BaseURL } from "./BaseURL";
 
@@ -7,7 +5,6 @@ test("RequestId: should return and echo X-Request-Id", async () => {
   const res = await fetch(`${BaseURL}/patterns/request-id`);
   const data = await res.json();
   const hdr = res.headers.get("X-Request-Id");
-
   expect(res.status).toBe(200);
   expect(typeof data.id).toBe("string");
   expect(data.id.length).toBeGreaterThan(0);
@@ -15,9 +12,13 @@ test("RequestId: should return and echo X-Request-Id", async () => {
 });
 
 test("RateLimit: third request should 429", async () => {
-  const r1 = await fetch(`${BaseURL}/patterns/limited`);
-  const r2 = await fetch(`${BaseURL}/patterns/limited`);
-  const r3 = await fetch(`${BaseURL}/patterns/limited`);
+  // ✅ isolate this test from global rateLimitMap state
+  const ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`; // TEST-NET-3 range
+  const headers = { "X-Forwarded-For": ip };
+
+  const r1 = await fetch(`${BaseURL}/patterns/limited`, { headers });
+  const r2 = await fetch(`${BaseURL}/patterns/limited`, { headers });
+  const r3 = await fetch(`${BaseURL}/patterns/limited`, { headers });
 
   expect(r1.status).toBe(200);
   expect(r2.status).toBe(200);
@@ -28,7 +29,6 @@ test("RateLimit: third request should 429", async () => {
 });
 
 test("CSRF: should reject missing token and accept matching token", async () => {
-  // 1) First GET sets cookie
   const r1 = await fetch(`${BaseURL}/patterns/csrf`);
   expect(r1.status).toBe(200);
 
@@ -39,14 +39,12 @@ test("CSRF: should reject missing token and accept matching token", async () => 
   const token = cookiePair.split("=", 2)[1] ?? "";
   expect(token.length).toBeGreaterThan(0);
 
-  // 2) POST without header should fail
   const r2 = await fetch(`${BaseURL}/patterns/csrf`, {
     method: "POST",
     headers: { Cookie: cookiePair },
   });
   expect(r2.status).toBe(403);
 
-  // 3) POST with matching header should pass
   const r3 = await fetch(`${BaseURL}/patterns/csrf`, {
     method: "POST",
     headers: {
@@ -60,7 +58,6 @@ test("CSRF: should reject missing token and accept matching token", async () => 
 test("Timeout: should return 504", async () => {
   const res = await fetch(`${BaseURL}/patterns/timeout`);
   const j = await res.json();
-
   expect(res.status).toBe(504);
   expect(j.error.code).toBe("TIMEOUT");
 });

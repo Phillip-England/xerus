@@ -17,30 +17,21 @@ class SomeQueryParam implements TypeValidator {
 
 class UserService implements InjectableStore {
   storeKey = "UserService";
-
-  // This is a validator RouteField; Xerus will resolve it and assign the instance.
   qp = Validator.Ctx(SomeQueryParam);
-
   computed: string = "";
 
   async init(c: HTTPContext): Promise<void> {
-    // ✅ Only supported way to derive request-scoped data is c.service(Type)
     const fromSvc = c.service(SomeQueryParam);
-
     if (!fromSvc || typeof fromSvc.query !== "string") {
       throw new Error(
         "Expected SomeQueryParam to exist in c.service(SomeQueryParam) before init()",
       );
     }
-
-    // Xerus should ensure the validator resolved for this service field
-    // is the exact same instance stored on the context.
     if (fromSvc !== this.qp) {
       throw new Error(
         "Expected service validator to be same instance as c.service(SomeQueryParam)",
       );
     }
-
     this.computed = `computed:${this.qp.query}`;
   }
 }
@@ -48,18 +39,15 @@ class UserService implements InjectableStore {
 class InjectorValidatorRoute extends XerusRoute {
   method = Method.GET;
   path = "/injector-validator";
-
   user = Inject(UserService);
 
   async handle(c: HTTPContext): Promise<void> {
     const fromSvc = this.user.qp.query;
-
-    // ✅ Only supported request-scoped derivation API
-    const fromContext = c.service(SomeQueryParam).query;
+    const fromData = c.service(SomeQueryParam).query;
 
     json(c, {
       fromSvc,
-      fromContext,
+      fromData, // ✅ match test expectation
       sameInstance: c.service(SomeQueryParam) === this.user.qp,
       computed: this.user.computed,
     });
