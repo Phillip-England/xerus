@@ -11,7 +11,8 @@ import { json } from "../../src/std/Response";
 class RoomOpen extends XerusRoute {
   method = Method.WS_OPEN;
   path = "/ws/room/:name";
-  store = Inject(TestStore);
+  service = [TestStore]
+
 
   async handle(c: HTTPContext) {
     let socket = ws(c);
@@ -24,7 +25,8 @@ class RoomOpen extends XerusRoute {
 class RoomMessage extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/room/:name";
-  store = Inject(TestStore);
+  service = [TestStore]
+
 
   async handle(c: HTTPContext) {
     let socket = ws(c);
@@ -37,7 +39,8 @@ class RoomMessage extends XerusRoute {
 class BinaryEcho extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/binary";
-  store = Inject(TestStore);
+  service = [TestStore]
+
 
   async handle(c: HTTPContext) {
     let socket = ws(c);
@@ -51,7 +54,8 @@ let closedConnections = 0;
 class WsStats extends XerusRoute {
   method = Method.GET;
   path = "/ws-stats";
-  store = Inject(TestStore);
+  service = [TestStore]
+
 
   async handle(c: HTTPContext) {
     json(c, { closed: closedConnections });
@@ -61,7 +65,7 @@ class WsStats extends XerusRoute {
 class LifecycleClose extends XerusRoute {
   method = Method.WS_CLOSE;
   path = "/ws/lifecycle";
-  store = Inject(TestStore);
+  service = [TestStore]
 
   async handle(_c: HTTPContext) {
     closedConnections++;
