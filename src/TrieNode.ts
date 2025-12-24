@@ -1,14 +1,14 @@
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
-import type { XerusMiddleware } from "./Middleware";
 import type { XerusRoute } from "./XerusRoute";
 
 export interface RouteBlueprint {
-  Ctor: new () => XerusRoute<any>;
-  middlewares: XerusMiddleware<any>[];
+  Ctor: new () => XerusRoute;
   errHandler?: HTTPErrorHandlerFunc;
+
   mounted?: {
     props: Record<string, any>;
   };
+
   wsChain?: {
     open?: RouteBlueprint;
     message?: RouteBlueprint;

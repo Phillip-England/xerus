@@ -2,12 +2,14 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
+import { json } from "../../src/std/Response";
+import { param } from "../../src/std/Request";
 
 class UsersMe extends XerusRoute {
   method = Method.GET;
   path = "/users/me";
   async handle(c: HTTPContext) {
-    c.json({ type: "exact", identity: "myself" });
+    json(c, { type: "exact", identity: "myself" });
   }
 }
 
@@ -15,7 +17,7 @@ class UsersParam extends XerusRoute {
   method = Method.GET;
   path = "/users/:id";
   async handle(c: HTTPContext) {
-    c.json({ type: "param", identity: c.getParam("id") });
+    json(c, { type: "param", identity: param(c, "id") });
   }
 }
 
@@ -23,9 +25,9 @@ class OrgProject extends XerusRoute {
   method = Method.GET;
   path = "/org/:orgId/project/:projectId";
   async handle(c: HTTPContext) {
-    c.json({
-      org: c.getParam("orgId"),
-      project: c.getParam("projectId"),
+    json(c, {
+      org: param(c, "orgId"),
+      project: param(c, "projectId"),
     });
   }
 }
@@ -34,7 +36,7 @@ class PublicWildcard extends XerusRoute {
   method = Method.GET;
   path = "/public/*";
   async handle(c: HTTPContext) {
-    c.json({ path: c.path, message: "wildcard matched" });
+    json(c, { path: c.path, message: "wildcard matched" });
   }
 }
 
@@ -42,7 +44,7 @@ class DocsWildcard extends XerusRoute {
   method = Method.GET;
   path = "/api/v1/docs/*";
   async handle(c: HTTPContext) {
-    c.json({ scope: "docs-wildcard" });
+    json(c, { scope: "docs-wildcard" });
   }
 }
 

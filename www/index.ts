@@ -3,19 +3,21 @@ import { Method } from "../src/Method";
 import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import type { InjectableStore } from "../src/RouteFields";
-import { Validator } from "../src/Validator";
 import type { TypeValidator } from "../src/TypeValidator";
 import { Inject } from "../src/RouteFields";
+import { html } from "../src/std/Response";
+import { query } from "../src/std/Request";
+import { Validate, Validator } from "../src/Validator";
 
 class QuerySearch implements TypeValidator {
   value: string = ''
   async validate(c: HTTPContext) {
-    this.value = c.query('search', 'again!')
+    this.value = query(c, 'search', 'again!')
   }
 }
 
 class BasicService implements InjectableStore {
-  querySearch = Validator.Ctx(QuerySearch)
+  querySearch = Validate(QuerySearch)
   someValue = ""
   async before(c: HTTPContext) {
     this.someValue = 'dog'
@@ -35,7 +37,7 @@ class HomeRoute extends XerusRoute {
   async handle(c: HTTPContext) {
     let basicService = c.service(BasicService)
     console.log(basicService.querySearch.value) // again!
-    c.html("<p>Hello, World!</p>")
+    html(c, "<p>Hello, World!</p>")
   }
 }
 

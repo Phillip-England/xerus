@@ -3,16 +3,18 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Validator } from "../../src/Validator";
 import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import type { TypeValidator } from "../../src/TypeValidator";
+import { clientIP, header, param, query, ws } from "../../src/std/Request";
+import { parseBody } from "../../src/std/Body";
+import { json } from "../../src/std/Response";
 
 export class QueryFilter implements TypeValidator {
   status!: string;
   async validate(c: HTTPContext) {
-    this.status = c.query("status") || "active";
+    this.status = query(c, "status") || "active";
     if (!["active", "archived"].includes(this.status)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -25,7 +27,7 @@ export class QueryFilter implements TypeValidator {
 export class UserIdParam implements TypeValidator {
   id!: number;
   async validate(c: HTTPContext) {
-    this.id = Number(c.getParam("id"));
+    this.id = Number(param(c, "id"));
     if (!Number.isFinite(this.id) || this.id <= 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -38,8 +40,7 @@ export class UserIdParam implements TypeValidator {
 export class ApiKeyHeader implements TypeValidator {
   key!: string;
   async validate(c: HTTPContext) {
-    // FIX: Added .get() to the HeaderRef
-    this.key = c.getHeader("X-Api-Key").get() ?? "";
+    this.key = header(c, "X-Api-Key") ?? "";
     if (this.key !== "xerus-secret-123") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -58,7 +59,7 @@ export class CreateUserJson implements TypeValidator {
   data!: z.infer<typeof userSchema>;
   async validate(c: HTTPContext) {
     try {
-      const raw = await c.parseBody(BodyType.JSON);
+      const raw = await parseBody(c, BodyType.JSON);
       this.data = await userSchema.parseAsync(raw);
     } catch (e: any) {
       throw new SystemErr(
@@ -72,7 +73,7 @@ export class CreateUserJson implements TypeValidator {
 export class IpValidator implements TypeValidator {
   ip!: string;
   async validate(c: HTTPContext) {
-    this.ip = c.getClientIP();
+    this.ip = clientIP(c);
     if (this.ip === "unknown") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -85,7 +86,7 @@ export class IpValidator implements TypeValidator {
 export class WsPingValidator implements TypeValidator {
   content!: string;
   async validate(c: HTTPContext) {
-    this.content = String(c.ws().message);
+    this.content = String(ws(c).message);
     if (this.content !== "PING") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -103,9 +104,8 @@ class AllValidatorsRoute extends XerusRoute {
   apiKey = Validator.Ctx(ApiKeyHeader);
   body = Validator.Ctx(CreateUserJson);
   ip = Validator.Ctx(IpValidator);
-
   async handle(c: HTTPContext) {
-    c.json({
+    json(c, {
       success: true,
       resolved: {
         id: this.userId.id,
@@ -124,8 +124,8 @@ class WsShowcaseRoute extends XerusRoute {
   path = "/showcase/ws";
   msg = Validator.Ctx(WsPingValidator);
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    ws.send(`PONG-${this.msg.content}`);
+    let socket = ws(c);
+    socket.send(`PONG-${this.msg.content}`);
   }
 }
 

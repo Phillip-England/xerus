@@ -5,13 +5,16 @@ import { HTTPContext } from "../../src/HTTPContext";
 import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
-import { Validator } from "../../src/Validator";
 import type { TypeValidator } from "../../src/TypeValidator";
+import { json } from "../../src/std/Response";
+// Alias the import to avoid conflict with the exported function below
+import { parseBody as stdParseBody } from "../../src/std/Body";
+import { Validator } from "../../src/Validator";
 
 class JsonBody implements TypeValidator {
   data: any;
   async validate(c: HTTPContext) {
-    this.data = await c.parseBody(BodyType.JSON);
+    this.data = await stdParseBody(c, BodyType.JSON);
     if (
       !this.data || typeof this.data !== "object" || Array.isArray(this.data)
     ) {
@@ -26,7 +29,7 @@ class JsonBody implements TypeValidator {
 class TextBody implements TypeValidator {
   content!: string;
   async validate(c: HTTPContext) {
-    this.content = await c.parseBody(BodyType.TEXT);
+    this.content = await stdParseBody(c, BodyType.TEXT);
     if (typeof this.content !== "string") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -39,7 +42,7 @@ class TextBody implements TypeValidator {
 class FormBody implements TypeValidator {
   data: any;
   async validate(c: HTTPContext) {
-    this.data = await c.parseBody(BodyType.FORM);
+    this.data = await stdParseBody(c, BodyType.FORM);
     if (!this.data || typeof this.data !== "object") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -52,7 +55,7 @@ class FormBody implements TypeValidator {
 class MultipartBody implements TypeValidator {
   fd!: FormData;
   async validate(c: HTTPContext) {
-    this.fd = await c.parseBody(BodyType.MULTIPART_FORM);
+    this.fd = await stdParseBody(c, BodyType.MULTIPART_FORM);
   }
 }
 
@@ -61,7 +64,7 @@ class ParseJson extends XerusRoute {
   path = "/parse/json";
   body = Validator.Ctx(JsonBody);
   async handle(c: HTTPContext) {
-    c.json({ status: "success", data: this.body.data });
+    json(c, { status: "success", data: this.body.data });
   }
 }
 
@@ -70,7 +73,7 @@ class ParseText extends XerusRoute {
   path = "/parse/text";
   body = Validator.Ctx(TextBody);
   async handle(c: HTTPContext) {
-    c.json({ status: "success", data: this.body.content });
+    json(c, { status: "success", data: this.body.content });
   }
 }
 
@@ -79,7 +82,7 @@ class ParseForm extends XerusRoute {
   path = "/parse/form";
   body = Validator.Ctx(FormBody);
   async handle(c: HTTPContext) {
-    c.json({ status: "success", data: this.body.data });
+    json(c, { status: "success", data: this.body.data });
   }
 }
 
@@ -92,7 +95,7 @@ class ParseMultipart extends XerusRoute {
     this.body.fd.forEach((value: FormDataEntryValue, key: string) => {
       if (typeof value === "string") result[key] = value;
     });
-    c.json({ status: "success", data: result });
+    json(c, { status: "success", data: result });
   }
 }
 

@@ -3,6 +3,7 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Inject, type InjectableStore } from "../../src/RouteFields";
+import { json, setHeader, stream, text } from "../../src/std/Response";
 
 class PollutionStore implements InjectableStore {
   storeKey = "PollutionStore";
@@ -13,10 +14,9 @@ class PollutionSet extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/set";
   store = Inject(PollutionStore);
-
   async handle(c: HTTPContext) {
     this.store.value = "I should be cleaned up";
-    c.json({ set: true });
+    json(c, { set: true });
   }
 }
 
@@ -24,10 +24,9 @@ class PollutionCheck extends XerusRoute {
   method = Method.GET;
   path = "/harden/pollution/check";
   store = Inject(PollutionStore);
-
   async handle(c: HTTPContext) {
     const val = this.store.value;
-    c.json({ polluted: !!val, value: val });
+    json(c, { polluted: !!val, value: val });
   }
 }
 
@@ -42,40 +41,34 @@ class BrokenServiceRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/service-fail";
   inject = [Inject(BrokenService)];
-
   async handle(c: HTTPContext) {
-    c.text("Should not reach here");
+    text(c, "Should not reach here");
   }
 }
 
 class LateHeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/late-header";
-
   async handle(c: HTTPContext) {
-    c.json({ ok: true });
-    c.setHeader("X-Late", "Too late");
+    json(c, { ok: true });
+    setHeader(c, "X-Late", "Too late");
   }
 }
 
 class StreamSafetyRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/stream-safety";
-
   async handle(c: HTTPContext) {
-    const stream = new ReadableStream({
+    const s = new ReadableStream({
       start(ctrl) {
         ctrl.enqueue(new TextEncoder().encode("stream data"));
         ctrl.close();
       },
     });
-
-    c.stream(stream);
-
+    stream(c, s);
     try {
-      c.setHeader("X-Fail", "True");
+      setHeader(c, "X-Fail", "True");
     } catch {
-      // expected: headers immutable after streaming begins
     }
   }
 }

@@ -1,9 +1,7 @@
 import type { HTTPContext } from "./HTTPContext";
-import type { ParsedFormBodyLast, ParsedFormBodyMulti } from "./HTTPContext";
+import type { ParsedFormBodyLast, ParsedFormBodyMulti } from "./std/Body";
+// CHANGE: Import from std/Body instead of HTTPContext
 
-/**
- * A ValidationSource now carries the *type* of the raw value it produces.
- */
 export type ValidationSource<TRaw = unknown> =
   | { kind: "JSON" } & { __raw?: TRaw }
   | { kind: "FORM"; formMode?: "last" } & { __raw?: ParsedFormBodyLast }
@@ -18,7 +16,6 @@ export class Source {
     return { kind: "JSON" } as ValidationSource<J>;
   }
 
-  // FORM: type depends on mode
   static FORM(formMode?: "last"): ValidationSource<ParsedFormBodyLast>;
   static FORM(formMode: "multi"): ValidationSource<ParsedFormBodyMulti>;
   static FORM(formMode: "params"): ValidationSource<URLSearchParams>;
@@ -28,14 +25,12 @@ export class Source {
     return { kind: "FORM", formMode } as any;
   }
 
-  // QUERY: if key provided => string, else => Record<string,string>
   static QUERY(key: string): ValidationSource<string>;
   static QUERY(): ValidationSource<Record<string, string>>;
   static QUERY(key?: string): ValidationSource<any> {
     return { kind: "QUERY", key } as any;
   }
 
-  // PARAM: same idea
   static PARAM(key: string): ValidationSource<string>;
   static PARAM(): ValidationSource<Record<string, string>>;
   static PARAM(key?: string): ValidationSource<any> {

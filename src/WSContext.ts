@@ -1,7 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import type { HTTPContext } from "./HTTPContext";
 
-// REMOVED: <T>
 export class WSContext {
   ws: ServerWebSocket<HTTPContext>;
   http: HTTPContext;
@@ -29,7 +28,6 @@ export class WSContext {
     return this.ws.data;
   }
 
-  // ... (rest is identical)
   get readyState(): number {
     return (this.ws as any).readyState ?? 0;
   }
@@ -82,11 +80,13 @@ export class WSContext {
     (this.ws as any).publish(topic, data);
   }
 
+  // FIXED: Access _store directly
   setStore(key: string, value: any): void {
-    this.http.setStore(key, value);
+    this.http._store.set(key, value);
   }
 
+  // FIXED: Access _store directly
   getStore<TVal = any>(key: string): TVal {
-    return this.http.getStore<TVal>(key);
+    return this.http._store.get(key) as TVal;
   }
 }

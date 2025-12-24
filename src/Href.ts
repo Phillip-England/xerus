@@ -74,3 +74,31 @@ export function href(path: string, query?: HrefQuery): string {
   const qs = params.toString();
   return qs.length ? `${basePath}?${qs}${hash}` : `${basePath}${hash}`;
 }
+
+
+/**
+ * Creates a reusable href generator function for a specific route.
+ *
+ * @param path - The base path (e.g., "/about" or "/search")
+ * @param keys - A list of query parameter keys that the returned function will accept as arguments.
+ * @returns A function that accepts values corresponding to `keys` and returns the full URL.
+ */
+export function defineHref(
+  path: string,
+  ...keys: string[]
+): (...values: HrefQueryValue[]) => string {
+  return (...values: HrefQueryValue[]) => {
+    const query: HrefQuery = {};
+
+    // Map the incoming values to the defined keys
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const val = values[i];
+      // We pass the value through even if null/undefined,
+      // because the underlying href() function handles normalization/skipping.
+      query[key] = val;
+    }
+
+    return href(path, query);
+  };
+}

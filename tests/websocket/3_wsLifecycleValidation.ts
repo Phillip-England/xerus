@@ -2,12 +2,14 @@ import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { Validator } from "../../src/Validator";
 import type { HTTPContext } from "../../src/HTTPContext";
 import type { TestStore } from "../TestStore";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
+import { header, ws } from "../../src/std/Request";
+import { json } from "../../src/std/Response";
+import { Validator } from "../../src/Validator";
 
 let lastClose: { code: number; reason: string } = { code: 0, reason: "" };
 let closeCount = 0;
@@ -20,9 +22,8 @@ const closeSchema = z.object({
 class HeaderClientValidator implements TypeValidator {
   client!: string;
   async validate(c: HTTPContext) {
-    // FIX: Call .get() on the HeaderRef
-    this.client = c.getHeader("X-Client").get() ?? "";
-    
+    this.client = header(c, "X-Client") ?? "";
+
     if (this.client.length === 0) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -37,8 +38,8 @@ class HeaderClientValidator implements TypeValidator {
 
 class CloseEventValidator implements TypeValidator {
   async validate(c: HTTPContext) {
-    let ws = c.ws();
-    await closeSchema.parseAsync({ code: ws.code, reason: ws.reason });
+    let socket = ws(c);
+    await closeSchema.parseAsync({ code: socket.code, reason: socket.reason });
   }
 }
 
@@ -47,8 +48,8 @@ class LifecycleOpen extends XerusRoute {
   path = "/ws/lifecycle-validate";
   headers = Validator.Ctx(HeaderClientValidator);
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    ws.send("open-ok");
+    let socket = ws(c);
+    socket.send("open-ok");
   }
 }
 
@@ -56,8 +57,8 @@ class LifecycleMessage extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/lifecycle-validate";
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    ws.send("cleared");
+    let socket = ws(c);
+    socket.send("cleared");
   }
 }
 
@@ -66,8 +67,8 @@ class LifecycleClose extends XerusRoute {
   path = "/ws/close-validate";
   closer = Validator.Ctx(CloseEventValidator);
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    lastClose = { code: ws.code, reason: ws.reason };
+    let socket = ws(c);
+    lastClose = { code: socket.code, reason: socket.reason };
     closeCount++;
   }
 }
@@ -76,7 +77,7 @@ class CloseStats extends XerusRoute {
   method = Method.GET;
   path = "/ws-close-stats";
   async handle(c: HTTPContext) {
-    c.json({ closeCount, lastClose });
+    json(c, { closeCount, lastClose });
   }
 }
 

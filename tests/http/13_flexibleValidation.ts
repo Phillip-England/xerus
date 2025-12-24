@@ -1,4 +1,3 @@
-// tests/http/13_flexibleValidation.ts
 import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
@@ -6,15 +5,15 @@ import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
-import { Validator } from "../../src/Validator";
 import type { TypeValidator } from "../../src/TypeValidator";
+import { header, param, query } from "../../src/std/Request";
+import { json } from "../../src/std/Response";
+import { Validator } from "../../src/Validator";
 
 class HeaderValidator implements TypeValidator {
   val!: string;
-
   async validate(c: HTTPContext) {
-    // ✅ HeaderRef -> primitive
-    this.val = c.getHeader("X-Secret").get() ?? "";
+    this.val = header(c, "X-Secret") ?? "";
     if (this.val !== "xerus-power") {
       throw new SystemErr(SystemErrCode.VALIDATION_FAILED, "Invalid Secret");
     }
@@ -23,18 +22,16 @@ class HeaderValidator implements TypeValidator {
 
 class IdParamValidator implements TypeValidator {
   id!: number;
-
   async validate(c: HTTPContext) {
-    this.id = Number(c.getParam("id"));
+    this.id = Number(param(c, "id"));
     z.number().int().parse(this.id);
   }
 }
 
 class PageQueryValidator implements TypeValidator {
   page!: number;
-
   async validate(c: HTTPContext) {
-    this.page = Number(c.query("page"));
+    this.page = Number(query(c, "page"));
     z.number().min(1).parse(this.page);
   }
 }
@@ -43,9 +40,8 @@ class HeaderRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/header";
   secret = Validator.Ctx(HeaderValidator);
-
   async handle(c: HTTPContext) {
-    c.json({ status: "ok" });
+    json(c, { status: "ok" });
   }
 }
 
@@ -53,9 +49,8 @@ class ParamRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/param/:id";
   params = Validator.Ctx(IdParamValidator);
-
   async handle(c: HTTPContext) {
-    c.json({ id: this.params.id });
+    json(c, { id: this.params.id });
   }
 }
 
@@ -63,9 +58,8 @@ class QueryRoute extends XerusRoute {
   method = Method.GET;
   path = "/flex/query";
   query = Validator.Ctx(PageQueryValidator);
-
   async handle(c: HTTPContext) {
-    c.json({ page: this.query.page });
+    json(c, { page: this.query.page });
   }
 }
 

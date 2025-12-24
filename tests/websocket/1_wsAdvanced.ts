@@ -4,6 +4,8 @@ import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
+import { param, ws } from "../../src/std/Request";
+import { json } from "../../src/std/Response";
 
 // 1) Pub/Sub (OPEN + MESSAGE) for /ws/room/:name
 class RoomOpen extends XerusRoute {
@@ -12,10 +14,10 @@ class RoomOpen extends XerusRoute {
   store = Inject(TestStore);
 
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    const room = c.getParam("name");
-    ws.subscribe(room);
-    ws.publish(room, `User joined ${room}`);
+    let socket = ws(c);
+    const room = param(c, "name");
+    socket.subscribe(room);
+    socket.publish(room, `User joined ${room}`);
   }
 }
 
@@ -25,9 +27,9 @@ class RoomMessage extends XerusRoute {
   store = Inject(TestStore);
 
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    const room = c.getParam("name");
-    ws.publish(room, ws.message);
+    let socket = ws(c);
+    const room = param(c, "name");
+    socket.publish(room, socket.message);
   }
 }
 
@@ -38,8 +40,8 @@ class BinaryEcho extends XerusRoute {
   store = Inject(TestStore);
 
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    ws.send(ws.message);
+    let socket = ws(c);
+    socket.send(socket.message);
   }
 }
 
@@ -52,7 +54,7 @@ class WsStats extends XerusRoute {
   store = Inject(TestStore);
 
   async handle(c: HTTPContext) {
-    c.json({ closed: closedConnections });
+    json(c, { closed: closedConnections });
   }
 }
 

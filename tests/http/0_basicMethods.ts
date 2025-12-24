@@ -1,21 +1,21 @@
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { HTTPContext } from "../../src/HTTPContext";
-import { Validator } from "../../src/Validator";
+import type { HTTPContext } from "../../src/HTTPContext";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { BodyType } from "../../src/BodyType";
 import type { TypeValidator } from "../../src/TypeValidator";
+import { parseBody } from "../../src/std/Body";
+import { json, redirect, setHeader, setStatus, text } from "../../src/std/Response";
+import { Validator } from "../../src/Validator";
+import { header, query } from "../../src/std/Request";
 
 class JsonObjectBody implements TypeValidator {
   body: any;
-
   async validate(c: HTTPContext) {
-    this.body = await c.parseBody(BodyType.JSON);
-    if (
-      !this.body || typeof this.body !== "object" || Array.isArray(this.body)
-    ) {
+    this.body = await parseBody(c, BodyType.JSON);
+    if (!this.body || typeof this.body !== "object" || Array.isArray(this.body)) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
         "Expected JSON object body",
@@ -28,7 +28,7 @@ class Root extends XerusRoute {
   method = Method.GET;
   path = "/";
   async handle(c: HTTPContext) {
-    c.json({ message: "Hello, world!" });
+    json(c, { message: "Hello, world!" });
   }
 }
 
@@ -37,7 +37,8 @@ class CreateItem extends XerusRoute {
   path = "/items";
   jsonObj = Validator.Ctx(JsonObjectBody);
   async handle(c: HTTPContext) {
-    c.setStatus(201).json({ message: "Item created", data: this.jsonObj.body });
+    setStatus(c, 201);
+    json(c, { message: "Item created", data: this.jsonObj.body });
   }
 }
 
@@ -46,7 +47,7 @@ class UpdateItem extends XerusRoute {
   path = "/items/1";
   jsonObj = Validator.Ctx(JsonObjectBody);
   async handle(c: HTTPContext) {
-    c.json({ message: "Item 1 updated", data: this.jsonObj.body });
+    json(c, { message: "Item 1 updated", data: this.jsonObj.body });
   }
 }
 
@@ -54,7 +55,7 @@ class DeleteItem extends XerusRoute {
   method = Method.DELETE;
   path = "/items/1";
   async handle(c: HTTPContext) {
-    c.json({ message: "Item 1 deleted" });
+    json(c, { message: "Item 1 deleted" });
   }
 }
 
@@ -62,7 +63,7 @@ class RedirSimple extends XerusRoute {
   method = Method.GET;
   path = "/redir/simple";
   async handle(c: HTTPContext) {
-    c.redirect("/");
+    redirect(c, "/");
   }
 }
 
@@ -70,7 +71,7 @@ class RedirQuery extends XerusRoute {
   method = Method.GET;
   path = "/redir/query";
   async handle(c: HTTPContext) {
-    c.redirect("/?existing=1", { new: "2" });
+    redirect(c, "/?existing=1", { new: "2" });
   }
 }
 
@@ -79,7 +80,7 @@ class RedirUnsafe extends XerusRoute {
   path = "/redir/unsafe";
   async handle(c: HTTPContext) {
     const dangerous = "Hack\r\nLocation: google.com";
-    c.redirect("/", { msg: dangerous });
+    redirect(c, "/", { msg: dangerous });
   }
 }
 
@@ -87,8 +88,8 @@ class Ping extends XerusRoute {
   method = Method.GET;
   path = "/basics/ping";
   async handle(c: HTTPContext) {
-    c.setHeader("X-Ping", "pong");
-    c.text("pong");
+    setHeader(c, "X-Ping", "pong");
+    text(c, "pong");
   }
 }
 
@@ -96,8 +97,9 @@ class HeadPing extends XerusRoute {
   method = Method.HEAD;
   path = "/basics/ping";
   async handle(c: HTTPContext) {
-    c.setHeader("X-Ping", "pong");
-    c.setStatus(200).text("");
+    setHeader(c, "X-Ping", "pong");
+    setStatus(c, 200);
+    text(c, "");
   }
 }
 
@@ -105,8 +107,9 @@ class OptionsPing extends XerusRoute {
   method = Method.OPTIONS;
   path = "/basics/ping";
   async handle(c: HTTPContext) {
-    c.setHeader("Allow", "GET, HEAD, OPTIONS");
-    c.setStatus(204).text("");
+    setHeader(c, "Allow", "GET, HEAD, OPTIONS");
+    setStatus(c, 204);
+    text(c, "");
   }
 }
 
@@ -114,9 +117,9 @@ class EchoQuery extends XerusRoute {
   method = Method.GET;
   path = "/basics/echo-query";
   async handle(c: HTTPContext) {
-    const a = c.url.searchParams.get("a");
-    const b = c.url.searchParams.get("b");
-    c.json({ a, b });
+    const a = query(c, "a") || null;
+    const b = query(c, "b") || null;
+    json(c, { a, b });
   }
 }
 
@@ -124,9 +127,9 @@ class EchoHeader extends XerusRoute {
   method = Method.GET;
   path = "/basics/echo-header";
   async handle(c: HTTPContext) {
-    const v = c.req.headers.get("x-test-header") ?? "";
-    c.setHeader("X-Echo-Test", v);
-    c.json({ value: v });
+    const v = header(c, "x-test-header") ?? "";
+    setHeader(c, "X-Echo-Test", v);
+    json(c, { value: v });
   }
 }
 
@@ -134,7 +137,8 @@ class StatusTest extends XerusRoute {
   method = Method.GET;
   path = "/basics/status";
   async handle(c: HTTPContext) {
-    c.setStatus(418).text("teapot");
+    setStatus(c, 418);
+    text(c, "teapot");
   }
 }
 
@@ -142,7 +146,7 @@ class JsonTest extends XerusRoute {
   method = Method.GET;
   path = "/basics/json";
   async handle(c: HTTPContext) {
-    c.json({ ok: true, msg: "✨ unicode ok" });
+    json(c, { ok: true, msg: "✨ unicode ok" });
   }
 }
 

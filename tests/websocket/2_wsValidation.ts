@@ -2,13 +2,14 @@ import { z } from "zod";
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { Validator } from "../../src/Validator";
 import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
 import type { HTTPContext } from "../../src/HTTPContext";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
+import { ws } from "../../src/std/Request";
+import { Validator } from "../../src/Validator";
 
 const schema = z.object({
   type: z.enum(["chat", "ping"]),
@@ -18,7 +19,7 @@ const schema = z.object({
 class WSJsonValidator implements TypeValidator {
   data!: z.infer<typeof schema>;
   async validate(c: HTTPContext) {
-    const raw = c.ws().message;
+    const raw = ws(c).message;
     if (typeof raw !== "string") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -49,11 +50,11 @@ class ValidatedChat extends XerusRoute {
   msg = Validator.Ctx(WSJsonValidator);
 
   async handle(c: HTTPContext) {
-    let ws = c.ws();
+    let socket = ws(c);
     if (this.msg.data.type === "ping") {
-      ws.send("pong");
+      socket.send("pong");
     } else {
-      ws.send(`received: ${this.msg.data.content}`);
+      socket.send(`received: ${this.msg.data.content}`);
     }
   }
 }

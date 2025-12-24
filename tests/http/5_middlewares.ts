@@ -3,21 +3,21 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
 import { Inject, type InjectableStore, type ServiceLifecycle } from "../../src/RouteFields";
+import { json, setHeader, setStatus, text } from "../../src/std/Response";
 
 class ServiceOrderLogger implements ServiceLifecycle {
   name: string = "Unknown";
-
   async before(c: HTTPContext) {
-    const existing = c.getResHeader("X-Order").get() ?? "";
-    c.setHeader(
+    const existing = c.res.getHeader("X-Order") ?? "";
+    setHeader(
+      c,
       "X-Order",
       existing ? `${existing}->${this.name}-In` : `${this.name}-In`,
     );
   }
-
   async after(c: HTTPContext) {
-    const after = c.getResHeader("X-Order").get() ?? "";
-    c.setHeader("X-Order", `${after}->${this.name}-Out`);
+    const after = c.res.getHeader("X-Order") ?? "";
+    setHeader(c, "X-Order", `${after}->${this.name}-Out`);
   }
 }
 
@@ -26,7 +26,8 @@ class ServiceB extends ServiceOrderLogger { name = "B"; }
 
 class ServiceShortCircuit implements ServiceLifecycle {
   async before(c: HTTPContext) {
-    c.setStatus(200).text("Intercepted by Service");
+    setStatus(c, 200);
+    text(c, "Intercepted by Service");
   }
 }
 
@@ -35,7 +36,6 @@ export const treasureValue = "secretValue";
 class TreasureService implements InjectableStore, ServiceLifecycle {
   storeKey = "TreasureService";
   value: string = "";
-
   async before(_c: HTTPContext) {
     this.value = treasureValue;
   }
@@ -45,9 +45,8 @@ class OrderRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/order";
   inject = [Inject(ServiceA), Inject(ServiceB)];
-
   async handle(c: HTTPContext) {
-    c.json({ message: "Handler reached" });
+    json(c, { message: "Handler reached" });
   }
 }
 
@@ -55,9 +54,8 @@ class ShortRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/short-circuit";
   inject = [Inject(ServiceShortCircuit)];
-
   async handle(c: HTTPContext) {
-    c.text("This should never be seen");
+    text(c, "This should never be seen");
   }
 }
 
@@ -65,10 +63,9 @@ class StoreRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/store";
   inject = [Inject(TreasureService)];
-
   async handle(c: HTTPContext) {
     const svc = c.service(TreasureService);
-    c.json({ storedValue: svc.value });
+    json(c, { storedValue: svc.value });
   }
 }
 

@@ -1,18 +1,19 @@
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
-import { Validator } from "../../src/Validator";
 import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
 import type { TypeValidator } from "../../src/TypeValidator";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { HTTPContext } from "../../src/HTTPContext";
+import { ws } from "../../src/std/Request";
+import { Validator } from "../../src/Validator";
 
 export class ChatMessageValidator implements TypeValidator {
   content!: string;
   async validate(c: HTTPContext) {
-    this.content = String(c.ws().message);
+    this.content = String(ws(c).message);
     if (this.content.includes("badword")) {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,
@@ -29,8 +30,8 @@ class ValidatorWsRoute extends XerusRoute {
   msg = Validator.Ctx(ChatMessageValidator);
 
   async handle(c: HTTPContext) {
-    let ws = c.ws();
-    ws.send(`clean: ${this.msg.content}`);
+    let socket = ws(c);
+    socket.send(`clean: ${this.msg.content}`);
   }
 }
 

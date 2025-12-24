@@ -2,75 +2,65 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Inject } from "../../src/RouteFields"; // Import Inject
-import { TestStore } from "../TestStore"; // Import the Class
+import { Inject } from "../../src/RouteFields";
+import { TestStore } from "../TestStore";
+import { query } from "../../src/std/Request";
+import { json, setHeader, setStatus, text } from "../../src/std/Response";
 
 class PoolSet extends XerusRoute {
   method = Method.GET;
   path = "/pool/set";
-
-  // Inject the store. The framework creates a NEW instance for every request.
   store = Inject(TestStore);
-
   async handle(c: HTTPContext) {
-    const val = c.query("val");
-
-    // Type-safe access!
+    const val = query(c, "val");
     this.store.test_val = val;
-
-    c.json({ value: val });
+    json(c, { value: val });
   }
 }
 
 class PoolGet extends XerusRoute {
   method = Method.GET;
   path = "/pool/get";
-
   store = Inject(TestStore);
-
   async handle(c: HTTPContext) {
-    // Type-safe retrieval
     const val = this.store.test_val;
-
-    c.json({ value: val });
+    json(c, { value: val });
   }
 }
 
 class PoolSetHeader extends XerusRoute {
   method = Method.GET;
   path = "/pool/set-header";
-
   async handle(c: HTTPContext) {
-    c.setHeader("X-Leaked-Header", "I should be gone");
-    c.text("Header set");
+    setHeader(c, "X-Leaked-Header", "I should be gone");
+    text(c, "Header set");
   }
 }
 
 class PoolCheckHeader extends XerusRoute {
   method = Method.GET;
   path = "/pool/check-header";
-
   async handle(c: HTTPContext) {
-    // This confirms that c.res headers were wiped during reset()
-    const leaked = c.getResHeader("X-Leaked-Header");
+    // Note: getResHeader is not in std, accessed via context directly as per internal API
+    const leaked = c.res.getHeader("X-Leaked-Header");
     if (leaked) {
-      c.setStatus(500).text("Header Leaked!");
+      setStatus(c, 500);
+      text(c, "Header Leaked!");
       return;
     }
-    c.text("Headers clean");
+    text(c, "Headers clean");
   }
 }
 
 class PoolError extends XerusRoute {
   method = Method.GET;
   path = "/pool/error";
-
   async handle(c: HTTPContext) {
-    c.setStatus(400).text("Bad Request");
+    setStatus(c, 400);
+    text(c, "Bad Request");
   }
 }
 
-// Remove the generic <TestStore> from Xerus
 export function objectPool(app: Xerus) {
   app.setHTTPContextPool(50);
   app.mount(PoolSet, PoolGet, PoolSetHeader, PoolCheckHeader, PoolError);

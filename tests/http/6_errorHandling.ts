@@ -3,6 +3,7 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
 import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
+import { file, json, setStatus, text } from "../../src/std/Response";
 
 class ServiceErrorTrigger implements ServiceLifecycle {
   async before(c: HTTPContext) {
@@ -21,11 +22,9 @@ class StandardErr extends XerusRoute {
 class SvcErr extends XerusRoute {
   method = Method.GET;
   path = "/err/middleware"; 
-  // REFACTORED
   inject = [Inject(ServiceErrorTrigger)];
-
-  async handle(_c: HTTPContext) {
-    _c.text("This won't be reached");
+  async handle(c: HTTPContext) {
+    text(c, "This won't be reached");
   }
 }
 
@@ -33,7 +32,7 @@ class MissingFile extends XerusRoute {
   method = Method.GET;
   path = "/err/file-missing";
   async handle(c: HTTPContext) {
-    return await c.file("./non/existent/path/file.txt");
+    return await file(c, "./non/existent/path/file.txt");
   }
 }
 
@@ -42,11 +41,9 @@ export function errorHandling(app: Xerus) {
     const detail = err instanceof Error
       ? err.message
       : String(err ?? "Unknown Error");
-    
-    // Check if error came from service
     const msg = detail === "Failure in Service" ? "Failure in Middleware" : "Custom Global Handler";
-
-    c.setStatus(500).json({
+    setStatus(c, 500);
+    json(c, {
       error: {
         code: "GLOBAL_ERROR",
         message: msg, 
