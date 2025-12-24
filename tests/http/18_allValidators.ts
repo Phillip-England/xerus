@@ -38,7 +38,8 @@ export class UserIdParam implements TypeValidator {
 export class ApiKeyHeader implements TypeValidator {
   key!: string;
   async validate(c: HTTPContext) {
-    this.key = c.getHeader("X-Api-Key") ?? "";
+    // FIX: Added .get() to the HeaderRef
+    this.key = c.getHeader("X-Api-Key").get() ?? "";
     if (this.key !== "xerus-secret-123") {
       throw new SystemErr(
         SystemErrCode.VALIDATION_FAILED,

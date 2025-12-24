@@ -4,14 +4,11 @@ import { Method } from "../../src/Method";
 import { Inject } from "../../src/RouteFields";
 import { TestStore } from "../TestStore";
 import type { HTTPContext } from "../../src/HTTPContext";
-import type { XerusMiddleware } from "../../src/Middleware";
-import type { AnyContext } from "../../src/MiddlewareFn";
-import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+import type { ServiceLifecycle } from "../../src/RouteFields";
 
-class GroupHeaderMiddleware implements XerusMiddleware {
-  async execute(c: AnyContext, next: MiddlewareNextFn) {
+class GroupHeaderService implements ServiceLifecycle {
+  async before(c: HTTPContext) {
     c.setHeader("X-Group-Auth", "passed");
-    await next();
   }
 }
 
@@ -19,7 +16,6 @@ class WSEcho extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/echo";
   store = Inject(TestStore);
-
   async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send(`echo: ${ws.message}`);
@@ -30,14 +26,11 @@ class WSChatOpen extends XerusRoute {
   method = Method.WS_OPEN;
   path = "/ws/chat";
   store = Inject(TestStore);
-
-  onMount() {
-    this.use(GroupHeaderMiddleware);
-  }
+  // REFACTORED
+  inject = [Inject(GroupHeaderService)];
 
   async handle(c: HTTPContext) {
     let ws = c.ws();
-    // FIX: Call .get() on the HeaderRef
     const auth = c.getResHeader("X-Group-Auth").get();
     ws.send(`auth-${auth}`);
   }
@@ -47,7 +40,6 @@ class WSChatMessage extends XerusRoute {
   method = Method.WS_MESSAGE;
   path = "/ws/chat";
   store = Inject(TestStore);
-
   async handle(c: HTTPContext) {
     let ws = c.ws();
     ws.send(`chat: ${ws.message}`);

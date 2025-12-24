@@ -16,17 +16,9 @@ test("Hardening: Service init() failure should trigger 500 error", async () => {
   expect(data.error.detail).toBe("Database Connection Failed inside Service");
 });
 
-test("Hardening: Middleware calling next() twice should be caught", async () => {
-  const res = await fetch(`${BaseURL}/harden/double-next`);
-  expect(res.status).toBe(500);
-  const data = await res.json();
-  expect(data.error.detail).toContain("next() called multiple times");
-});
-
 test("Hardening: Headers should be mutable after body written (Onion Pattern support)", async () => {
   const res = await fetch(`${BaseURL}/harden/late-header`);
   expect(res.status).toBe(200);
-  // Framework allows headers after body logic (before sending to client)
   expect(res.headers.get("X-Late")).toBe("Too late");
 });
 
@@ -35,7 +27,6 @@ test("Hardening: Headers should be IMMUTABLE after Streaming starts", async () =
   expect(res.status).toBe(200);
   const text = await res.text();
   expect(text).toBe("stream data");
-  // Ensure the header set AFTER stream() call was blocked
   expect(res.headers.get("X-Fail")).toBeNull();
 });
 

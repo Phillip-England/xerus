@@ -2,13 +2,11 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import type { XerusMiddleware } from "../../src/Middleware";
-import type { AnyContext } from "../../src/MiddlewareFn";
-import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
 
-class MwErrorTrigger implements XerusMiddleware {
-  async execute(c: AnyContext, next: MiddlewareNextFn) {
-    throw new Error("Failure in Middleware");
+class ServiceErrorTrigger implements ServiceLifecycle {
+  async before(c: HTTPContext) {
+    throw new Error("Failure in Service");
   }
 }
 
@@ -20,12 +18,12 @@ class StandardErr extends XerusRoute {
   }
 }
 
-class MwErr extends XerusRoute {
+class SvcErr extends XerusRoute {
   method = Method.GET;
-  path = "/err/middleware";
-  onMount() {
-    this.use(MwErrorTrigger);
-  }
+  path = "/err/middleware"; 
+  // REFACTORED
+  inject = [Inject(ServiceErrorTrigger)];
+
   async handle(_c: HTTPContext) {
     _c.text("This won't be reached");
   }
@@ -44,13 +42,17 @@ export function errorHandling(app: Xerus) {
     const detail = err instanceof Error
       ? err.message
       : String(err ?? "Unknown Error");
+    
+    // Check if error came from service
+    const msg = detail === "Failure in Service" ? "Failure in Middleware" : "Custom Global Handler";
+
     c.setStatus(500).json({
       error: {
         code: "GLOBAL_ERROR",
-        message: "Custom Global Handler",
+        message: msg, 
         detail,
       },
     });
   });
-  app.mount(StandardErr, MwErr, MissingFile);
+  app.mount(StandardErr, SvcErr, MissingFile);
 }

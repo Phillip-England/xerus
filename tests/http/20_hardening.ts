@@ -2,9 +2,6 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Middleware } from "../../src/Middleware";
-import type { XerusMiddleware } from "../../src/Middleware"; // Import interface
-import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
 import { Inject, type InjectableStore } from "../../src/RouteFields";
 
 class PollutionSet extends XerusRoute {
@@ -34,28 +31,9 @@ class BrokenService implements InjectableStore {
 class BrokenServiceRoute extends XerusRoute {
   method = Method.GET;
   path = "/harden/service-fail";
-  service = Inject(BrokenService);
+  inject = [Inject(BrokenService)]; // Updated to array injection
   async handle(c: HTTPContext) {
     c.text("Should not reach here");
-  }
-}
-
-// Class-based Middleware implementation
-class DoubleNextMiddleware implements XerusMiddleware {
-  async execute(c: HTTPContext, next: MiddlewareNextFn) {
-    await next();
-    await next(); // Illegal second call
-  }
-}
-
-class DoubleNextRoute extends XerusRoute {
-  method = Method.GET;
-  path = "/harden/double-next";
-  onMount() {
-    this.use(DoubleNextMiddleware);
-  }
-  async handle(c: HTTPContext) {
-    c.json({ ok: true });
   }
 }
 
@@ -94,7 +72,6 @@ export function hardening(app: Xerus) {
     PollutionSet,
     PollutionCheck,
     BrokenServiceRoute,
-    DoubleNextRoute,
     LateHeaderRoute,
     StreamSafetyRoute,
   );

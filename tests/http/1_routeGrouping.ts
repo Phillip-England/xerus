@@ -6,15 +6,13 @@ import { BodyType } from "../../src/BodyType";
 import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { Validator } from "../../src/Validator";
+import { Inject } from "../../src/RouteFields"; // Added Inject
 import type { TypeValidator } from "../../src/TypeValidator";
-import type { XerusMiddleware } from "../../src/Middleware";
-import type { AnyContext } from "../../src/MiddlewareFn";
-import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+import type { ServiceLifecycle } from "../../src/RouteFields";
 
-export class GroupHeaderMiddleware implements XerusMiddleware {
-  async execute(c: AnyContext, next: MiddlewareNextFn) {
+export class GroupHeaderService implements ServiceLifecycle {
+  async before(c: HTTPContext) {
     c.setHeader("X-Group-Auth", "passed");
-    await next();
   }
 }
 
@@ -53,9 +51,8 @@ class ApiEcho extends XerusRoute {
 class AdminDashboard extends XerusRoute {
   method = Method.GET;
   path = "/admin/dashboard";
-  onMount() {
-    this.use(GroupHeaderMiddleware);
-  }
+  // REFACTORED: Use inject array
+  inject = [Inject(GroupHeaderService)]; 
   async handle(c: HTTPContext) {
     c.text("Welcome to the Dashboard");
   }
@@ -64,9 +61,8 @@ class AdminDashboard extends XerusRoute {
 class AdminSettings extends XerusRoute {
   method = Method.DELETE;
   path = "/admin/settings";
-  onMount() {
-    this.use(GroupHeaderMiddleware);
-  }
+  // REFACTORED: Use inject array
+  inject = [Inject(GroupHeaderService)];
   async handle(c: HTTPContext) {
     c.json({ deleted: true });
   }

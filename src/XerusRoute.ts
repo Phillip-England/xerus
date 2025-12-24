@@ -1,42 +1,25 @@
+// src/XerusRoute.ts
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Method } from "./Method";
-import type { XerusMiddleware } from "./Middleware";
-
-type MiddlewareInput =
-  | XerusMiddleware
-  | (new (...args: any[]) => XerusMiddleware);
-
-function isCtor(x: any): x is new (...args: any[]) => any {
-  return typeof x === "function" && x.prototype &&
-    x.prototype.constructor === x;
-}
+// Removed Middleware imports
 
 export abstract class XerusRoute {
   abstract method: Method;
   abstract path: string;
-  public _middlewares: XerusMiddleware[] = [];
+  
+  // No more middleware array. Logic must be in services (Inject) or hooks.
   public _errHandler?: HTTPErrorHandlerFunc;
-  public inject: any[] = [];
+  public inject: any[] = []; // Still used for manual injections if needed
 
   onMount(): void {}
+
   async validate(_c: HTTPContext): Promise<void> {}
   async preHandle(_c: HTTPContext): Promise<void> {}
   async postHandle(_c: HTTPContext): Promise<void> {}
   async onFinally(_c: HTTPContext): Promise<void> {}
 
   abstract handle(c: HTTPContext): Promise<void>;
-
-  use(...middlewares: MiddlewareInput[]): this {
-    const normalized = middlewares.map((m) => {
-      if (isCtor(m)) {
-        return new m();
-      }
-      return m;
-    });
-    this._middlewares.push(...(normalized as XerusMiddleware[]));
-    return this;
-  }
 
   onErr(handler: HTTPErrorHandlerFunc): this {
     this._errHandler = handler;

@@ -2,28 +2,82 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-// import type { TestStore } from "../TestStore"; // Not needed anymore
-import { csrf, rateLimit, requestId, timeout } from "../../src/Middleware";
+import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
 
-const csrfMw = csrf({ ensureCookieOnSafeMethods: true });
+class CsrfService implements ServiceLifecycle {
+  async before(c: HTTPContext) {
+    const cookieName = "csrf_token";
+    const existing = c.getCookie(cookieName).get();
+    
+    if (c.method === "GET") {
+        const token = existing || "test-token-123";
+        if (!existing) {
+            c.setCookie(cookieName, token);
+        }
+        c.setStore("csrfToken", token);
+        return;
+    }
+
+    const headerToken = c.getHeader("x-csrf-token").get();
+    if (!existing || existing !== headerToken) {
+        c.errorJSON(403, "CSRF_FAILED", "Invalid Token");
+    }
+  }
+}
+
+class RequestIdService implements ServiceLifecycle {
+    async before(c: HTTPContext) {
+        const id = crypto.randomUUID();
+        c.setStore("requestId", id);
+        c.setHeader("X-Request-Id", id);
+    }
+}
+
+const rateLimitMap = new Map<string, number>();
+
+class RateLimitService implements ServiceLifecycle {
+    async before(c: HTTPContext) {
+        const ip = "127.0.0.1"; // Mock IP
+        const count = (rateLimitMap.get(ip) || 0) + 1;
+        rateLimitMap.set(ip, count);
+
+        if (count > 2) {
+            c.errorJSON(429, "RATE_LIMITED", "Too many requests");
+        }
+    }
+}
+
+class TimeoutService implements ServiceLifecycle {
+    async before(c: HTTPContext) {
+       const start = Date.now();
+       c.setStore("__start", start);
+    }
+
+    async after(c: HTTPContext) {
+        const start = c.getStore<number>("__start");
+        // Check if handler took too long (> 50ms)
+        if (Date.now() - start > 50) {
+            // Only send error if response hasn't been sent yet
+            if (!c.isDone) {
+                 c.errorJSON(504, "TIMEOUT", "Gateway Timeout");
+            }
+        }
+    }
+}
 
 class RequestIdRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/request-id";
-  onMount() {
-    this.use(requestId({ storeKey: "requestId" }));
-  }
+  inject = [Inject(RequestIdService)];
   async handle(c: HTTPContext) {
-    c.json({ id: c.getRequestId() });
+    c.json({ id: c.getStore("requestId") });
   }
 }
 
 class RateLimitRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/limited";
-  onMount() {
-    this.use(rateLimit({ windowMs: 250, max: 2 }));
-  }
+  inject = [Inject(RateLimitService)];
   async handle(c: HTTPContext) {
     c.json({ ok: true });
   }
@@ -32,22 +86,17 @@ class RateLimitRoute extends XerusRoute {
 class CsrfGetRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/csrf";
-  onMount() {
-    this.use(csrfMw);
-  }
+  inject = [Inject(CsrfService)];
   async handle(c: HTTPContext) {
-    // Note: Ensure your CSRF middleware writes to 'store' if you use getStore(),
-    // or access c.data.csrfToken if it writes to 'data'.
-    c.json({ token: c.data.csrfToken });
+    const token = c.getStore("csrfToken");
+    c.json({ token });
   }
 }
 
 class CsrfPostRoute extends XerusRoute {
   method = Method.POST;
   path = "/patterns/csrf";
-  onMount() {
-    this.use(csrfMw);
-  }
+  inject = [Inject(CsrfService)];
   async handle(c: HTTPContext) {
     c.json({ ok: true });
   }
@@ -56,13 +105,10 @@ class CsrfPostRoute extends XerusRoute {
 class TimeoutRoute extends XerusRoute {
   method = Method.GET;
   path = "/patterns/timeout";
-  onMount() {
-    this.use(timeout(50));
-  }
+  inject = [Inject(TimeoutService)];
   async handle(c: HTTPContext) {
-    // Increased sleep to 500ms to ensure it loses the race against the 50ms timeout
-    await new Promise((r) => setTimeout(r, 500));
-    c.json({ shouldNot: "reach" });
+    // Simulate slow work. Should be caught by TimeoutService.after
+    await new Promise((r) => setTimeout(r, 100)); 
   }
 }
 

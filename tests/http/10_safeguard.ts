@@ -2,40 +2,34 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import { HTTPContext } from "../../src/HTTPContext";
-import { Middleware } from "../../src/Middleware";
+import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
 
-// The Bad Middleware: Forgets to await next()
-const mwForgotAwait = new Middleware(async (c: HTTPContext, next) => {
-  next();
-});
-
-// The Good Middleware
-const mwStandard = new Middleware(async (c: HTTPContext, next) => {
-  await next();
-});
+class ErrorCatcherService implements ServiceLifecycle {
+  async onError(c: HTTPContext, err: any) {
+    c.setStatus(500).json({
+      error: {
+        code: "SERVICE_CAUGHT",
+        message: "Service caught the error",
+        detail: err.message
+      }
+    });
+  }
+}
 
 class FailRoute extends XerusRoute {
   method = Method.GET;
   path = "/safeguard/fail";
-
-  onMount() {
-    this.use(mwForgotAwait);
-  }
+  // REFACTORED
+  inject = [Inject(ErrorCatcherService)];
 
   async handle(c: HTTPContext) {
-    await new Promise((r) => setTimeout(r, 10));
-    c.json({ message: "Should not see this" });
+    throw new Error("Handler Failed");
   }
 }
 
 class OkRoute extends XerusRoute {
   method = Method.GET;
   path = "/safeguard/ok";
-
-  onMount() {
-    this.use(mwStandard);
-  }
-
   async handle(c: HTTPContext) {
     c.json({ status: "ok" });
   }

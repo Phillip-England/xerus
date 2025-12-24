@@ -1,59 +1,51 @@
-// tests/http/5_middlewares.ts
 import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-import type { XerusMiddleware } from "../../src/Middleware";
-import type { AnyContext } from "../../src/MiddlewareFn";
-import type { MiddlewareNextFn } from "../../src/MiddlewareNextFn";
+import { Inject, type ServiceLifecycle } from "../../src/RouteFields";
 
-class MwOrderLogger implements XerusMiddleware {
-  private name: string;
-
-  constructor(name: string) {
-    this.name = name;
-  }
-
-  async execute(c: AnyContext, next: MiddlewareNextFn) {
-    // ✅ HeaderRef -> primitive
+// REFACTORED: Service Logic
+class ServiceOrderLogger implements ServiceLifecycle {
+  name: string = "Unknown";
+  
+  async before(c: HTTPContext) {
     const existing = c.getResHeader("X-Order").get() ?? "";
-
     c.setHeader(
       "X-Order",
       existing ? `${existing}->${this.name}-In` : `${this.name}-In`,
     );
+  }
 
-    await next();
-
+  async after(c: HTTPContext) {
     const after = c.getResHeader("X-Order").get() ?? "";
     c.setHeader("X-Order", `${after}->${this.name}-Out`);
   }
 }
 
-class MwShortCircuit implements XerusMiddleware {
-  async execute(c: AnyContext, _next: MiddlewareNextFn) {
-    c.setStatus(200).text("Intercepted by Middleware");
+class ServiceA extends ServiceOrderLogger { name = "A"; }
+class ServiceB extends ServiceOrderLogger { name = "B"; }
+
+class ServiceShortCircuit implements ServiceLifecycle {
+  async before(c: HTTPContext) {
+    c.setStatus(200).text("Intercepted by Service");
   }
 }
 
 export const treasureKey = "secretKey" as const;
 export const treasureValue = "secretValue";
 
-class MwTreasure implements XerusMiddleware {
-  async execute(c: AnyContext, next: MiddlewareNextFn) {
+class ServiceTreasure implements ServiceLifecycle {
+  async before(c: HTTPContext) {
     c.setStore(treasureKey, treasureValue);
-    await next();
   }
 }
 
 class OrderRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/order";
-
-  onMount() {
-    this.use(new MwOrderLogger("A"), new MwOrderLogger("B"));
-  }
-
+  // REFACTORED: Inject services
+  inject = [Inject(ServiceA), Inject(ServiceB)];
+  
   async handle(c: HTTPContext) {
     c.json({ message: "Handler reached" });
   }
@@ -62,10 +54,8 @@ class OrderRoute extends XerusRoute {
 class ShortRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/short-circuit";
-
-  onMount() {
-    this.use(new MwShortCircuit());
-  }
+  // REFACTORED
+  inject = [Inject(ServiceShortCircuit)];
 
   async handle(c: HTTPContext) {
     c.text("This should never be seen");
@@ -75,10 +65,8 @@ class ShortRoute extends XerusRoute {
 class StoreRoute extends XerusRoute {
   method = Method.GET;
   path = "/mw/store";
-
-  onMount() {
-    this.use(new MwTreasure());
-  }
+  // REFACTORED
+  inject = [Inject(ServiceTreasure)];
 
   async handle(c: HTTPContext) {
     const value = c.getStore(treasureKey);
