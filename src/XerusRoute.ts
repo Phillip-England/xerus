@@ -2,8 +2,22 @@
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Method } from "./Method";
-import type { ServiceLifecycle } from "./RouteFields";
 import type { TypeValidator } from "./TypeValidator";
+
+/**
+ * Services are now "any constructor" globally.
+ *
+ * Reason:
+ * - ServiceLifecycle is a "weak type" (all optional keys).
+ * - TypeScript requires some shared keys when assigning class instances to weak types.
+ * - WS routes often use lightweight per-message services without lifecycle keys,
+ *   so typing them as ServiceLifecycle creates false-negative TS errors.
+ *
+ * Runtime already treats hooks as optional:
+ *   if (svc.before) await svc.before(c)
+ */
+export type AnyServiceCtor = new () => any;
+export type AnyValidatorCtor = new () => TypeValidator<any>;
 
 export abstract class XerusRoute {
   abstract method: Method;
@@ -11,27 +25,13 @@ export abstract class XerusRoute {
 
   public _errHandler?: HTTPErrorHandlerFunc;
 
-  /**
-   * Declare services required by this route.
-   * These services become available via `c.service(ServiceCtor)`.
-   */
-  public services: Array<new () => ServiceLifecycle> = [];
-
-  /**
-   * Declare validators required by this route.
-   * These validators are executed before services/hooks/handle,
-   * and their returned values are available via `c.validated(ValidatorCtor)`.
-   */
-  public validators: Array<new () => TypeValidator<any>> = [];
+  // ✅ Unified: HTTP + WS both use ctor lists
+  public services: AnyServiceCtor[] = [];
+  public validators: AnyValidatorCtor[] = [];
 
   onMount(): void {}
 
-  /**
-   * Optional custom validation hook (still supported),
-   * but *data plumbing* is standardized through `validators = [...]`.
-   */
   async validate(_c: HTTPContext): Promise<void> {}
-
   async preHandle(_c: HTTPContext): Promise<void> {}
   async postHandle(_c: HTTPContext): Promise<void> {}
   async onFinally(_c: HTTPContext): Promise<void> {}

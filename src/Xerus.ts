@@ -8,9 +8,8 @@ import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { join, resolve } from "path";
 import { ObjectPool } from "./ObjectPool";
-import { XerusRoute } from "./XerusRoute";
+import { XerusRoute, type AnyServiceCtor, type AnyValidatorCtor } from "./XerusRoute";
 import { Method } from "./Method";
-import type { ServiceLifecycle } from "./RouteFields";
 import type { TypeValidator } from "./TypeValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
@@ -18,13 +17,16 @@ import { WSContext } from "./WSContext";
 const LEGACY_FIELD = Symbol.for("xerus:routefield");
 const INIT_PROMISE = Symbol.for("xerus:service_init_promise");
 
-type ServiceCtor<T extends ServiceLifecycle = any> = new () => T;
+// ✅ Services are now “any ctor” globally
+type ServiceCtor = AnyServiceCtor;
+
+// Validators remain typed as TypeValidator ctors
 type ValidatorCtor<T extends TypeValidator<any> = any> = new () => T;
 
 export class Xerus {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
-  private globalServices: ServiceCtor[] = []; // per-request services
+  private globalServices: ServiceCtor[] = []; // per-request (and per-WS-event) services
   private notFoundHandler?: HTTPHandlerFunc;
   private errHandler?: HTTPErrorHandlerFunc;
 
@@ -32,8 +34,8 @@ export class Xerus {
     string,
     { blueprint?: RouteBlueprint; params: Record<string, string> }
   >();
-
   private readonly MAX_CACHE_SIZE = 500;
+
   private contextPool: ObjectPool<HTTPContext>;
   private globals = new Map<any, any>();
   private freezeValidators: boolean = true;
@@ -81,24 +83,26 @@ export class Xerus {
 
   private assertCtorList(name: string, arr: any, where: string) {
     if (arr === undefined || arr === null) return;
+
     if (!Array.isArray(arr)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `[XERUS] ${where}.${name} must be an array of constructors.`,
       );
     }
+
     for (const item of arr) {
-      if (typeof item !== "function") {
-        throw new SystemErr(
-          SystemErrCode.INTERNAL_SERVER_ERR,
-          `[XERUS] ${where}.${name} must contain only constructors (classes/functions).`,
-        );
-      }
       if (item && typeof item === "object" && item[LEGACY_FIELD] === true) {
         throw new SystemErr(
           SystemErrCode.INTERNAL_SERVER_ERR,
           `[XERUS] ${where}.${name} contains legacy RouteField objects. ` +
             `Use ctor lists: ${name} = [MyCtor]`,
+        );
+      }
+      if (typeof item !== "function") {
+        throw new SystemErr(
+          SystemErrCode.INTERNAL_SERVER_ERR,
+          `[XERUS] ${where}.${name} must contain only constructors (classes/functions).`,
         );
       }
     }
@@ -113,6 +117,7 @@ export class Xerus {
           `Then access via: c.service(MyServiceCtor)`,
       );
     }
+
     const props = Object.getOwnPropertyNames(instance);
     for (const prop of props) {
       const val = instance[prop];
@@ -124,8 +129,35 @@ export class Xerus {
         );
       }
     }
+
     this.assertCtorList("services", instance?.services, where);
     this.assertCtorList("validators", instance?.validators, where);
+  }
+
+  private releaseContextSafely(ctx: HTTPContext) {
+    const scrubAndRelease = () => {
+      ctx.clearResponse();
+      ctx.resetScope();
+      ctx.err = undefined;
+
+      (ctx as any)._wsBlueprints = undefined;
+      ctx._wsMessage = null;
+      ctx._wsContext = null;
+      ctx._isWS = false;
+
+      this.contextPool.release(ctx);
+    };
+
+    const hold = ctx.__holdRelease;
+    if (hold && typeof (hold as any).then === "function") {
+      ctx.__holdRelease = undefined;
+      (hold as Promise<void>).finally(() => {
+        scrubAndRelease();
+      });
+      return;
+    }
+
+    scrubAndRelease();
   }
 
   mount(...routeCtors: (new () => XerusRoute)[] | any[]) {
@@ -134,13 +166,6 @@ export class Xerus {
       instance.onMount();
       this.assertNoLegacyFields(instance, Ctor?.name ?? "Route");
 
-      /**
-       * Snapshot only "config/data" instance fields.
-       * - Do NOT snapshot method/path (surprising + can cause odd overwrites)
-       * - Do NOT snapshot services/validators/_errHandler/inject
-       * - Do NOT snapshot any functions (lifecycle methods may be written as instance fields)
-       * - Do NOT invoke getters while snapshotting (avoid side effects)
-       */
       const SKIP_PROPS = new Set<string>([
         "_errHandler",
         "services",
@@ -148,7 +173,6 @@ export class Xerus {
         "inject",
         "method",
         "path",
-        // common lifecycle names if user defines them as instance fields (arrow funcs)
         "onMount",
         "validate",
         "preHandle",
@@ -159,18 +183,11 @@ export class Xerus {
 
       const props: Record<string, any> = {};
       const descriptors = Object.getOwnPropertyDescriptors(instance);
-
       for (const [k, desc] of Object.entries(descriptors)) {
         if (SKIP_PROPS.has(k)) continue;
-
-        // Skip accessors so we don't trigger getters at mount time.
         if (typeof desc.get === "function" || typeof desc.set === "function") continue;
-
         const v = desc.value;
-
-        // Skip functions (keeps "mounted props" purely data/config)
         if (typeof v === "function") continue;
-
         props[k] = v;
       }
 
@@ -242,6 +259,7 @@ export class Xerus {
   private register(method: string, path: string, blueprint: RouteBlueprint) {
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
+
     for (const part of parts) {
       if (part.startsWith(":")) {
         node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
@@ -270,6 +288,7 @@ export class Xerus {
           drain: undefined,
         };
       }
+
       const container = (node as any).wsHandler;
       switch (method) {
         case Method.WS_OPEN:
@@ -294,6 +313,7 @@ export class Xerus {
         `Route ${method} ${path} has already been registered`,
       );
     }
+
     (node.handlers as any)[method] = blueprint;
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
@@ -439,6 +459,7 @@ export class Xerus {
     try {
       Object.freeze(o);
     } catch {}
+
     return obj;
   }
 
@@ -475,7 +496,10 @@ export class Xerus {
     }
 
     const inst: any = new Type();
+
+    // still blocks legacy RouteField usage inside services
     this.assertNoLegacyFields(inst, Type?.name ?? "Service");
+
     (c as any)._setServiceCtor(Type, inst);
 
     const initPromise = (async () => {
@@ -498,11 +522,12 @@ export class Xerus {
 
     inst[INIT_PROMISE] = initPromise;
     await initPromise;
+
     return inst;
   }
 
-  private async activateServices(c: HTTPContext, roots: ServiceCtor[]): Promise<ServiceLifecycle[]> {
-    const ordered: ServiceLifecycle[] = [];
+  private async activateServices(c: HTTPContext, roots: ServiceCtor[]): Promise<any[]> {
+    const ordered: any[] = [];
     const seen = new Set<any>();
 
     const visit = async (Type: ServiceCtor) => {
@@ -520,6 +545,7 @@ export class Xerus {
     for (const Root of roots) {
       await visit(Root);
     }
+
     return ordered;
   }
 
@@ -556,11 +582,12 @@ export class Xerus {
     ] as ServiceCtor[];
 
     this.assertCtorList("services", serviceRoots, blueprint.Ctor?.name ?? "Route");
+
     const activeServices = await this.activateServices(context, serviceRoots);
 
     try {
       for (const svc of activeServices) {
-        if (svc.before) await svc.before(context);
+        if (typeof svc.before === "function") await svc.before(context);
         if (context.isDone) return;
       }
 
@@ -573,12 +600,12 @@ export class Xerus {
 
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
-        if (svc.after) await svc.after(context);
+        if (typeof svc.after === "function") await svc.after(context);
       }
     } catch (err) {
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
-        if (svc.onError) {
+        if (typeof svc.onError === "function") {
           await svc.onError(context, err);
           if (context.isDone) return;
         }
@@ -614,16 +641,16 @@ export class Xerus {
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
 
-        context.clearResponse();
-        this.contextPool.release(context);
+        this.releaseContextSafely(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
       } catch (e) {
-        if (context) this.contextPool.release(context);
+        this.releaseContextSafely(context);
         throw e;
       }
     }
 
     let context: HTTPContext | undefined;
+
     try {
       context = this.contextPool.acquire();
       context.reset(req, params);
@@ -638,8 +665,9 @@ export class Xerus {
 
       if (this.notFoundHandler) {
         const activeServices = await this.activateServices(context, this.globalServices);
+
         for (const svc of activeServices) {
-          if (svc.before) await svc.before(context);
+          if (typeof svc.before === "function") await svc.before(context);
           if (context.isDone) {
             const resp = context.res.send();
             context.markSent();
@@ -651,7 +679,7 @@ export class Xerus {
 
         for (let i = activeServices.length - 1; i >= 0; i--) {
           const svc = activeServices[i];
-          if (svc.after) await svc.after(context);
+          if (typeof svc.after === "function") await svc.after(context);
         }
 
         const resp = context.res.send();
@@ -720,23 +748,12 @@ export class Xerus {
       return resp;
     } finally {
       if (context) {
-        const hold = context.__holdRelease;
-        if (hold && typeof (hold as any).then === "function") {
-          const ctx = context;
-          ctx.__holdRelease = undefined;
-          hold.finally(() => {
-            ctx.clearResponse();
-            ctx.err = undefined;
-            this.contextPool.release(ctx);
-          });
-        } else {
-          this.contextPool.release(context);
-        }
+        this.releaseContextSafely(context);
       }
     }
   }
 
-  async listen(port: number = 8080): Promise<void> {
+  async listen(port: number = 8080): Promise<Server<HTTPContext>> {
     const app = this;
 
     const wsCloseOnError = (ws: ServerWebSocket<any>, err: any) => {
@@ -776,6 +793,7 @@ export class Xerus {
       if (!blueprint) return;
 
       httpCtx.resetForWSEvent(wsMethodFor(eventName));
+
       if (eventName === "message") {
         httpCtx._wsMessage = args[0] ?? null;
       } else {
@@ -790,6 +808,7 @@ export class Xerus {
       } else {
         wsCtx = new WSContext(ws, httpCtx);
       }
+
       httpCtx._wsContext = wsCtx;
 
       try {
@@ -825,8 +844,7 @@ export class Xerus {
           await runWS("close", ws, code, reason);
           const ctx = ws.data as HTTPContext;
           if (ctx) {
-            (ctx as any)._wsBlueprints = undefined;
-            app.contextPool.release(ctx);
+            app.releaseContextSafely(ctx);
           }
         },
         async drain(ws) {
@@ -836,6 +854,7 @@ export class Xerus {
     });
 
     console.log(`🚀 Server running on ${server.port}`);
+    return server;
   }
 }
-// --- END FILE: src/Xerus.ts ---
+// --- END FILE ---
