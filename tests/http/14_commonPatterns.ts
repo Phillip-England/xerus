@@ -4,7 +4,7 @@ import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
 import { Inject, type InjectableStore, type ServiceLifecycle } from "../../src/RouteFields";
 import { errorJSON, json, setHeader } from "../../src/std/Response";
-import { header } from "../../src/std/Request";
+import { header, clientIP } from "../../src/std/Request"; // Added clientIP import
 
 class CsrfService implements InjectableStore, ServiceLifecycle {
   storeKey = "CsrfService";
@@ -38,9 +38,10 @@ class RequestIdService implements InjectableStore, ServiceLifecycle {
 }
 
 const rateLimitMap = new Map<string, number>();
+
 class RateLimitService implements ServiceLifecycle {
   async before(c: HTTPContext) {
-    const ip = "127.0.0.1"; // Mock IP
+    const ip = clientIP(c); // Use actual IP (allows mocking via X-Forwarded-For)
     const count = (rateLimitMap.get(ip) || 0) + 1;
     rateLimitMap.set(ip, count);
     if (count > 2) {
@@ -56,6 +57,7 @@ class TimeoutService implements InjectableStore, ServiceLifecycle {
     this.start = Date.now();
   }
   async after(c: HTTPContext) {
+    // Handler waits 100ms. If we check > 50ms, it should trigger.
     if (Date.now() - this.start > 50) {
       if (!c.isDone) {
         errorJSON(c, 504, "TIMEOUT", "Gateway Timeout");
