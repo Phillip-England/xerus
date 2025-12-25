@@ -12,6 +12,7 @@ import type { TypeValidator } from "./TypeValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
 import { SystemErr } from "./SystemErr";
+import type { XerusPlugin } from "./XerusPlugin";
 
 const LEGACY_FIELD = Symbol.for("xerus:routefield");
 const INIT_PROMISE = Symbol.for("xerus:service_init_promise");
@@ -22,9 +23,12 @@ type ValidatorCtor<T extends TypeValidator<any> = any> = new () => T;
 export class Xerus {
   private root: TrieNode = new TrieNode();
   private routes: Record<string, RouteBlueprint> = {};
-  private globalServices: ServiceCtor[] = []; // per-request (and per-WS-event) services
-  private notFoundHandler?: HTTPHandlerFunc;
-  private errHandler?: HTTPErrorHandlerFunc;
+  private globalServices: ServiceCtor[] = []; 
+  
+  // Stores blueprints for system handlers
+  private notFoundBlueprint?: RouteBlueprint;
+  private errBlueprint?: RouteBlueprint;
+
   private resolvedRoutes = new Map<
     string,
     { blueprint?: RouteBlueprint; params: Record<string, string> }
@@ -33,6 +37,8 @@ export class Xerus {
   private contextPool: ObjectPool<HTTPContext>;
   private globals = new Map<any, any>();
   private freezeValidators: boolean = true;
+  private plugins: XerusPlugin[] = [];
+  private _server?: Server<HTTPContext>;
 
   constructor() {
     this.contextPool = new ObjectPool<HTTPContext>(() => new HTTPContext(), 200);
@@ -44,6 +50,15 @@ export class Xerus {
 
   setFreezeValidators(enabled: boolean) {
     this.freezeValidators = !!enabled;
+    return this;
+  }
+
+  plugin(PluginCtor: new () => XerusPlugin): this {
+    const p = new PluginCtor();
+    this.plugins.push(p);
+    if (p.onConnect) {
+      p.onConnect(this);
+    }
     return this;
   }
 
@@ -109,7 +124,6 @@ export class Xerus {
           `Then access via: c.service(MyServiceCtor)`,
       );
     }
-
     const props = Object.getOwnPropertyNames(instance);
     for (const prop of props) {
       const val = instance[prop];
@@ -121,7 +135,6 @@ export class Xerus {
         );
       }
     }
-
     this.assertCtorList("services", instance?.services, where);
     this.assertCtorList("validators", instance?.validators, where);
   }
@@ -137,7 +150,6 @@ export class Xerus {
       ctx._isWS = false;
       this.contextPool.release(ctx);
     };
-
     const hold = ctx.__holdRelease;
     if (hold && typeof (hold as any).then === "function") {
       ctx.__holdRelease = undefined;
@@ -146,59 +158,68 @@ export class Xerus {
       });
       return;
     }
-
     scrubAndRelease();
+  }
+
+  // FIX: Return the instance so 'mount' can use the path modified by plugins
+  private createBlueprint(Ctor: new () => XerusRoute): { blueprint: RouteBlueprint, instance: XerusRoute } {
+    const instance = new Ctor();
+    instance.onMount();
+    for(const p of this.plugins) {
+      if (p.onRegister) p.onRegister(this, instance);
+    }
+    this.assertNoLegacyFields(instance, Ctor?.name ?? "Route");
+    const SKIP_PROPS = new Set<string>([
+      "_errHandler",
+      "services",
+      "validators",
+      "inject",
+      "method",
+      "path",
+      "onMount",
+      "validate",
+      "preHandle",
+      "handle",
+      "postHandle",
+      "onFinally",
+    ]);
+    const props: Record<string, any> = {};
+    const descriptors = Object.getOwnPropertyDescriptors(instance);
+    for (const [k, desc] of Object.entries(descriptors)) {
+      if (SKIP_PROPS.has(k)) continue;
+      if (typeof desc.get === "function" || typeof desc.set === "function") continue;
+      const v = desc.value;
+      if (typeof v === "function") continue;
+      props[k] = v;
+    }
+    
+    const blueprint: RouteBlueprint = {
+      Ctor,
+      errHandler: instance._errHandler,
+      mounted: { props },
+      services: (instance.services ?? []) as any,
+      validators: (instance.validators ?? []) as any,
+    };
+
+    return { blueprint, instance };
   }
 
   mount(...routeCtors: (new () => XerusRoute)[] | any[]) {
     for (const Ctor of routeCtors) {
-      const instance = new Ctor();
-      instance.onMount();
-      this.assertNoLegacyFields(instance, Ctor?.name ?? "Route");
-
-      const SKIP_PROPS = new Set<string>([
-        "_errHandler",
-        "services",
-        "validators",
-        "inject",
-        "method",
-        "path",
-        "onMount",
-        "validate",
-        "preHandle",
-        "handle",
-        "postHandle",
-        "onFinally",
-      ]);
-
-      const props: Record<string, any> = {};
-      const descriptors = Object.getOwnPropertyDescriptors(instance);
-      for (const [k, desc] of Object.entries(descriptors)) {
-        if (SKIP_PROPS.has(k)) continue;
-        if (typeof desc.get === "function" || typeof desc.set === "function") continue;
-        const v = desc.value;
-        if (typeof v === "function") continue;
-        props[k] = v;
-      }
-
-      const blueprint: RouteBlueprint = {
-        Ctor,
-        errHandler: instance._errHandler,
-        mounted: { props },
-        services: (instance.services ?? []) as any,
-        validators: (instance.validators ?? []) as any,
-      };
-
+      // FIX: Use the instance returned by createBlueprint (plugins may have mutated it)
+      const { blueprint, instance } = this.createBlueprint(Ctor);
       this.register(instance.method, instance.path, blueprint);
     }
   }
 
-  onNotFound(h: HTTPHandlerFunc) {
-    this.notFoundHandler = h;
+  onNotFound(RouteCtor: new () => XerusRoute) {
+    const { blueprint } = this.createBlueprint(RouteCtor);
+    this.notFoundBlueprint = blueprint;
   }
 
-  onErr(h: HTTPErrorHandlerFunc) {
-    this.errHandler = h;
+  onErr(RouteCtor: new () => XerusRoute) {
+    const { blueprint } = this.createBlueprint(RouteCtor);
+    this.errBlueprint = blueprint;
   }
 
   embed(
@@ -215,11 +236,9 @@ export class Xerus {
         const lookupPath = c.path.substring(pathPrefix.length);
         const fileData =
           embeddedFiles[lookupPath] || embeddedFiles[lookupPath + "/index.html"];
-
         if (!fileData) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, `Asset ${lookupPath} not found`);
         }
-
         setHeader(c, "Content-Type", fileData.type);
         let bodyData = fileData.content;
         if (Array.isArray(bodyData)) bodyData = new Uint8Array(bodyData);
@@ -239,11 +258,9 @@ export class Xerus {
         const urlPath = c.path.substring(pathPrefix.length === 1 ? 0 : pathPrefix.length);
         const relativePath = urlPath.replace(/^\/+/, "");
         const finalPath = resolve(join(absRoot, relativePath));
-
         if (!finalPath.startsWith(absRoot)) {
           throw new SystemErr(SystemErrCode.FILE_NOT_FOUND, "Access Denied");
         }
-
         await file(c, finalPath);
       }
     }
@@ -253,7 +270,6 @@ export class Xerus {
   private register(method: string, path: string, blueprint: RouteBlueprint) {
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
-
     for (const part of parts) {
       if (part.startsWith(":")) {
         node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
@@ -265,14 +281,12 @@ export class Xerus {
         node = node.children[part] ?? (node.children[part] = new TrieNode());
       }
     }
-
     const isWS = [
       Method.WS_OPEN,
       Method.WS_MESSAGE,
       Method.WS_CLOSE,
       Method.WS_DRAIN,
     ].includes(method as Method);
-
     if (isWS) {
       if (!(node as any).wsHandler) {
         (node as any).wsHandler = {
@@ -299,14 +313,12 @@ export class Xerus {
       }
       return;
     }
-
     if ((node.handlers as any)[method]) {
       throw new SystemErr(
         SystemErrCode.ROUTE_ALREADY_REGISTERED,
         `Route ${method} ${path} has already been registered`,
       );
     }
-
     (node.handlers as any)[method] = blueprint;
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
@@ -321,28 +333,18 @@ export class Xerus {
     params: Record<string, string>,
   ): { blueprint?: RouteBlueprint; params: Record<string, string> } | null {
     if (index === parts.length) {
-      // 1. Exact match
       if ((node.handlers as any)[method]) {
         return { blueprint: (node.handlers as any)[method], params };
       }
-
-      // 2. WS match
       if ((node as any).wsHandler) {
         return { blueprint: (node as any).wsHandler, params };
       }
-
-      // 3. [FIX] Auto-OPTIONS Fallback
-      // If method is OPTIONS but no OPTIONS handler exists, return *any* existing handler for this path.
-      // This allows middleware (like CORSService) attached to a GET/POST route to intercept and handle the Preflight.
       if (method === Method.OPTIONS) {
         const availableMethods = Object.keys(node.handlers);
         if (availableMethods.length > 0) {
-          // Return the blueprint of the first available method so its services can run
           return { blueprint: node.handlers[availableMethods[0]], params };
         }
       }
-
-      // 4. Wildcard match (Greedy suffix)
       if (node.wildcard) {
         const wcNode = node.wildcard;
         if ((wcNode.handlers as any)[method]) {
@@ -351,7 +353,6 @@ export class Xerus {
         if ((wcNode as any).wsHandler) {
           return { blueprint: (wcNode as any).wsHandler, params };
         }
-        // Auto-OPTIONS for Wildcard
         if (method === Method.OPTIONS) {
           const availableMethods = Object.keys(wcNode.handlers);
           if (availableMethods.length > 0) {
@@ -359,20 +360,14 @@ export class Xerus {
           }
         }
       }
-
       return null;
     }
-
     const part = parts[index];
-
-    // Exact Child
     const exactNode = node.children[part];
     if (exactNode) {
       const result = this.search(exactNode, parts, index + 1, method, { ...params });
       if (result) return result;
     }
-
-    // Param Child
     const paramNode = node.children[":param"];
     if (paramNode) {
       const newParams = { ...params };
@@ -380,8 +375,6 @@ export class Xerus {
       const result = this.search(paramNode, parts, index + 1, method, newParams);
       if (result) return result;
     }
-
-    // Wildcard Child (Standard)
     if (node.wildcard) {
       const wcNode = node.wildcard;
       if ((wcNode.handlers as any)[method]) {
@@ -390,7 +383,6 @@ export class Xerus {
       if ((wcNode as any).wsHandler) {
         return { blueprint: (wcNode as any).wsHandler, params };
       }
-      // Auto-OPTIONS for Wildcard
       if (method === Method.OPTIONS) {
         const availableMethods = Object.keys(wcNode.handlers);
         if (availableMethods.length > 0) {
@@ -398,7 +390,6 @@ export class Xerus {
         }
       }
     }
-
     return null;
   }
 
@@ -408,30 +399,25 @@ export class Xerus {
   } {
     const normalizedPath = path.replace(/\/+$/, "") || "/";
     const cacheKey = `${method} ${normalizedPath}`;
-
     if (this.routes[cacheKey]) {
       return { blueprint: this.routes[cacheKey], params: {} };
     }
-
     const cached = this.resolvedRoutes.get(cacheKey);
     if (cached) {
       this.resolvedRoutes.delete(cacheKey);
       this.resolvedRoutes.set(cacheKey, cached);
       return cached;
     }
-
     const parts = normalizedPath.split("/").filter(Boolean);
     const result =
       this.search(this.root, parts, 0, method, {}) ?? {
         blueprint: undefined,
         params: {},
       };
-
     if (this.resolvedRoutes.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.resolvedRoutes.keys().next().value;
       if (oldestKey !== undefined) this.resolvedRoutes.delete(oldestKey);
     }
-
     this.resolvedRoutes.set(cacheKey, result);
     return result;
   }
@@ -445,21 +431,16 @@ export class Xerus {
   private deepFreeze<T>(obj: T, seen: WeakSet<object> = new WeakSet()): T {
     if (!this.freezeValidators) return obj;
     if (!obj || typeof obj !== "object") return obj;
-
     const o: any = obj as any;
     if (seen.has(o)) return obj;
     seen.add(o);
-
     const isArray = Array.isArray(o);
     const isPlain = this.isPlainObject(o);
-
     if (!isArray && !isPlain) return obj;
-
     const keys = Object.getOwnPropertyNames(o);
     for (const k of keys) {
       const v = o[k];
       if (!v || typeof v !== "object") continue;
-
       const ctorName = v?.constructor?.name;
       if (
         v instanceof Request ||
@@ -479,11 +460,9 @@ export class Xerus {
       }
       this.deepFreeze(v, seen);
     }
-
     try {
       Object.freeze(o);
     } catch {}
-
     return obj;
   }
 
@@ -491,10 +470,8 @@ export class Xerus {
     if ((c as any)._hasValidatedCtor(Type)) {
       return (c as any)._getValidatedCtor(Type);
     }
-
     const inst: any = new Type();
     const value = await inst.validate(c);
-
     if (value === undefined) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
@@ -503,7 +480,6 @@ export class Xerus {
           `If you need access to raw input later, include it in your return value.`,
       );
     }
-
     const stored = this.freezeValidators ? this.deepFreeze(value) : value;
     (c as any)._setValidatedCtor(Type, stored);
     return stored;
@@ -518,29 +494,24 @@ export class Xerus {
       }
       return existing;
     }
-
     const inst: any = new Type();
     this.assertNoLegacyFields(inst, Type?.name ?? "Service");
     (c as any)._setServiceCtor(Type, inst);
-
     const initPromise = (async () => {
       const deps: ServiceCtor[] = Array.isArray(inst.services) ? inst.services : [];
       this.assertCtorList("services", deps, Type?.name ?? "Service");
       for (const Dep of deps) {
         await this.resolveService(c, Dep);
       }
-
       const vdeps: ValidatorCtor[] = Array.isArray(inst.validators) ? inst.validators : [];
       this.assertCtorList("validators", vdeps, Type?.name ?? "Service");
       for (const V of vdeps) {
         await this.resolveValidatorValue(c, V);
       }
-
       if (typeof inst.init === "function") {
         await inst.init(c);
       }
     })();
-
     inst[INIT_PROMISE] = initPromise;
     await initPromise;
     return inst;
@@ -549,11 +520,9 @@ export class Xerus {
   private async activateServices(c: HTTPContext, roots: ServiceCtor[]): Promise<any[]> {
     const ordered: any[] = [];
     const seen = new Set<any>();
-
     const visit = async (Type: ServiceCtor) => {
       if (seen.has(Type)) return;
       seen.add(Type);
-
       const inst: any = await this.resolveService(c, Type);
       const deps: ServiceCtor[] = Array.isArray(inst?.services) ? inst.services : [];
       for (const Dep of deps) {
@@ -561,11 +530,9 @@ export class Xerus {
       }
       ordered.push(inst);
     };
-
     for (const Root of roots) {
       await visit(Root);
     }
-
     return ordered;
   }
 
@@ -580,46 +547,34 @@ export class Xerus {
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext) {
     const routeInstance = new blueprint.Ctor();
     const mounted = (blueprint as any).mounted;
-
     if (mounted?.props && typeof mounted.props === "object") {
       for (const [k, v] of Object.entries(mounted.props)) {
         (routeInstance as any)[k] = v;
       }
     }
-
     this.assertNoLegacyFields(routeInstance, blueprint.Ctor?.name ?? "Route");
-
     const routeValidators = (blueprint.validators ??
       (routeInstance as any).validators ??
       []) as ValidatorCtor[];
-
     await this.runValidators(context, routeValidators, blueprint.Ctor?.name ?? "Route");
     if (context.isDone) return;
-
     await routeInstance.validate(context);
     if (context.isDone) return;
-
     const serviceRoots: ServiceCtor[] = [
       ...(this.globalServices ?? []),
       ...(((blueprint.services ?? (routeInstance as any).services ?? []) as any[]) ?? []),
     ] as ServiceCtor[];
-
     this.assertCtorList("services", serviceRoots, blueprint.Ctor?.name ?? "Route");
-
     const activeServices = await this.activateServices(context, serviceRoots);
-
     try {
       for (const svc of activeServices) {
         if (typeof svc.before === "function") await svc.before(context);
         if (context.isDone) return;
       }
-
       await routeInstance.preHandle(context);
       if (context.isDone) return;
-
       await routeInstance.handle(context);
       await routeInstance.postHandle(context);
-
       for (let i = activeServices.length - 1; i >= 0; i--) {
         const svc = activeServices[i];
         if (typeof svc.after === "function") await svc.after(context);
@@ -642,11 +597,10 @@ export class Xerus {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
-
     const found = this.find(method, path);
     const blueprint = found.blueprint;
     const params = found.params;
-
+    
     if (
       method === "GET" &&
       blueprint &&
@@ -659,10 +613,8 @@ export class Xerus {
         (context as any)._globals = this.globals;
         context._isWS = true;
         (context as any)._wsBlueprints = blueprint;
-
         const ok = server.upgrade(req, { data: context });
         if (ok) return;
-
         this.releaseContextSafely(context);
         throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, "Upgrade failed");
       } catch (e) {
@@ -676,7 +628,7 @@ export class Xerus {
       context = this.contextPool.acquire();
       context.reset(req, params);
       (context as any)._globals = this.globals;
-
+      
       if (blueprint) {
         await this.executeRoute(blueprint, context);
         const resp = context.res.send();
@@ -684,21 +636,8 @@ export class Xerus {
         return resp;
       }
 
-      if (this.notFoundHandler) {
-        const activeServices = await this.activateServices(context, this.globalServices);
-        for (const svc of activeServices) {
-          if (typeof svc.before === "function") await svc.before(context);
-          if (context.isDone) {
-            const resp = context.res.send();
-            context.markSent();
-            return resp;
-          }
-        }
-        await this.notFoundHandler(context);
-        for (let i = activeServices.length - 1; i >= 0; i--) {
-          const svc = activeServices[i];
-          if (typeof svc.after === "function") await svc.after(context);
-        }
+      if (this.notFoundBlueprint) {
+        await this.executeRoute(this.notFoundBlueprint, context);
         const resp = context.res.send();
         context.markSent();
         return resp;
@@ -710,7 +649,7 @@ export class Xerus {
       if (!context) c.reset(req, {});
       (c as any)._globals = this.globals;
       c.clearResponse();
-      c.err = e;
+      c.err = e; 
 
       const isSystemValidation =
         e instanceof SystemErr && e.typeOf === SystemErrCode.VALIDATION_FAILED;
@@ -748,11 +687,15 @@ export class Xerus {
         }
       }
 
-      if (this.errHandler) {
-        await this.errHandler(c, e);
-        const resp = c.res.send();
-        c.markSent();
-        return resp;
+      if (this.errBlueprint) {
+        try {
+          await this.executeRoute(this.errBlueprint, c);
+          const resp = c.res.send();
+          c.markSent();
+          return resp;
+        } catch(fallbackErr) {
+           console.error("Error inside custom Error Handler:", fallbackErr);
+        }
       }
 
       console.warn(`[XERUS WARNING] Uncaught error on ${method} ${path}`);
@@ -770,9 +713,20 @@ export class Xerus {
     }
   }
 
-  async listen(port: number = 8080): Promise<Server<HTTPContext>> {
-    const app = this;
+  async shutdown() {
+    if (this._server) {
+      this._server.stop();
+    }
+    for (const p of this.plugins) {
+      if (p.onShutdown) await p.onShutdown(this);
+    }
+  }
 
+  async listen(port: number = 8080): Promise<Server<HTTPContext>> {
+    for (const p of this.plugins) {
+      if (p.onPreListen) await p.onPreListen(this);
+    }
+    const app = this;
     const wsCloseOnError = (ws: ServerWebSocket<any>, err: any) => {
       const reason =
         err &&
@@ -785,7 +739,6 @@ export class Xerus {
         ws.close(1008, reason);
       } catch {}
     };
-
     const wsMethodFor = (eventName: "open" | "message" | "close" | "drain"): string => {
       switch (eventName) {
         case "open":
@@ -798,7 +751,6 @@ export class Xerus {
           return Method.WS_DRAIN;
       }
     };
-
     const runWS = async (
       eventName: "open" | "message" | "close" | "drain",
       ws: ServerWebSocket<any>,
@@ -807,17 +759,13 @@ export class Xerus {
       const httpCtx = ws.data as HTTPContext;
       const container = (httpCtx as any)._wsBlueprints;
       const blueprint = container?.[eventName];
-
       if (!blueprint) return;
-
       httpCtx.resetForWSEvent(wsMethodFor(eventName));
-
       if (eventName === "message") {
         httpCtx._wsMessage = args[0] ?? null;
       } else {
         httpCtx._wsMessage = null;
       }
-
       let wsCtx: WSContext;
       if (eventName === "message") {
         wsCtx = new WSContext(ws, httpCtx, { message: args[0] });
@@ -827,7 +775,6 @@ export class Xerus {
         wsCtx = new WSContext(ws, httpCtx);
       }
       httpCtx._wsContext = wsCtx;
-
       try {
         await app.executeRoute(blueprint, httpCtx);
       } catch (e: any) {
@@ -846,7 +793,6 @@ export class Xerus {
         httpCtx._wsContext = null;
       }
     };
-
     const server: Server<HTTPContext> = Bun.serve({
       port,
       fetch: (req, server) => app.handleHTTP(req, server),
@@ -869,7 +815,14 @@ export class Xerus {
         },
       },
     });
-
+    this._server = server;
+    const shutdownHandler = async () => {
+      console.log(`\n[Xerus] Shutting down...`);
+      await this.shutdown();
+      process.exit(0);
+    };
+    process.on("SIGINT", shutdownHandler);
+    process.on("SIGTERM", shutdownHandler);
     console.log(`🚀 Server running on ${server.port}`);
     return server;
   }

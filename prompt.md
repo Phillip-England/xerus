@@ -1,49 +1,49 @@
-Okay I would like to implement some sort of plugin system for this framework.
-Here is how it will work:
+Okay this request is just really to help syncronize the idea that "Classes are first class citizens" in this framework.
+
+Right now, to set up Xerus.onErr and Xerus.onNotFound, I simply provide a function:
+```ts
+  onNotFound(h: HTTPHandlerFunc) {
+    this.notFoundHandler = h;
+  }
+
+  onErr(h: HTTPErrorHandlerFunc) {
+    this.errHandler = h;
+  }
+```
+
+I would instead like to pass Xerus Routes like so:
 
 ```ts
 
-class SomePlugin implements XerusPlugin {
-
-  // onConnect lifecycle action
-  // gives us access to Xerus PRIOR to any Route registration
-  async onConnect(app: Xerus) {
-
-  }
-
-  // onRegister lifecycle action 
-  // gives us access to the Routes as they are full prepared to be registered
-  async onRegister(app: Xerus, route: XerusRoute) {
+class OnNotFoundRoute extends XerusRoute {
+  path: // some path? idk what to put here i dont need a path
+  method: // same thing, not methods needed
+  async handle(c: HTTPContext) {
 
   }
-
-  // onPreListen lifecycle action
-  // gives us access to Xerus in a state where all XerusRoute's are registered
-  // BUT prior to actually listening on port
-  async onPreListen(app: Xerus) {
-
-  }
-
-  // onShutdown lifecycle action
-  // give us access to Xerus right before we shutdown
-  async onShutdown(app: Xerus) {
-
-  }
-
 }
 
-let app = new Xerus()
-
-app.plugin(SomePlugin) // the order matters as it dictates the order plugin functions will run during lifecycle
+Xerus.onNotFound(OnNotFoundRoute)
 
 ```
 
-in this way, plugins allow us to intercept route registration as well as other aspects of the Xerus connection and initatlization lifecycle.
+I should also be able to do the same thing with Xerus.onErr as well.
 
-Okay, with this being said, we will also need a way to manage graceful shutdowns.
+But here is the most important part: I want to do this in such a way that is does not add additional complexity to the way Routes and Xerus Route is managed. That is to say that I do not want the changes we make to accomplish this to impact how standard routes are made.
 
-That is not built into my frameowrk yet and we need it to implement onShutdown
+I would like the OnNotFoundRoute to accept Services and Validators too, so they function exactly like regular XerusRoutes, the only difference is they do not have a path or a method... or do they?
 
-can you please make these changes to introduce plugins?
+This is especially challenging because OnNotFoundRoutes do not have access to an error while error route function signatures do like so:
 
-Thank you so much!
+```ts
+  onErr(h: HTTPErrorHandlerFunc) {
+    this.errHandler = h;
+  }
+```
+
+see, it uses HTTPErrorHandlerFunc which is different that what standard XerusRoutes use.
+
+All this to be said, can you help make these changes in a way that doesnt require major changes in how i actually use the framework?
+
+I want it to feel seemless.
+

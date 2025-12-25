@@ -1,5 +1,4 @@
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
-
 import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
@@ -24,15 +23,11 @@ describe("Global error handling", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    // --- services
-
     class ServiceErrorTrigger implements ServiceLifecycle {
       async before(_c: HTTPContext) {
         throw new Error("Failure in Service");
       }
     }
-
-    // --- routes
 
     class StandardErr extends XerusRoute {
       method = Method.GET;
@@ -46,7 +41,6 @@ describe("Global error handling", () => {
       method = Method.GET;
       path = "/err/middleware";
       services = [ServiceErrorTrigger];
-
       async handle(c: HTTPContext) {
         text(c, "This won't be reached");
       }
@@ -60,27 +54,29 @@ describe("Global error handling", () => {
       }
     }
 
-    // --- global error handler
+    // CHANGED: Use Class-based error handler
+    class GlobalErrorHandler extends XerusRoute {
+      method = Method.GET;
+      path = "";
+      async handle(c: HTTPContext) {
+        const err = c.err;
+        const detail = err instanceof Error ? err.message : String(err ?? "Unknown Error");
+        const msg = detail === "Failure in Service"
+            ? "Failure in Middleware"
+            : "Custom Global Handler";
 
-    app.onErr(async (c: HTTPContext, err: any) => {
-      const detail =
-        err instanceof Error ? err.message : String(err ?? "Unknown Error");
+        setStatus(c, 500);
+        json(c, {
+          error: {
+            code: "GLOBAL_ERROR",
+            message: msg,
+            detail,
+          },
+        });
+      }
+    }
 
-      const msg =
-        detail === "Failure in Service"
-          ? "Failure in Middleware"
-          : "Custom Global Handler";
-
-      setStatus(c, 500);
-      json(c, {
-        error: {
-          code: "GLOBAL_ERROR",
-          message: msg,
-          detail,
-        },
-      });
-    });
-
+    app.onErr(GlobalErrorHandler);
     app.mount(StandardErr, SvcErr, MissingFile);
 
     server = await app.listen(0);
@@ -94,7 +90,6 @@ describe("Global error handling", () => {
   test("GET /err/standard should be caught by app.onErr", async () => {
     const res = await fetch(makeURL(port, "/err/standard"));
     const data = await res.json();
-
     expect(res.status).toBe(500);
     expect(data.error.message).toBe("Custom Global Handler");
     expect(data.error.detail).toBe("Standard Route Failure");
@@ -103,7 +98,6 @@ describe("Global error handling", () => {
   test("GET /err/middleware should be caught by app.onErr", async () => {
     const res = await fetch(makeURL(port, "/err/middleware"));
     const data = await res.json();
-
     expect(res.status).toBe(500);
     expect(data.error.detail).toBe("Failure in Service");
   });
@@ -111,9 +105,7 @@ describe("Global error handling", () => {
   test("Non-existent route should trigger 404 SystemErr", async () => {
     const res = await fetch(makeURL(port, "/err/does-not-exist"));
     const body = await readMaybeError(res);
-
     expect(res.status).toBe(404);
-
     if (typeof body === "string") {
       expect(body).toContain("is not registered");
     } else {
@@ -126,4 +118,3 @@ describe("Global error handling", () => {
     expect(res.status).toBe(404);
   });
 });
-
