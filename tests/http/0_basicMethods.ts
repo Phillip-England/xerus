@@ -2,7 +2,6 @@ import { Xerus } from "../../src/Xerus";
 import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
-import { SystemErr } from "../../src/SystemErr";
 import { SystemErrCode } from "../../src/SystemErrCode";
 import { BodyType } from "../../src/BodyType";
 import type { TypeValidator } from "../../src/TypeValidator";
@@ -15,6 +14,7 @@ import {
   text,
 } from "../../src/std/Response";
 import { header, query } from "../../src/std/Request";
+import { SystemErr } from "../../src/SystemErr";
 
 class JsonObjectBody implements TypeValidator {
   async validate(c: HTTPContext) {

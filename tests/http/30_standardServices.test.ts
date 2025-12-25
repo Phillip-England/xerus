@@ -4,9 +4,9 @@ import { XerusRoute } from "../../src/XerusRoute";
 import { Method } from "../../src/Method";
 import type { HTTPContext } from "../../src/HTTPContext";
 import { json, text } from "../../src/std/Response";
-import { CORSService } from "../../src/std/CORSService";
-import { CSRFService } from "../../src/std/CSRFService";
-import { RateLimitService } from "../../src/std/RateLimitService";
+import { CORSService } from "../../src/CORSService";
+import { CSRFService } from "../../src/CSRFService";
+import { RateLimitService } from "../../src/RateLimitService";
 
 function makeURL(port: number, path: string) {
   return `http://127.0.0.1:${port}${path}`;

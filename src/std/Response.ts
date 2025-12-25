@@ -1,10 +1,10 @@
 // --- START FILE: src/std/Response.ts ---
 import { HTTPContext } from "../HTTPContext";
-import { SystemErr } from "../SystemErr";
 import { SystemErrCode } from "../SystemErrCode";
 import { ContextState } from "../ContextState";
 import { href } from "../Href";
 import type { CookieOptions } from "../CookieOptions";
+import { SystemErr } from "../SystemErr";
 
 export function setStatus(c: HTTPContext, code: number): void {
   c.ensureConfigurable();

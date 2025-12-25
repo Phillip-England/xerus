@@ -1,8 +1,8 @@
 // PATH: /home/jacex/src/xerus/src/std/Body.ts
 import { HTTPContext } from "../HTTPContext";
 import { BodyType } from "../BodyType";
-import { SystemErr } from "../SystemErr";
 import { SystemErrCode } from "../SystemErrCode";
+import { SystemErr } from "../SystemErr";
 
 export type ParsedFormBodyLast = Record<string, string>;
 export type ParsedFormBodyMulti = Record<string, string | string[]>;

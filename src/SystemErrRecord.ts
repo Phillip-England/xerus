@@ -1,8 +1,8 @@
-import { SystemErrCode } from "./SystemErrCode";
 import { HTTPContext } from "./HTTPContext";
-import { SystemErr } from "./SystemErr";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { errorJSON } from "./std/Response";
+import { SystemErrCode } from "./SystemErrCode";
+import { SystemErr } from "./SystemErr";
 
 export const SystemErrRecord: Record<SystemErrCode, HTTPErrorHandlerFunc> = {
   [SystemErrCode.FILE_NOT_FOUND]: async (c: HTTPContext, err: any) => {

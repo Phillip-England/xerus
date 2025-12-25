@@ -1,7 +1,7 @@
-import type { HTTPContext } from "../HTTPContext";
-import type { ServiceLifecycle } from "../RouteFields";
-import { errorJSON, setHeader } from "./Response";
-import { clientIP } from "./Request";
+import type { HTTPContext } from "./HTTPContext";
+import type { ServiceLifecycle } from "./RouteFields";
+import { errorJSON, setHeader } from "./std/Response";
+import { clientIP } from "./std/Request";
 
 export interface RateLimitConfig {
   /**

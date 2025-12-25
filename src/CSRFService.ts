@@ -1,7 +1,7 @@
-import type { HTTPContext } from "../HTTPContext";
-import type { ServiceLifecycle } from "../RouteFields";
-import { errorJSON } from "./Response";
-import { Method } from "../Method";
+import type { HTTPContext } from "./HTTPContext";
+import { Method } from "./Method";
+import type { ServiceLifecycle } from "./RouteFields";
+import { errorJSON } from "./std/Response";
 
 export interface CSRFConfig {
   /**

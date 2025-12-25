@@ -1,8 +1,8 @@
-import type { HTTPContext } from "../HTTPContext";
-import type { ServiceLifecycle } from "../RouteFields";
-import { setHeader, setStatus } from "./Response";
-import { header } from "./Request";
-import { Method } from "../Method";
+import type { HTTPContext } from "./HTTPContext";
+import { Method } from "./Method";
+import type { ServiceLifecycle } from "./RouteFields";
+import { header } from "./std/Request";
+import { setHeader, setStatus } from "./std/Response";
 
 export type OriginType =
   | string

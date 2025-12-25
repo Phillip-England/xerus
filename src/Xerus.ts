@@ -2,7 +2,6 @@ import type { Server, ServerWebSocket } from "bun";
 import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc, HTTPHandlerFunc } from "./HTTPHandlerFunc";
-import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { join, resolve } from "path";
@@ -12,6 +11,7 @@ import { Method } from "./Method";
 import type { TypeValidator } from "./TypeValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
+import { SystemErr } from "./SystemErr";
 
 const LEGACY_FIELD = Symbol.for("xerus:routefield");
 const INIT_PROMISE = Symbol.for("xerus:service_init_promise");

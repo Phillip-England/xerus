@@ -1,5 +1,5 @@
-import { HeadersBag } from "./Headers";
 import { CookieJar } from "./Cookies";
+import { HeadersBag } from "./Headers";
 
 export class MutResponse {
   statusCode: number;

@@ -1,4 +1,4 @@
-import { SystemErrCode } from "./SystemErrCode";
+import type { SystemErrCode } from "./SystemErrCode";
 
 export class SystemErr extends Error {
   typeOf: SystemErrCode;
