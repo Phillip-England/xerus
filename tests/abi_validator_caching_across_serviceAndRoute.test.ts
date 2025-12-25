@@ -3,7 +3,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { json } from "../src/std/Response";
 
 function makeURL(port: number, path: string) {
@@ -22,7 +22,7 @@ describe("validator caching: service + route share one evaluation per request", 
 
     let validateCalls = 0;
 
-    class CountedValidator implements TypeValidator {
+    class CountedValidator implements XerusValidator {
       async validate(_c: HTTPContext) {
         validateCalls++;
         return { ok: true, n: validateCalls };

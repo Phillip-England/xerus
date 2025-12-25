@@ -5,11 +5,11 @@ import { HTTPContext } from "../src/HTTPContext";
 import { BodyType } from "../src/BodyType";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { json } from "../src/std/Response";
 import { parseBody as stdParseBody } from "../src/std/Body";
 
-class JsonBody implements TypeValidator {
+class JsonBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const data: any = await stdParseBody(c, BodyType.JSON);
     if (!data || typeof data !== "object" || Array.isArray(data)) {
@@ -22,7 +22,7 @@ class JsonBody implements TypeValidator {
   }
 }
 
-class TextBody implements TypeValidator {
+class TextBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const content = await stdParseBody(c, BodyType.TEXT);
     if (typeof content !== "string") {
@@ -32,7 +32,7 @@ class TextBody implements TypeValidator {
   }
 }
 
-class FormBody implements TypeValidator {
+class FormBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const data: any = await stdParseBody(c, BodyType.FORM);
     if (!data || typeof data !== "object") {
@@ -42,7 +42,7 @@ class FormBody implements TypeValidator {
   }
 }
 
-class MultipartBody implements TypeValidator {
+class MultipartBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const fd = await stdParseBody(c, BodyType.MULTIPART_FORM);
     return fd;

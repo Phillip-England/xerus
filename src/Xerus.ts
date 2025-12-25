@@ -8,7 +8,7 @@ import { join, resolve } from "path";
 import { ObjectPool } from "./ObjectPool";
 import { XerusRoute, type AnyServiceCtor, type AnyValidatorCtor } from "./XerusRoute";
 import { Method } from "./Method";
-import type { TypeValidator } from "./XerusValidator";
+import type { XerusValidator } from "./XerusValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
 import { SystemErr } from "./SystemErr";
@@ -18,7 +18,7 @@ const LEGACY_FIELD = Symbol.for("xerus:routefield");
 const INIT_PROMISE = Symbol.for("xerus:service_init_promise");
 
 type ServiceCtor = AnyServiceCtor;
-type ValidatorCtor<T extends TypeValidator<any> = any> = new () => T;
+type ValidatorCtor<T extends XerusValidator<any> = any> = new () => T;
 
 export class Xerus {
   private root: TrieNode = new TrieNode();

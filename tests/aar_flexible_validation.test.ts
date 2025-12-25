@@ -7,7 +7,7 @@ import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { header, param, query } from "../src/std/Request";
 import { json } from "../src/std/Response";
 
@@ -17,7 +17,7 @@ function makeURL(port: number, path: string) {
 
 // --- Validators
 
-class HeaderValidator implements TypeValidator {
+class HeaderValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const val = header(c, "X-Secret") ?? "";
     if (val !== "xerus-power") {
@@ -27,7 +27,7 @@ class HeaderValidator implements TypeValidator {
   }
 }
 
-class IdParamValidator implements TypeValidator {
+class IdParamValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const id = Number(param(c, "id"));
     z.number().int().parse(id);
@@ -35,7 +35,7 @@ class IdParamValidator implements TypeValidator {
   }
 }
 
-class PageQueryValidator implements TypeValidator {
+class PageQueryValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const page = Number(query(c, "page"));
     z.number().min(1).parse(page);

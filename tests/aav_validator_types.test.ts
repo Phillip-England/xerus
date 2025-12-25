@@ -5,7 +5,7 @@ import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
 import { BodyType } from "../src/BodyType";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
 import { header, param, query } from "../src/std/Request";
@@ -20,7 +20,7 @@ function makeURL(port: number, path: string) {
    Validators
 ====================== */
 
-class SearchQuery implements TypeValidator {
+class SearchQuery implements XerusValidator {
   async validate(c: HTTPContext) {
     const term = query(c, "q") || "";
     const limit = Number(query(c, "limit") || "10");
@@ -42,7 +42,7 @@ class SearchQuery implements TypeValidator {
   }
 }
 
-class ProductIdParam implements TypeValidator {
+class ProductIdParam implements XerusValidator {
   async validate(c: HTTPContext) {
     const id = Number(param(c, "id"));
     if (!Number.isInteger(id) || id <= 0) {
@@ -55,7 +55,7 @@ class ProductIdParam implements TypeValidator {
   }
 }
 
-class CreateUserBody implements TypeValidator {
+class CreateUserBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const raw: any = await parseBody(c, BodyType.JSON);
     const username = raw?.username;
@@ -72,7 +72,7 @@ class CreateUserBody implements TypeValidator {
   }
 }
 
-class LoginForm implements TypeValidator {
+class LoginForm implements XerusValidator {
   async validate(c: HTTPContext) {
     const raw: any = await parseBody(c, BodyType.FORM);
     const user = raw?.username;
@@ -85,7 +85,7 @@ class LoginForm implements TypeValidator {
   }
 }
 
-class ApiKeyValidator implements TypeValidator {
+class ApiKeyValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const key = header(c, "X-Api-Key") ?? "";
     if (key !== "secret-123") {

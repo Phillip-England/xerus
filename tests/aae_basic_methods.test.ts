@@ -4,7 +4,7 @@ import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
 import { SystemErrCode } from "../src/SystemErrCode";
 import { BodyType } from "../src/BodyType";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { parseBody } from "../src/std/Body";
 import {
   json,
@@ -16,7 +16,7 @@ import {
 import { header, query } from "../src/std/Request";
 import { SystemErr } from "../src/SystemErr";
 
-class JsonObjectBody implements TypeValidator {
+class JsonObjectBody implements XerusValidator {
   async validate(c: HTTPContext) {
     const body = await parseBody(c, BodyType.JSON);
     if (!body || typeof body !== "object" || Array.isArray(body)) {

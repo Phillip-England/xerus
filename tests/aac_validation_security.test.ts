@@ -4,7 +4,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { CORSService } from "../src/CORSService";
 import { RateLimitService } from "../src/RateLimitService";
 import { json, setHeader } from "../src/std/Response";
@@ -26,7 +26,7 @@ describe("Validation & Security", () => {
         password: z.string().min(6)
     });
 
-    class LoginValidator implements TypeValidator {
+    class LoginValidator implements XerusValidator {
         async validate(c: HTTPContext) {
             const raw = await parseBody(c, BodyType.JSON);
             try {

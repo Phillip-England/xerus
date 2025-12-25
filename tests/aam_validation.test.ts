@@ -6,7 +6,7 @@ import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { BodyType } from "../src/BodyType";
 import { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 
 import { parseBody } from "../src/std/Body";
 import { query } from "../src/std/Request";
@@ -42,7 +42,7 @@ const loginSchema = z.object({
 
 // --- Validators
 
-class SignupValidator implements TypeValidator {
+class SignupValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const raw = await parseBody(c, BodyType.JSON);
     const data = await signupSchema.parseAsync(raw);
@@ -50,7 +50,7 @@ class SignupValidator implements TypeValidator {
   }
 }
 
-class SearchValidator implements TypeValidator {
+class SearchValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const prepared = {
       q: query(c, "q") || "",
@@ -61,7 +61,7 @@ class SearchValidator implements TypeValidator {
   }
 }
 
-class LoginValidator implements TypeValidator {
+class LoginValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const raw = await parseBody(c, BodyType.FORM);
     const data = await loginSchema.parseAsync(raw);

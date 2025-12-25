@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import type { HTTPContext } from "../src/HTTPContext";
 import type { InjectableStore } from "../src/RouteFields";
 import { Method } from "../src/Method";
@@ -17,7 +17,7 @@ function makeURL(port: number, path: string) {
    Validator + Service + Route
 ====================== */
 
-class SomeQueryParam implements TypeValidator {
+class SomeQueryParam implements XerusValidator {
   async validate(c: HTTPContext) {
     const q = query(c, "q", "");
     return { query: q };

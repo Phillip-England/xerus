@@ -5,7 +5,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
 import { header, ws } from "../src/std/Request";
@@ -69,7 +69,7 @@ const closeSchema = z.object({
   reason: z.string(),
 });
 
-class HeaderClientValidator implements TypeValidator<string> {
+class HeaderClientValidator implements XerusValidator<string> {
   async validate(c: HTTPContext): Promise<string> {
     const client = header(c, "X-Client") ?? "";
 
@@ -88,7 +88,7 @@ class HeaderClientValidator implements TypeValidator<string> {
 }
 
 class CloseEventValidator
-  implements TypeValidator<{ code: number; reason: string }>
+  implements XerusValidator<{ code: number; reason: string }>
 {
   async validate(c: HTTPContext): Promise<{ code: number; reason: string }> {
     const socket = ws(c);

@@ -3,7 +3,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { ws as wsCtx } from "../src/std/Request";
 
 function wsURL(port: number, path: string) {
@@ -20,7 +20,7 @@ describe("websocket: resetForWSEvent resets scope (validators/services do not le
     let validatorRuns = 0;
     let serviceInits = 0;
 
-    class MsgValidator implements TypeValidator<{ msg: string }> {
+    class MsgValidator implements XerusValidator<{ msg: string }> {
       async validate(c: HTTPContext) {
         validatorRuns++;
         return { msg: String(c._wsMessage ?? "") };

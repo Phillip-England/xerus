@@ -6,7 +6,7 @@ import type { ServiceLifecycle } from "../src/RouteFields";
 import { json, setHeader, text } from "../src/std/Response";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { parseBody } from "../src/std/Body";
@@ -32,7 +32,7 @@ describe("Route grouping: prefix + middleware/service", () => {
       }
     }
 
-    class AnyJsonBody implements TypeValidator {
+    class AnyJsonBody implements XerusValidator {
       async validate(c: HTTPContext) {
         const data = parseBody(c, BodyType.JSON);
         if (!data || typeof data !== "object" || Array.isArray(data)) {

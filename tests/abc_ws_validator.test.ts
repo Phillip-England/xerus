@@ -4,7 +4,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { TestStore } from "./TestStore";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
 import type { HTTPContext } from "../src/HTTPContext";
@@ -18,7 +18,7 @@ function makeWSURL(port: number, path: string) {
    Validator + Route
 ====================== */
 
-export class ChatMessageValidator implements TypeValidator<string> {
+export class ChatMessageValidator implements XerusValidator<string> {
   async validate(c: HTTPContext): Promise<string> {
     const content = String(ws(c).message);
 

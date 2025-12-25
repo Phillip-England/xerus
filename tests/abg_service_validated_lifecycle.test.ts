@@ -4,7 +4,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import type { ServiceLifecycle } from "../src/RouteFields";
 import { json } from "../src/std/Response";
 
@@ -47,7 +47,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
     const tid = crypto.randomUUID();
     const q = "hello";
 
-    class RouteVal implements TypeValidator<{ tid: string; q: string }> {
+    class RouteVal implements XerusValidator<{ tid: string; q: string }> {
       validate(c: HTTPContext) {
         const u = new URL(c.req.url);
         const out = {
@@ -59,7 +59,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class ServiceVal implements TypeValidator<{ from: string }> {
+    class ServiceVal implements XerusValidator<{ from: string }> {
       validate(c: HTTPContext) {
         pushTrace(c, "validator:ServiceVal");
         return { from: "ServiceVal" };
@@ -224,14 +224,14 @@ describe("Services + Validators + Lifecycle ordering", () => {
   test("shared validator + shared service are executed/initialized only once even when multiple services depend on them", async () => {
     const tid = crypto.randomUUID();
 
-    class RouteVal implements TypeValidator<{ tid: string }> {
+    class RouteVal implements XerusValidator<{ tid: string }> {
       validate(c: HTTPContext) {
         pushTrace(c, "validator:RouteVal");
         return { tid: tidFromReqUrl(c.req.url) };
       }
     }
 
-    class SharedVal implements TypeValidator<{ v: string }> {
+    class SharedVal implements XerusValidator<{ v: string }> {
       validate(c: HTTPContext) {
         pushTrace(c, "validator:SharedVal");
         return { v: "shared" };
@@ -334,7 +334,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
   test("onError runs (reverse order), after does NOT run on failure; onFinally always runs; validated data still available in onError", async () => {
     const tid = crypto.randomUUID();
 
-    class RouteVal implements TypeValidator<{ q: string }> {
+    class RouteVal implements XerusValidator<{ q: string }> {
       validate(c: HTTPContext) {
         const q = new URL(c.req.url).searchParams.get("q") ?? "";
         pushTrace(c, `validator:RouteVal q=${q}`);

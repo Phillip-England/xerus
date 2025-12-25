@@ -3,7 +3,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { json } from "../src/std/Response";
 
 function makeURL(port: number, path: string) {
@@ -25,14 +25,14 @@ describe("validators: must return value + deepFreeze behavior", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    class UndefinedValidator implements TypeValidator<any> {
+    class UndefinedValidator implements XerusValidator<any> {
       async validate(_c: HTTPContext) {
         // INTENTIONALLY returns undefined
         return undefined;
       }
     }
 
-    class FreezeValidator implements TypeValidator<any> {
+    class FreezeValidator implements XerusValidator<any> {
       async validate(_c: HTTPContext) {
         return {
           a: 1,

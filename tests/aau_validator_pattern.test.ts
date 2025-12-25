@@ -4,7 +4,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
+import type { XerusValidator } from "../src/XerusValidator";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
 import { query } from "../src/std/Request";
@@ -18,7 +18,7 @@ function makeURL(port: number, path: string) {
 // Validator
 // --------------------
 
-class QueryPageValidator implements TypeValidator {
+class QueryPageValidator implements XerusValidator {
   async validate(c: HTTPContext) {
     const page = Number(query(c, "page") || "1");
     if (isNaN(page) || page < 1) {
