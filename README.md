@@ -25,7 +25,7 @@ Structured servers in Bun
 
 ## Installation
 ```bash
-bun add github:phillip-england/xerus#v0.0.70
+bun add github:phillip-england/xerus#v0.0.71
 ```
 
 ## Read the Docs

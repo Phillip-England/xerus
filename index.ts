@@ -1,5 +1,4 @@
 // --- START FILE: index.ts ---
-
 export * from "./src/BodyType";
 export * from "./src/ContextState";
 export * from "./src/Method";
@@ -10,8 +9,8 @@ export * from "./src/SystemErrRecord";
 
 export * from "./src/CookieOptions";
 export * from "./src/Cookies";
-
 export * from "./src/Headers";
+
 export * from "./src/PathParams";
 export * from "./src/URLQuery";
 export * from "./src/Href";
@@ -31,13 +30,16 @@ export * from "./src/Validator";
 export * from "./src/RouteFields";
 export * from "./src/RouteGroup";
 export * from "./src/XerusRoute";
-export * from "./src/TrieNode";
 
+export * from "./src/TrieNode";
 export * from "./src/ObjectPool";
 export * from "./src/MutResponse";
 
-export * from "./src/Xerus";
+export * from "./src/TemplateStore";
+export * from "./src/LoggerService";
+export * from "./src/XerusPlugin";
 
+export * from "./src/Xerus";
 export * from "./src/CORSService";
 export * from "./src/CSRFService";
 export * from "./src/RateLimitService";
@@ -45,7 +47,7 @@ export * from "./src/RateLimitService";
 export * from "./src/std/Body";
 export * from "./src/std/Request";
 export * from "./src/std/Response";
+export * from "./src/std/Template";
 
 export * from "./src/macros";
-
 // --- END FILE: index.ts ---
