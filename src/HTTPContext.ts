@@ -11,7 +11,6 @@ import type { TypeValidator } from "./TypeValidator";
 export type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
 type Ctor<T> = new (...args: any[]) => T;
-
 type AnyValidatorCtor = new () => TypeValidator<any>;
 type ValidatedOut<TCtor extends AnyValidatorCtor> = Awaited<
   ReturnType<InstanceType<TCtor>["validate"]>
@@ -31,8 +30,11 @@ export class HTTPContext {
 
   _url: URL | null = null;
   _segments: string[] | null = null;
+
   _reqHeaders: RequestHeaders | null = null;
 
+  // ✅ request cookies are now truly request-backed
+  private _cookieHeader: string | null = null;
   _reqCookiesView: RequestCookies | null = null;
   _resCookiesWriter: ResponseCookies | null = null;
 
@@ -90,6 +92,7 @@ export class HTTPContext {
 
     this._url = null;
     this._segments = null;
+
     this.params = params;
 
     this._body = undefined;
@@ -103,7 +106,6 @@ export class HTTPContext {
 
     this._clearServices();
     this._clearValidated();
-
     this._isWS = false;
 
     this.__timeoutSent = undefined;
@@ -116,8 +118,13 @@ export class HTTPContext {
 
     this._reqHeaders = new RequestHeaders(req.headers);
 
-    this.res.cookies.resetRequest(req.headers.get("Cookie"));
-    this._reqCookiesView = null;
+    // ✅ request cookie header captured here
+    this._cookieHeader = req.headers.get("Cookie");
+
+    // reset cookie views (lazily recreated / re-pointed)
+    if (this._reqCookiesView) this._reqCookiesView.reset(this._cookieHeader);
+    else this._reqCookiesView = null;
+
     this._resCookiesWriter = null;
   }
 
@@ -134,7 +141,11 @@ export class HTTPContext {
     this.err = undefined;
     this.__timeoutSent = undefined;
     this.__holdRelease = undefined;
+
+    // ✅ per-event scrubbing
     this.resetScope();
+    this._segments = null;
+
     this.method = wsMethod;
     this.route = `${this.method} ${this.path}`;
   }
@@ -157,8 +168,18 @@ export class HTTPContext {
   }
 
   get cookies() {
-    if (!this._reqCookiesView) this._reqCookiesView = new RequestCookies(this.res.cookies);
-    if (!this._resCookiesWriter) this._resCookiesWriter = new ResponseCookies(this.res.cookies);
+    if (!this._reqCookiesView) {
+      this._reqCookiesView = new RequestCookies();
+      this._reqCookiesView.reset(this._cookieHeader);
+    } else {
+      // in case someone calls this before reset() (rare), keep it correct
+      this._reqCookiesView.reset(this._cookieHeader);
+    }
+
+    if (!this._resCookiesWriter) {
+      this._resCookiesWriter = new ResponseCookies(this.res.cookies);
+    }
+
     return {
       request: this._reqCookiesView,
       response: this._resCookiesWriter,
@@ -175,10 +196,6 @@ export class HTTPContext {
     return this._getServiceCtor(Type) as T;
   }
 
-  /**
-   * Returns ONLY the value returned by the validator's validate() method.
-   * If you want access to raw input, you must include/return it from validate().
-   */
   validated<TCtor extends AnyValidatorCtor>(Type: TCtor): ValidatedOut<TCtor> {
     if (!this._hasValidatedCtor(Type as any)) {
       throw new SystemErr(
@@ -199,11 +216,13 @@ export class HTTPContext {
     }
     const byCtor = g.get(Type);
     if (byCtor) return byCtor as T;
+
     const name = (Type as any)?.name;
     if (name) {
       const byName = g.get(name);
       if (byName) return byName as T;
     }
+
     throw new SystemErr(
       SystemErrCode.INTERNAL_SERVER_ERR,
       `Global injectable not registered: ${Type?.name ?? "UnknownType"}`,

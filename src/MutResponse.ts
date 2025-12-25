@@ -1,4 +1,3 @@
-// src/MutResponse.ts
 import { HeadersBag } from "./Headers";
 import { CookieJar } from "./Cookies";
 
@@ -18,7 +17,7 @@ export class MutResponse {
   reset(): void {
     this.statusCode = 200;
     this.headers.reset();
-    this.cookies.resetResponse();
+    this.cookies.reset();
     this.bodyContent = "";
   }
 
@@ -52,13 +51,10 @@ export class MutResponse {
 
   send(): Response {
     const h = this.headers.toHeaders();
-
-    // ✅ Attach ALL Set-Cookie lines (critical for CSRF + multi-cookie tests)
     const cookieLines = this.cookies.getSetCookieLines();
     for (const line of cookieLines) {
       h.append("Set-Cookie", line);
     }
-
     return new Response(this.bodyContent, {
       status: this.statusCode,
       headers: h,

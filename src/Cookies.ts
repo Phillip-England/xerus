@@ -1,4 +1,3 @@
-// src/Cookies.ts
 import type { CookieOptions } from "./CookieOptions";
 
 function safeDecode(v: string) {
@@ -17,9 +16,6 @@ function safeEncode(v: string) {
   }
 }
 
-/**
- * Parse Cookie header into { name: value }
- */
 export function parseCookieHeader(header: string): Record<string, string> {
   const out: Record<string, string> = {};
   const parts = header.split(";");
@@ -58,40 +54,17 @@ export function serializeSetCookie(
   return cookieString;
 }
 
+/**
+ * CookieJar is RESPONSE-only: it stores Set-Cookie lines to be sent out.
+ * Request cookie parsing belongs to HTTPContext (via RequestCookies below).
+ */
 export class CookieJar {
-  private reqCookieHeader: string | null = null;
-  private reqParsed: Record<string, string> | null = null;
-
-  // outgoing set-cookie lines
   private setCookies: string[] = [];
 
-  resetRequest(cookieHeader: string | null) {
-    this.reqCookieHeader = cookieHeader;
-    this.reqParsed = null;
-  }
-
-  resetResponse() {
+  reset(): void {
     this.setCookies = [];
   }
 
-  private ensureParsed() {
-    if (this.reqParsed) return;
-    this.reqParsed = this.reqCookieHeader
-      ? parseCookieHeader(this.reqCookieHeader)
-      : {};
-  }
-
-  /**
-   * Read request cookie value
-   */
-  get(name: string): string | undefined {
-    this.ensureParsed();
-    return this.reqParsed![name];
-  }
-
-  /**
-   * Add Set-Cookie line to response
-   */
   set(name: string, value: string, options: CookieOptions = {}) {
     this.setCookies.push(serializeSetCookie(name, value, options));
   }
@@ -105,9 +78,6 @@ export class CookieJar {
     });
   }
 
-  /**
-   * Response builder reads these
-   */
   getSetCookieLines(): string[] {
     return this.setCookies.slice();
   }
@@ -130,10 +100,6 @@ export class CookieRef {
     return this._name;
   }
 
-  get(): string | undefined {
-    return this.jar.get(this._name);
-  }
-
   set(value: string, options: CookieOptions = {}): this {
     this.jar.set(this._name, value, options);
     return this;
@@ -145,26 +111,48 @@ export class CookieRef {
   }
 }
 
-// Cookies.ts (additions)
-
+/**
+ * RequestCookies parses from the inbound Cookie header.
+ * It is NOT backed by the response jar.
+ */
 export class RequestCookies {
-  constructor(private jar: CookieJar) {}
-  get(name: string): string | undefined {
-    return this.jar.get(name);
+  private header: string | null = null;
+  private parsed: Record<string, string> | null = null;
+
+  reset(cookieHeader: string | null) {
+    this.header = cookieHeader;
+    this.parsed = null;
   }
+
+  private ensureParsed() {
+    if (this.parsed) return;
+    this.parsed = this.header ? parseCookieHeader(this.header) : {};
+  }
+
+  get(name: string): string | undefined {
+    this.ensureParsed();
+    return this.parsed![name];
+  }
+
   ref(name: string): RequestCookieRef {
     return new RequestCookieRef(this, name);
   }
 }
 
+/**
+ * ResponseCookies writes Set-Cookie lines via the response jar.
+ */
 export class ResponseCookies {
   constructor(private jar: CookieJar) {}
+
   set(name: string, value: string, options: CookieOptions = {}) {
     this.jar.set(name, value, options);
   }
+
   clear(name: string, options?: { path?: string; domain?: string }) {
     this.jar.clear(name, options);
   }
+
   ref(name: string): ResponseCookieRef {
     return new ResponseCookieRef(this, name);
   }
@@ -172,9 +160,11 @@ export class ResponseCookies {
 
 export class RequestCookieRef {
   constructor(private view: RequestCookies, private _name: string) {}
+
   get name() {
     return this._name;
   }
+
   get(): string | undefined {
     return this.view.get(this._name);
   }
@@ -182,13 +172,16 @@ export class RequestCookieRef {
 
 export class ResponseCookieRef {
   constructor(private writer: ResponseCookies, private _name: string) {}
+
   get name() {
     return this._name;
   }
+
   set(value: string, options: CookieOptions = {}): this {
     this.writer.set(this._name, value, options);
     return this;
   }
+
   clear(options?: { path?: string; domain?: string }): this {
     this.writer.clear(this._name, options);
     return this;

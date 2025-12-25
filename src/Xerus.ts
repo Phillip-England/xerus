@@ -1,4 +1,3 @@
-// --- START FILE: src/Xerus.ts ---
 import type { Server, ServerWebSocket } from "bun";
 import { type RouteBlueprint, TrieNode } from "./TrieNode";
 import { HTTPContext } from "./HTTPContext";
@@ -17,10 +16,7 @@ import { WSContext } from "./WSContext";
 const LEGACY_FIELD = Symbol.for("xerus:routefield");
 const INIT_PROMISE = Symbol.for("xerus:service_init_promise");
 
-// ✅ Services are now “any ctor” globally
 type ServiceCtor = AnyServiceCtor;
-
-// Validators remain typed as TypeValidator ctors
 type ValidatorCtor<T extends TypeValidator<any> = any> = new () => T;
 
 export class Xerus {
@@ -83,14 +79,12 @@ export class Xerus {
 
   private assertCtorList(name: string, arr: any, where: string) {
     if (arr === undefined || arr === null) return;
-
     if (!Array.isArray(arr)) {
       throw new SystemErr(
         SystemErrCode.INTERNAL_SERVER_ERR,
         `[XERUS] ${where}.${name} must be an array of constructors.`,
       );
     }
-
     for (const item of arr) {
       if (item && typeof item === "object" && item[LEGACY_FIELD] === true) {
         throw new SystemErr(
@@ -117,7 +111,6 @@ export class Xerus {
           `Then access via: c.service(MyServiceCtor)`,
       );
     }
-
     const props = Object.getOwnPropertyNames(instance);
     for (const prop of props) {
       const val = instance[prop];
@@ -129,7 +122,6 @@ export class Xerus {
         );
       }
     }
-
     this.assertCtorList("services", instance?.services, where);
     this.assertCtorList("validators", instance?.validators, where);
   }
@@ -139,12 +131,10 @@ export class Xerus {
       ctx.clearResponse();
       ctx.resetScope();
       ctx.err = undefined;
-
       (ctx as any)._wsBlueprints = undefined;
       ctx._wsMessage = null;
       ctx._wsContext = null;
       ctx._isWS = false;
-
       this.contextPool.release(ctx);
     };
 
@@ -259,7 +249,6 @@ export class Xerus {
   private register(method: string, path: string, blueprint: RouteBlueprint) {
     const parts = path.split("/").filter(Boolean);
     let node = this.root;
-
     for (const part of parts) {
       if (part.startsWith(":")) {
         node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
@@ -288,7 +277,6 @@ export class Xerus {
           drain: undefined,
         };
       }
-
       const container = (node as any).wsHandler;
       switch (method) {
         case Method.WS_OPEN:
@@ -313,8 +301,8 @@ export class Xerus {
         `Route ${method} ${path} has already been registered`,
       );
     }
-
     (node.handlers as any)[method] = blueprint;
+
     if (!path.includes(":") && !path.includes("*")) {
       this.routes[`${method} ${path}`] = blueprint;
     }
@@ -415,6 +403,10 @@ export class Xerus {
     return proto === Object.prototype || proto === null;
   }
 
+  /**
+   * ✅ Freeze only arrays + plain objects (NOT class instances).
+   * This avoids surprising behavior when validators return DTO class instances.
+   */
   private deepFreeze<T>(obj: T, seen: WeakSet<object> = new WeakSet()): T {
     if (!this.freezeValidators) return obj;
     if (!obj || typeof obj !== "object") return obj;
@@ -425,10 +417,9 @@ export class Xerus {
 
     const isArray = Array.isArray(o);
     const isPlain = this.isPlainObject(o);
-    const isClassInstance =
-      !isArray && !isPlain && typeof o === "object" && o.constructor && o.constructor !== Object;
 
-    if (!isArray && !isPlain && !isClassInstance) return obj;
+    // ✅ only traverse/freeze safe structures
+    if (!isArray && !isPlain) return obj;
 
     const keys = Object.getOwnPropertyNames(o);
     for (const k of keys) {
@@ -496,8 +487,6 @@ export class Xerus {
     }
 
     const inst: any = new Type();
-
-    // still blocks legacy RouteField usage inside services
     this.assertNoLegacyFields(inst, Type?.name ?? "Service");
 
     (c as any)._setServiceCtor(Type, inst);
@@ -522,7 +511,6 @@ export class Xerus {
 
     inst[INIT_PROMISE] = initPromise;
     await initPromise;
-
     return inst;
   }
 
@@ -559,7 +547,6 @@ export class Xerus {
 
   private async executeRoute(blueprint: RouteBlueprint, context: HTTPContext) {
     const routeInstance = new blueprint.Ctor();
-
     const mounted = (blueprint as any).mounted;
     if (mounted?.props && typeof mounted.props === "object") {
       for (const [k, v] of Object.entries(mounted.props)) {
@@ -569,7 +556,10 @@ export class Xerus {
 
     this.assertNoLegacyFields(routeInstance, blueprint.Ctor?.name ?? "Route");
 
-    const routeValidators = (blueprint.validators ?? (routeInstance as any).validators ?? []) as ValidatorCtor[];
+    const routeValidators = (blueprint.validators ??
+      (routeInstance as any).validators ??
+      []) as ValidatorCtor[];
+
     await this.runValidators(context, routeValidators, blueprint.Ctor?.name ?? "Route");
     if (context.isDone) return;
 
@@ -582,7 +572,6 @@ export class Xerus {
     ] as ServiceCtor[];
 
     this.assertCtorList("services", serviceRoots, blueprint.Ctor?.name ?? "Route");
-
     const activeServices = await this.activateServices(context, serviceRoots);
 
     try {
@@ -595,7 +584,6 @@ export class Xerus {
       if (context.isDone) return;
 
       await routeInstance.handle(context);
-
       await routeInstance.postHandle(context);
 
       for (let i = activeServices.length - 1; i >= 0; i--) {
@@ -665,7 +653,6 @@ export class Xerus {
 
       if (this.notFoundHandler) {
         const activeServices = await this.activateServices(context, this.globalServices);
-
         for (const svc of activeServices) {
           if (typeof svc.before === "function") await svc.before(context);
           if (context.isDone) {
@@ -692,16 +679,20 @@ export class Xerus {
       const c = context || new HTTPContext();
       if (!context) c.reset(req, {});
       (c as any)._globals = this.globals;
-
       c.clearResponse();
       c.err = e;
 
-      const isValidationish =
+      // ✅ tighter validation classification
+      const isSystemValidation =
+        e instanceof SystemErr && e.typeOf === SystemErrCode.VALIDATION_FAILED;
+
+      const isZodValidation =
         e &&
         typeof e === "object" &&
-        (e.typeOf === SystemErrCode.VALIDATION_FAILED || Array.isArray(e.issues));
+        (e.name === "ZodError" || e.constructor?.name === "ZodError") &&
+        Array.isArray((e as any).issues);
 
-      if (isValidationish) {
+      if (isSystemValidation || isZodValidation) {
         const errHandler = SystemErrRecord[SystemErrCode.VALIDATION_FAILED];
         await errHandler(c, e);
         const resp = c.res.send();
@@ -857,4 +848,3 @@ export class Xerus {
     return server;
   }
 }
-// --- END FILE ---

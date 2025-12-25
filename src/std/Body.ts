@@ -1,3 +1,4 @@
+// PATH: /home/jacex/src/xerus/src/std/Body.ts
 import { HTTPContext } from "../HTTPContext";
 import { BodyType } from "../BodyType";
 import { SystemErr } from "../SystemErr";
@@ -64,16 +65,12 @@ function parseFormMulti(text: string): ParsedFormBodyMulti {
 export async function parseBody(c: HTTPContext, expectedType: BodyType, opts: ParseBodyOptions = {}): Promise<any> {
   const strict = !!opts.strict;
   enforceStrictContentType(c, expectedType, strict);
-
-  // Fix: Check if client sent JSON when we expected FORM, even in non-strict mode
   const ct = contentType(c);
-  if (expectedType === BodyType.FORM && ct.includes("application/json")) {
-    throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
-  }
 
   if (expectedType === BodyType.JSON && c._body !== undefined && c._parsedBodyMode === "JSON") return c._body;
   if (expectedType === BodyType.TEXT && c._rawBody !== null && ["TEXT", "JSON", "FORM"].includes(c._parsedBodyMode)) return c._rawBody;
 
+  // MOVED UP: Check existing raw body logic BEFORE checking Content-Type conflicts.
   if (c._rawBody !== null) {
     if (expectedType === BodyType.JSON) {
       assertReparseAllowed(c, "JSON");
@@ -100,6 +97,11 @@ export async function parseBody(c: HTTPContext, expectedType: BodyType, opts: Pa
       c._parsedBodyMode = c._parsedBodyMode === "NONE" ? "TEXT" : c._parsedBodyMode;
       return c._rawBody;
     }
+  }
+
+  // Content-Type checks for fresh reads
+  if (expectedType === BodyType.FORM && ct.includes("application/json")) {
+    throw new SystemErr(SystemErrCode.BODY_PARSING_FAILED, "Unexpected JSON data");
   }
 
   if (ct.includes("multipart/form-data")) {
