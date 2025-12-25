@@ -1,34 +1,25 @@
 kill:
 	sudo lsof -t -i:8080 | xargs kill -9
 
-run-http:
-	bun run --hot ./tests/http/server.ts
+test:
+	clear; bun test ./tests
 
-test-http:
-	clear; bun test ./tests/http
-
-run-ws:
-	bun run --hot ./tests/websocket/server.ts
-
-test-ws:
-	clear; bun test ./tests/websocket
-
-bench-http-raw:
+bench-raw:
 	wrk -t12 -c400 -d30s http://localhost:8080/
 
-bench-http-routing:
+bench-routing:
 	wrk -t12 -c400 -d30s http://localhost:8080/users/12345
 
-bench-http-embedded-assets:
+bench-embedded:
 	wrk -t12 -c400 -d10s http://localhost:8080/static-site/index.html
 
-bench-http-static-assets:
+bench-static:
 	wrk -t12 -c400 -d10s http://localhost:8080/disk-src/Xerus.ts
 
-bench-http-json:
+bench-json:
 	@echo 'wrk.method = "POST"; wrk.body = "{\"name\": \"Benchmark Item\"}"; wrk.headers["Content-Type"] = "application/json"' > temp_post.lua
 	wrk -t12 -c400 -d30s -s temp_post.lua http://localhost:8080/items
 	@rm temp_post.lua
 
-docs:
+dev:
 	bun run --hot ./www/index.ts
