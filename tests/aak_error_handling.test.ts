@@ -23,7 +23,7 @@ describe("Global error handling", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    class ServiceErrorTrigger implements ServiceLifecycle {
+    class ServiceErrorTrigger implements XerusService {
       async before(_c: HTTPContext) {
         throw new Error("Failure in Service");
       }

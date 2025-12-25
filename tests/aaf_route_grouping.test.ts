@@ -26,7 +26,7 @@ describe("Route grouping: prefix + middleware/service", () => {
 
     // --- services / validators used by routes (defined inline to keep test self-contained)
 
-    class GroupHeaderService implements ServiceLifecycle {
+    class GroupHeaderService implements XerusService {
       async before(c: HTTPContext) {
         setHeader(c, "X-Group-Auth", "passed");
       }

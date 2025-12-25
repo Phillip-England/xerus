@@ -5,7 +5,7 @@ import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
 import type { XerusValidator } from "../src/XerusValidator";
-import type { ServiceLifecycle } from "../src/RouteFields";
+import type { XerusService } from "../src/RouteFields";
 import { json } from "../src/std/Response";
 
 type TraceMap = Map<string, string[]>;
@@ -66,7 +66,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class DepService implements ServiceLifecycle {
+    class DepService implements XerusService {
       validators = [ServiceVal];
 
       async init(c: HTTPContext) {
@@ -86,7 +86,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class GlobalRootService implements ServiceLifecycle {
+    class GlobalRootService implements XerusService {
       services = [DepService];
 
       async init(c: HTTPContext) {
@@ -102,7 +102,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class AnotherDepService implements ServiceLifecycle {
+    class AnotherDepService implements XerusService {
       async init(c: HTTPContext) {
         pushTrace(c, "svc:AnotherDep:init");
       }
@@ -114,7 +114,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class RouteRootService implements ServiceLifecycle {
+    class RouteRootService implements XerusService {
       services = [DepService, AnotherDepService];
 
       async init(c: HTTPContext) {
@@ -238,7 +238,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class SharedDep implements ServiceLifecycle {
+    class SharedDep implements XerusService {
       validators = [SharedVal];
       readonly instanceId = crypto.randomUUID();
 
@@ -254,7 +254,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class AService implements ServiceLifecycle {
+    class AService implements XerusService {
       services = [SharedDep];
       async init(c: HTTPContext) {
         const dep = c.service(SharedDep);
@@ -269,7 +269,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class BService implements ServiceLifecycle {
+    class BService implements XerusService {
       services = [SharedDep];
       async init(c: HTTPContext) {
         const dep = c.service(SharedDep);
@@ -342,7 +342,7 @@ describe("Services + Validators + Lifecycle ordering", () => {
       }
     }
 
-    class ErrorService implements ServiceLifecycle {
+    class ErrorService implements XerusService {
       async init(c: HTTPContext) {
         const rv = c.validated(RouteVal);
         pushTrace(c, `svc:Err:init q=${rv.q}`);

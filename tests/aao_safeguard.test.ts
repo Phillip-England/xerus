@@ -18,7 +18,7 @@ describe("Safeguard", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    class ErrorCatcherService implements ServiceLifecycle {
+    class ErrorCatcherService implements XerusService {
       async onError(c: HTTPContext, err: any) {
         setStatus(c, 500);
         json(c, {

@@ -1,6 +1,6 @@
 import type { HTTPContext } from "./HTTPContext";
 import { Method } from "./Method";
-import type { ServiceLifecycle } from "./RouteFields";
+import type { XerusService } from "./RouteFields";
 import { errorJSON } from "./std/Response";
 
 export interface CSRFConfig {
@@ -23,7 +23,7 @@ export interface CSRFConfig {
   ignoreMethods?: string[];
 }
 
-export class CSRFService implements ServiceLifecycle {
+export class CSRFService implements XerusService {
   // Configuration defaults
   private cookieName = "XSRF-TOKEN";
   private headerName = "X-XSRF-TOKEN";

@@ -21,7 +21,7 @@ describe("Services + middleware lifecycle", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    class ServiceOrderLogger implements ServiceLifecycle {
+    class ServiceOrderLogger implements XerusService {
       name: string = "Unknown";
 
       async before(c: HTTPContext) {
@@ -46,7 +46,7 @@ describe("Services + middleware lifecycle", () => {
       name = "B";
     }
 
-    class ServiceShortCircuit implements ServiceLifecycle {
+    class ServiceShortCircuit implements XerusService {
       async before(c: HTTPContext) {
         setStatus(c, 200);
         text(c, "Intercepted by Service");

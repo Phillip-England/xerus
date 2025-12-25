@@ -22,4 +22,10 @@ bench-json:
 	@rm temp_post.lua
 
 dev:
-	bun run --hot ./www/index.ts
+	bun ./www/html/**/*.html
+
+build-docs:
+	bun build ./www/html/**/*.html --outdir=dist --env=PUBLIC_*
+
+tw:
+	tailwindcss -i './www/static/input.css' -o './www/static/output.css' --watch

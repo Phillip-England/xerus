@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/www/static/output.css"/>
+  <title>Documentation - Xerus</title>
+</head>
+
+<body class="bg-black text-white font-mono flex justify-center min-h-screen">
+  <div class="p-8 flex flex-col gap-8 max-w-4xl w-full">
+
+    <header class="flex flex-col gap-2">
+      <h1 class="text-3xl">Xerus</h1>
+      <p class="text-white/70">Structured servers in Bun</p>
+
+      <div class="mt-2 flex flex-wrap gap-2 text-xs">
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#getting-started">Getting Started</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#routes">Routes</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#validators">Validators</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#services">Services</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#context">HTTPContext</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#response">Responses</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#websockets">WebSockets</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#errors">Errors</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#static">Static & Embed</a>
+        <a class="px-2 py-1 rounded border border-white/15 hover:border-white/40" href="#plugins">Plugins</a>
+      </div>
+    </header>
+
+    <main class="flex flex-col gap-12">
+
+      <!-- Overview -->
+      <section class="flex flex-col gap-4">
+        <h2 class="text-xl">What is Xerus?</h2>
+        <p class="text-white/80 leading-relaxed">
+          Xerus is a small, structured HTTP + WebSocket framework for Bun. You define routes as classes,
+          optionally attach <span class="text-white">validators</span> (for typed input) and <span class="text-white">services</span>
+          (for shared logic + lifecycle hooks). Xerus runs validators first, then services, then your route handler.
+        </p>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/70">
+            Key ideas:
+          </p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><span class="text-white">Routes are classes</span> (method + path + handle).</li>
+            <li><span class="text-white">Validators return values</span> and are read via <code class="text-white">c.validated(MyValidator)</code>.</li>
+            <li><span class="text-white">Services are class-constructed per-request scope</span> and read via <code class="text-white">c.service(MyService)</code>.</li>
+            <li><span class="text-white">Lifecycle hooks</span> for services: <code>init</code>, <code>before</code>, <code>after</code>, <code>onError</code>.</li>
+            <li><span class="text-white">WebSockets reuse the same HTTPContext</span> with per-event reset (OPEN / MESSAGE / CLOSE / DRAIN).</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Getting Started -->
+      <section id="getting-started" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Getting Started</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Create an app, mount routes, and listen.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>// app.ts
+import { Xerus } from "./src/Xerus";
+import { XerusRoute } from "./src/XerusRoute";
+import { Method } from "./src/Method";
+import { json } from "./src/std/Response";
+import type { HTTPContext } from "./src/HTTPContext";
+
+class HomeRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/";
+
+  async handle(c: HTTPContext) {
+    json(c, { message: "Hello, world!" });
+  }
+}
+
+const app = new Xerus();
+app.mount(HomeRoute);
+
+await app.listen(8080);
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm">
+          <p class="text-white/80">
+            Notes:
+          </p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li>Routes are mounted with <code class="text-white">app.mount(RouteCtor)</code>.</li>
+            <li>Each request creates / reuses an <code class="text-white">HTTPContext</code> from a pool.</li>
+            <li>Responses are built through <code class="text-white">c.res</code> or helpers in <code class="text-white">std/Response</code>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Routes -->
+      <section id="routes" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Routes</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          A route is a class extending <code class="text-white">XerusRoute</code>:
+          it declares a <code class="text-white">method</code>, <code class="text-white">path</code>,
+          and implements <code class="text-white">handle(c)</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { XerusRoute } from "./src/XerusRoute";
+import { Method } from "./src/Method";
+import { json, text } from "./src/std/Response";
+import type { HTTPContext } from "./src/HTTPContext";
+
+class Hello extends XerusRoute {
+  method = Method.GET;
+  path = "/hello/:name";
+
+  async handle(c: HTTPContext) {
+    // path params are stored on c.params
+    const name = c.params["name"] ?? "world";
+    json(c, { hello: name });
+  }
+}
+
+class Ping extends XerusRoute {
+  method = Method.GET;
+  path = "/ping";
+
+  async handle(c: HTTPContext) {
+    text(c, "pong");
+  }
+}
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">
+            Route lifecycle hooks (optional):
+          </p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">onMount()</code> — runs once at mount-time (during blueprint creation).</li>
+            <li><code class="text-white">validate(c)</code> — runs after validators list has executed.</li>
+            <li><code class="text-white">preHandle(c)</code> / <code class="text-white">postHandle(c)</code> — runs around <code>handle</code>.</li>
+            <li><code class="text-white">onFinally(c)</code> — always runs (success or error).</li>
+            <li><code class="text-white">onErr(handler)</code> — attach a per-route error handler.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Validators -->
+      <section id="validators" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Validators</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Validators are constructors listed on routes/services as <code class="text-white">validators = [MyValidator]</code>.
+          Each validator must implement <code class="text-white">validate(c)</code> and must <span class="text-white">return a value</span>.
+          That returned value is stored on the context and retrieved via <code class="text-white">c.validated(MyValidator)</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import type { HTTPContext } from "./src/HTTPContext";
+import type { XerusValidator } from "./src/XerusValidator";
+import { Method } from "./src/Method";
+import { XerusRoute } from "./src/XerusRoute";
+import { query } from "./src/std/Request";
+import { json } from "./src/std/Response";
+
+class SearchQuery implements XerusValidator&lt;{ search: string }&gt; {
+  validate(c: HTTPContext) {
+    // std/Request helpers exist too:
+    const s = query(c, "search", "");
+    return { search: s };
+  }
+}
+
+class SearchRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/search";
+  validators = [SearchQuery];
+
+  async handle(c: HTTPContext) {
+    const v = c.validated(SearchQuery);
+    json(c, { youSearchedFor: v.search });
+  }
+}
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">
+            Important validator rules:
+          </p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><span class="text-white">Validators run before services</span>, and before route hooks.</li>
+            <li>If a validator <span class="text-white">returns</span> an object, Xerus can optionally deep-freeze it (enabled by default).</li>
+            <li>If a validator throws, Xerus converts common validation errors (including Zod-style errors) into a 400 response.</li>
+            <li><code class="text-white">Validator.Ctx()</code> and <code class="text-white">Validate()</code> are removed; use ctor lists.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Services -->
+      <section id="services" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Services</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Services are constructors listed on routes as <code class="text-white">services = [MyService]</code>.
+          Xerus will instantiate services per-request (within the request scope), resolve dependencies, run lifecycle hooks,
+          and store instances on the context so you can call <code class="text-white">c.service(MyService)</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import type { HTTPContext } from "./src/HTTPContext";
+import { Method } from "./src/Method";
+import { XerusRoute } from "./src/XerusRoute";
+import { json } from "./src/std/Response";
+
+class MetricsService {
+  private start = 0;
+
+  async before(_c: HTTPContext) {
+    this.start = performance.now();
+  }
+
+  async after(_c: HTTPContext) {
+    const ms = performance.now() - this.start;
+    console.log("request ms:", ms.toFixed(2));
+  }
+}
+
+class UsersService {
+  users = ["ada", "grace", "linus"];
+  async init(_c: HTTPContext) {
+    // run once per request scope when service is first constructed
+  }
+}
+
+class UsersRoute extends XerusRoute {
+  method = Method.GET;
+  path = "/users";
+  services = [MetricsService, UsersService];
+
+  async handle(c: HTTPContext) {
+    const users = c.service(UsersService);
+    json(c, { users: users.users });
+  }
+}
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">Service dependency graph</p>
+          <p class="text-white/70 mt-2">
+            A service can declare its own dependencies:
+          </p>
+          <pre class="mt-3 rounded-lg border border-white/15 bg-black/40 p-3 overflow-auto text-xs"><code>class AService {
+  services = [BService, CService];   // service deps
+  validators = [InputValidator];     // validator deps
+}</code></pre>
+
+          <ul class="list-disc pl-5 mt-3 text-white/80">
+            <li>Dependencies are resolved before <code class="text-white">init()</code>.</li>
+            <li><code class="text-white">before()</code> hooks run in dependency order; <code class="text-white">after()</code> runs in reverse order.</li>
+            <li>On error, <code class="text-white">onError()</code> runs in reverse order, then route error handling kicks in.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- HTTPContext -->
+      <section id="context" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">HTTPContext</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          The <code class="text-white">HTTPContext</code> is the per-request (and per-WS-event) state container.
+          Xerus pools contexts for performance, and resets them between uses.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm">
+            <h3 class="text-base mb-2">Request fields</h3>
+            <ul class="list-disc pl-5 text-white/80">
+              <li><code class="text-white">c.req</code> — Bun Request</li>
+              <li><code class="text-white">c.path</code> — URL pathname (normalized)</li>
+              <li><code class="text-white">c.method</code> — HTTP method (or WS event method)</li>
+              <li><code class="text-white">c.params</code> — route params map</li>
+              <li><code class="text-white">c.route</code> — “METHOD /path” string</li>
+            </ul>
+          </div>
+
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm">
+            <h3 class="text-base mb-2">Response builder</h3>
+            <ul class="list-disc pl-5 text-white/80">
+              <li><code class="text-white">c.res</code> — MutResponse (status/headers/body/cookies)</li>
+              <li><code class="text-white">c.finalize()</code> — stops handler chain after body is set</li>
+              <li><code class="text-white">c.ensureConfigurable()</code> — guards header writes</li>
+              <li><code class="text-white">c.ensureBodyModifiable()</code> — guards body writes</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">Context registries</p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">c.validated(MyValidator)</code> — read validated value</li>
+            <li><code class="text-white">c.service(MyService)</code> — read service instance</li>
+            <li><code class="text-white">c.global(MyGlobal)</code> — read a global injectable registered on the app</li>
+            <li><code class="text-white">c.cookies.request</code> / <code class="text-white">c.cookies.response</code> — cookie access</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Responses -->
+      <section id="response" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Responses</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          You can write responses directly with <code class="text-white">c.res</code> or use helpers from <code class="text-white">std/Response</code>.
+          Helpers finalize the response and prevent accidental double writes.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { json, text, html, redirect, setHeader, setStatus } from "./src/std/Response";
+
+json(c, { ok: true });         // Content-Type application/json
+text(c, "hello");               // text/plain (if not already set)
+html(c, "&lt;h1&gt;Hi&lt;/h1&gt;");       // text/html
+redirect(c, "/login");          // 302 + Location
+setHeader(c, "X-Foo", "bar");   // header only
+setStatus(c, 201);              // status only</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">Streaming + Files</p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">stream(c, readableStream)</code> sets streaming mode (headers become immutable).</li>
+            <li><code class="text-white">await file(c, path)</code> sends a file using <code class="text-white">Bun.file</code> and sets Content-Type.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Cookies -->
+      <section id="cookies" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Cookies</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus exposes request cookies and response cookie writers via <code class="text-white">c.cookies</code>.
+          Response cookies are written as <code class="text-white">Set-Cookie</code> headers when the response is sent.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>// Read cookie
+const session = c.cookies.request.get("session");
+
+// Set cookie
+c.cookies.response.set("session", "abc123", {
+  path: "/",
+  httpOnly: true,
+  sameSite: "Lax",
+});
+
+// Clear cookie
+c.cookies.response.clear("session", { path: "/" });
+</code></pre>
+      </section>
+
+      <!-- Body parsing -->
+      <section id="body" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Body Parsing</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus includes a strict-ish body parser with guarded re-parsing rules.
+          Parsing helpers live in <code class="text-white">std/Body</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { jsonBody, textBody, formBody, multipartBody } from "./src/std/Body";
+import { BodyType } from "./src/BodyType";
+
+// JSON
+const data = await jsonBody(c); // or parseBody(c, BodyType.JSON)
+
+// TEXT
+const s = await textBody(c);
+
+// FORM (application/x-www-form-urlencoded)
+const form = await formBody(c);
+
+// MULTIPART (multipart/form-data)
+const fd = await multipartBody(c);
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">Parsing rules (high level)</p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li>JSON and FORM are mutually exclusive once parsed (no reparse across them).</li>
+            <li>Multipart consumes the body and cannot be re-parsed into something else.</li>
+            <li>Strict Content-Type enforcement is available via <code class="text-white">opts.strict</code>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- WebSockets -->
+      <section id="websockets" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">WebSockets</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus supports WebSocket upgrade routes automatically when you mount WS event routes on the same path.
+          A GET route at a path will upgrade if the route trie contains WS handlers for that same path and the request includes <code class="text-white">Upgrade: websocket</code>.
+        </p>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">WS event methods</p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">Method.WS_OPEN</code></li>
+            <li><code class="text-white">Method.WS_MESSAGE</code></li>
+            <li><code class="text-white">Method.WS_CLOSE</code></li>
+            <li><code class="text-white">Method.WS_DRAIN</code></li>
+          </ul>
+        </div>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { XerusRoute } from "./src/XerusRoute";
+import { Method } from "./src/Method";
+import type { HTTPContext } from "./src/HTTPContext";
+import { ws } from "./src/std/Request";
+
+// Same path, different WS event methods:
+
+class ChatOpen extends XerusRoute {
+  method = Method.WS_OPEN;
+  path = "/chat";
+  async handle(c: HTTPContext) {
+    ws(c).send("welcome");
+  }
+}
+
+class ChatMessage extends XerusRoute {
+  method = Method.WS_MESSAGE;
+  path = "/chat";
+
+  // validators/services work the same as HTTP:
+  // validators = [MessageValidator]
+  // services = [AuthService]
+
+  async handle(c: HTTPContext) {
+    const w = ws(c);
+    // message available on WSContext
+    w.send("echo: " + String(w.message));
+  }
+}
+
+class ChatClose extends XerusRoute {
+  method = Method.WS_CLOSE;
+  path = "/chat";
+  async handle(_c: HTTPContext) {
+    // cleanup per close
+  }
+}
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">WSContext</p>
+          <p class="text-white/70 mt-2">
+            Inside WS routes, use <code class="text-white">ws(c)</code> to access the WebSocket wrapper:
+          </p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">ws(c).send(...)</code>, <code class="text-white">ping</code>, <code class="text-white">pong</code>, <code class="text-white">close</code></li>
+            <li><code class="text-white">ws(c).message</code> is populated for MESSAGE events</li>
+            <li><code class="text-white">ws(c).code</code> / <code class="text-white">ws(c).reason</code> for CLOSE events</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Errors -->
+      <section id="errors" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Errors</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus uses <code class="text-white">SystemErr</code> (with <code class="text-white">SystemErrCode</code>) for framework-level errors.
+          The framework maps these to JSON error responses via <code class="text-white">SystemErrRecord</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { SystemErr } from "./src/SystemErr";
+import { SystemErrCode } from "./src/SystemErrCode";
+
+throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, "Nope");
+</code></pre>
+
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+          <p class="text-white/80">Custom handlers</p>
+          <ul class="list-disc pl-5 mt-2 text-white/80">
+            <li><code class="text-white">app.onNotFound(RouteCtor)</code> — fallback route when nothing matches.</li>
+            <li><code class="text-white">app.onErr(RouteCtor)</code> — app-wide error handler route.</li>
+            <li><code class="text-white">route.onErr(handler)</code> — per-route error handler function.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Route groups -->
+      <section id="groups" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Route Groups</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Use <code class="text-white">RouteGroup</code> to mount multiple routes under a prefix.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import { Xerus } from "./src/Xerus";
+import { RouteGroup } from "./src/RouteGroup";
+
+const app = new Xerus();
+
+new RouteGroup(app, "/api")
+  .mount(UsersRoute, SearchRoute, PingRoute);
+</code></pre>
+      </section>
+
+      <!-- Static + embed -->
+      <section id="static" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Static Files & Embed</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus can serve static files from disk or embed an in-memory file map.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm">
+            <h3 class="text-base mb-2">Static directory</h3>
+            <pre class="rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>app.static("/www", "./www");</code></pre>
+            <p class="text-white/70 mt-2">
+              Requests to <code class="text-white">/www/*</code> map into that directory.
+              Paths are resolved and checked to prevent directory traversal.
+            </p>
+          </div>
+
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm">
+            <h3 class="text-base mb-2">Embed route</h3>
+            <pre class="rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>app.embed("/docs", {
+  "/index.html": { content: "&lt;h1&gt;Hi&lt;/h1&gt;", type: "text/html" }
+});</code></pre>
+            <p class="text-white/70 mt-2">
+              Useful for bundling documentation/assets.
+              You can generate embedded maps using <code class="text-white">embedDir()</code> in <code class="text-white">macros.ts</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Plugins -->
+      <section id="plugins" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Plugins</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Plugins provide structured hooks for app lifecycle:
+          connect, route registration, pre-listen, and shutdown.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>import type { XerusPlugin } from "./src/XerusPlugin";
+import type { Xerus } from "./src/Xerus";
+
+class MyPlugin implements XerusPlugin {
+  onConnect(app: Xerus) {
+    // called when plugin is registered
+  }
+
+  onRegister(app: Xerus, route: any) {
+    // called when routes are mounted
+  }
+
+  onPreListen(app: Xerus) {
+    // called before listen()
+  }
+
+  onShutdown(app: Xerus) {
+    // called on SIGINT/SIGTERM shutdown
+  }
+}
+
+app.plugin(MyPlugin);
+</code></pre>
+      </section>
+
+      <!-- Built-in services -->
+      <section id="built-in" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Built-in Services</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus ships a few opt-in services you can mount globally or per-route.
+        </p>
+
+        <div class="grid grid-cols-1 gap-4">
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+            <h3 class="text-base mb-2">CORSService</h3>
+            <p class="text-white/70">
+              Adds CORS headers and auto-handles OPTIONS preflight by finalizing the response.
+            </p>
+            <pre class="mt-3 rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>import { CORSService } from "./src/CORSService";
+
+app.use(class extends CORSService {
+  constructor() {
+    super({
+      origin: true, // reflect request origin
+      credentials: true,
+      methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+    });
+  }
+});</code></pre>
+          </div>
+
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+            <h3 class="text-base mb-2">CSRFService</h3>
+            <p class="text-white/70">
+              Sets a CSRF cookie and validates a matching header for non-safe methods.
+            </p>
+            <pre class="mt-3 rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>import { CSRFService } from "./src/CSRFService";
+
+app.use(class extends CSRFService {
+  constructor() {
+    super({
+      cookieName: "XSRF-TOKEN",
+      headerName: "X-XSRF-TOKEN",
+    });
+  }
+});</code></pre>
+          </div>
+
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+            <h3 class="text-base mb-2">RateLimitService</h3>
+            <p class="text-white/70">
+              In-memory rate limiting (Map store) with standard rate headers.
+            </p>
+            <pre class="mt-3 rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>import { RateLimitService } from "./src/RateLimitService";
+
+app.use(class extends RateLimitService {
+  constructor() {
+    super({ limit: 120, windowMs: 60_000 });
+  }
+});</code></pre>
+          </div>
+
+          <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+            <h3 class="text-base mb-2">LoggerService</h3>
+            <p class="text-white/70">
+              Logs request method + path + duration using service hooks.
+            </p>
+            <pre class="mt-3 rounded border border-white/10 bg-black/40 p-3 overflow-auto text-xs"><code>import { LoggerService } from "./src/LoggerService";
+
+app.use(LoggerService);</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Globals -->
+      <section id="globals" class="flex flex-col gap-4 scroll-mt-8">
+        <h2 class="text-xl">Globals (App-level Injectables)</h2>
+
+        <p class="text-white/80 leading-relaxed">
+          Xerus supports global singletons you can access via <code class="text-white">c.global(MyType)</code>.
+          Register them with <code class="text-white">app.provide()</code> or <code class="text-white">app.injectGlobal()</code>.
+        </p>
+
+        <pre class="rounded-lg border border-white/15 bg-white/5 p-4 overflow-auto text-sm"><code>class Config {
+  storeKey = "Config";
+  apiKey = "secret";
+}
+
+const app = new Xerus();
+app.provide(Config, new Config());
+
+class Route extends XerusRoute {
+  method = Method.GET;
+  path = "/cfg";
+  async handle(c: HTTPContext) {
+    const cfg = c.global(Config);
+    json(c, { apiKey: cfg.apiKey });
+  }
+}</code></pre>
+      </section>
+
+      <!-- Footnotes -->
+      <section class="flex flex-col gap-3">
+        <h2 class="text-xl">API Notes</h2>
+        <div class="rounded-lg border border-white/15 bg-white/5 p-4 text-sm leading-relaxed text-white/80">
+          <ul class="list-disc pl-5">
+            <li>
+              Legacy helpers <code class="text-white">Inject()</code>, <code class="text-white">Validate()</code>, and <code class="text-white">Validator.Ctx()</code>
+              are intentionally removed. Declare ctor lists instead:
+              <code class="text-white">services = [...]</code>, <code class="text-white">validators = [...]</code>.
+            </li>
+            <li>
+              If you write to the response body using helpers like <code class="text-white">json()</code> or <code class="text-white">text()</code>,
+              they call <code class="text-white">c.finalize()</code> and stop the handler chain.
+            </li>
+            <li>
+              WebSocket routes share a pooled <code class="text-white">HTTPContext</code>. Xerus resets per-event scope via <code class="text-white">resetForWSEvent()</code>.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="text-xs text-white/50 pt-4 border-t border-white/10">
+      <p>Xerus Documentation — generated from source layout. Add more examples as your app grows.</p>
+    </footer>
+  </div>
+</body>
+</html>

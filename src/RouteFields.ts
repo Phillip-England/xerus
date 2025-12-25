@@ -9,7 +9,7 @@ const XERUS_FIELD = Symbol.for("xerus:routefield");
  * Lifecycle interface for services.
  * (Kept for compatibility + typing.)
  */
-export interface ServiceLifecycle {
+export interface XerusService {
   storeKey?: string;
   init?(c: HTTPContext): Promise<void>;
   initApp?(app: any): Promise<void>; // `any` avoids circular import; Xerus calls it.
@@ -18,7 +18,7 @@ export interface ServiceLifecycle {
   onError?(c: HTTPContext, err: unknown): Promise<void>;
 }
 
-export type InjectableStore = ServiceLifecycle; // Alias for backward compat
+export type InjectableStore = XerusService; // Alias for backward compat
 
 /**
  * @deprecated Legacy RouteField classes are kept only so old code errors clearly.

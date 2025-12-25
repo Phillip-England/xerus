@@ -14,7 +14,7 @@ describe("Architecture: Services & Middleware", () => {
     const app = new Xerus();
 
     // --- Services ---
-    class AuthMiddleware implements ServiceLifecycle {
+    class AuthMiddleware implements XerusService {
       async before(c: HTTPContext) {
         setHeader(c, "X-Auth-Check", "Passed");
       }
@@ -26,7 +26,7 @@ describe("Architecture: Services & Middleware", () => {
         getUsers() { return this.users; }
     }
 
-    class ErrorService implements ServiceLifecycle {
+    class ErrorService implements XerusService {
         async onError(c: HTTPContext, err: unknown) {
             setStatus(c, 500);
             json(c, { handled: true, error: (err as Error).message });

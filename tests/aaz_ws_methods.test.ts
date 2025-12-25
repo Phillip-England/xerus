@@ -17,7 +17,7 @@ function makeWSURL(port: number, path: string) {
    Services
 ====================== */
 
-class GroupHeaderService implements ServiceLifecycle {
+class GroupHeaderService implements XerusService {
   async before(c: HTTPContext) {
     setHeader(c, "X-Group-Auth", "passed");
   }

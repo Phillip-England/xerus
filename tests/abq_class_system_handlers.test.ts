@@ -20,7 +20,7 @@ describe("Class-based System Handlers (onNotFound / onErr)", () => {
   const app = new Xerus();
 
   // 1. Define a Service to prove Dependency Injection works in system routes
-  class SystemAuditService implements ServiceLifecycle {
+  class SystemAuditService implements XerusService {
    async before(c: HTTPContext) {
     setHeader(c, "X-System-Audit", "Logged");
    }

@@ -51,7 +51,7 @@ class RequestIdService implements InjectableStore, ServiceLifecycle {
   }
 }
 
-class RateLimitService implements ServiceLifecycle {
+class RateLimitService implements XerusService {
   async before(c: HTTPContext) {
     const ip = clientIP(c);
     const count = (rateLimitMap.get(ip) || 0) + 1;

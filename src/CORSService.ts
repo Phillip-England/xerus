@@ -1,6 +1,6 @@
 import type { HTTPContext } from "./HTTPContext";
 import { Method } from "./Method";
-import type { ServiceLifecycle } from "./RouteFields";
+import type { XerusService } from "./RouteFields";
 import { header } from "./std/Request";
 import { setHeader, setStatus } from "./std/Response";
 
@@ -60,7 +60,7 @@ export interface CORSConfig {
   optionsSuccessStatus?: number;
 }
 
-export class CORSService implements ServiceLifecycle {
+export class CORSService implements XerusService {
   protected config: Required<CORSConfig>;
 
   constructor(config?: CORSConfig) {

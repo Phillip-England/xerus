@@ -17,7 +17,7 @@ describe("Middleware error handling", () => {
   beforeAll(async () => {
     const app = new Xerus();
 
-    class ServiceSafeGuard implements ServiceLifecycle {
+    class ServiceSafeGuard implements XerusService {
       async onError(c: HTTPContext, err: any) {
         setStatus(c, 422);
         json(c, {
