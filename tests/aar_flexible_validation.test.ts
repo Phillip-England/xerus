@@ -7,7 +7,7 @@ import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 import { header, param, query } from "../src/std/Request";
 import { json } from "../src/std/Response";
 

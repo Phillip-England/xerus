@@ -24,7 +24,7 @@ export * from "./src/HTTPHandlerFunc";
 export * from "./src/WSContext";
 export * from "./src/WSHandlerFuncs";
 
-export * from "./src/TypeValidator";
+export * from "./src/XerusValidator";
 export * from "./src/ValidationSource";
 export * from "./src/Validator";
 

@@ -6,7 +6,7 @@ import type { ServiceLifecycle } from "../src/RouteFields";
 import { json, setHeader, text } from "../src/std/Response";
 import { SystemErr } from "../src/SystemErr";
 import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { parseBody } from "../src/std/Body";

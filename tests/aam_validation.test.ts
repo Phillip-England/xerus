@@ -6,7 +6,7 @@ import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { BodyType } from "../src/BodyType";
 import { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 
 import { parseBody } from "../src/std/Body";
 import { query } from "../src/std/Request";

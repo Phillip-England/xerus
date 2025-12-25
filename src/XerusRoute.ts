@@ -2,7 +2,7 @@
 import { HTTPContext } from "./HTTPContext";
 import type { HTTPErrorHandlerFunc } from "./HTTPHandlerFunc";
 import { Method } from "./Method";
-import type { TypeValidator } from "./TypeValidator";
+import type { TypeValidator } from "./XerusValidator";
 
 /**
  * Services are now "any constructor" globally.

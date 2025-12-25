@@ -4,14 +4,14 @@ import { SystemErrCode } from "./SystemErrCode";
 import { RequestHeaders } from "./Headers";
 import { createDataBag, type DataBag } from "./DataBag";
 import type { WSContext } from "./WSContext";
-import type { TypeValidator } from "./TypeValidator";
+import type { XerusValidator } from "./XerusValidator";
 import { RequestCookies, ResponseCookies } from "./Cookies";
 import { SystemErr } from "./SystemErr";
 
 export type ParsedBodyMode = "NONE" | "TEXT" | "JSON" | "FORM" | "MULTIPART";
 
 type Ctor<T> = new (...args: any[]) => T;
-type AnyValidatorCtor = new () => TypeValidator<any>;
+type AnyValidatorCtor = new () => XerusValidator<any>;
 type ValidatedOut<TCtor extends AnyValidatorCtor> = Awaited<
   ReturnType<InstanceType<TCtor>["validate"]>
 >;

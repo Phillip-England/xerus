@@ -8,7 +8,7 @@ import { join, resolve } from "path";
 import { ObjectPool } from "./ObjectPool";
 import { XerusRoute, type AnyServiceCtor, type AnyValidatorCtor } from "./XerusRoute";
 import { Method } from "./Method";
-import type { TypeValidator } from "./TypeValidator";
+import type { TypeValidator } from "./XerusValidator";
 import { errorJSON, file, setHeader } from "./std/Response";
 import { WSContext } from "./WSContext";
 import { SystemErr } from "./SystemErr";

@@ -1,5 +1,5 @@
 // --- START FILE: src/Validator.ts ---
-import type { TypeValidator } from "./TypeValidator";
+import type { TypeValidator } from "./XerusValidator";
 
 /**
  * @deprecated

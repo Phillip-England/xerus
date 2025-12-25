@@ -4,7 +4,7 @@ import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import type { HTTPContext } from "../src/HTTPContext";
 import type { ServiceLifecycle } from "../src/RouteFields";
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 import { json, setHeader } from "../src/std/Response";
 import { query } from "../src/std/Request";
 

@@ -4,7 +4,7 @@ import { Xerus } from "../src/Xerus";
 import { XerusRoute } from "../src/XerusRoute";
 import { Method } from "../src/Method";
 import { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 import { CORSService } from "../src/CORSService";
 import { RateLimitService } from "../src/RateLimitService";
 import { json, setHeader } from "../src/std/Response";

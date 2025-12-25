@@ -1,13 +1,13 @@
-import { Xerus } from "../src/Xerus";
-import { XerusRoute } from "../src/XerusRoute";
-import { Method } from "../src/Method";
-import { HTTPContext } from "../src/HTTPContext";
-import { BodyType } from "../src/BodyType";
-import { SystemErr } from "../src/SystemErr";
-import { SystemErrCode } from "../src/SystemErrCode";
-import type { TypeValidator } from "../src/XerusValidator";
-import { json } from "../src/std/Response";
-import { parseBody as stdParseBody } from "../src/std/Body";
+import { Xerus } from "../../src/Xerus";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
+import { HTTPContext } from "../../src/HTTPContext";
+import { BodyType } from "../../src/BodyType";
+import { SystemErr } from "../../src/SystemErr";
+import { SystemErrCode } from "../../src/SystemErrCode";
+import type { TypeValidator } from "../../src/XerusValidator";
+import { json } from "../../src/std/Response";
+import { parseBody as stdParseBody } from "../../src/std/Body";
 
 class JsonBody implements TypeValidator {
   async validate(c: HTTPContext) {

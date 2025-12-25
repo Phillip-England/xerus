@@ -1,13 +1,13 @@
 import { z } from "zod";
-import { Xerus } from "../src/Xerus";
-import { XerusRoute } from "../src/XerusRoute";
-import { Method } from "../src/Method";
-import type { HTTPContext } from "../src/HTTPContext";
-import type { TypeValidator } from "../src/XerusValidator";
-import { SystemErr } from "../src/SystemErr";
-import { SystemErrCode } from "../src/SystemErrCode";
-import { header, ws } from "../src/std/Request";
-import { json } from "../src/std/Response";
+import { Xerus } from "../../src/Xerus";
+import { XerusRoute } from "../../src/XerusRoute";
+import { Method } from "../../src/Method";
+import type { HTTPContext } from "../../src/HTTPContext";
+import type { TypeValidator } from "../../src/XerusValidator";
+import { SystemErr } from "../../src/SystemErr";
+import { SystemErrCode } from "../../src/SystemErrCode";
+import { header, ws } from "../../src/std/Request";
+import { json } from "../../src/std/Response";
 
 let lastClose: { code: number; reason: string } = { code: 0, reason: "" };
 let closeCount = 0;

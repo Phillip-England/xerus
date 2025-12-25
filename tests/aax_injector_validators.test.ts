@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 
-import type { TypeValidator } from "../src/TypeValidator";
+import type { TypeValidator } from "../src/XerusValidator";
 import type { HTTPContext } from "../src/HTTPContext";
 import type { InjectableStore } from "../src/RouteFields";
 import { Method } from "../src/Method";
