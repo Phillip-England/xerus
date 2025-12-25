@@ -21,7 +21,7 @@ bench-json:
 	wrk -t12 -c400 -d30s -s temp_post.lua http://localhost:8080/items
 	@rm temp_post.lua
 
-dev:
+docs:
 	bun ./www/html/**/*.html
 
 build-docs:

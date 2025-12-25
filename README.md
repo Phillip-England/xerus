@@ -28,6 +28,14 @@ Structured servers in Bun
 bun add github:phillip-england/xerus#v0.0.70
 ```
 
+## Read the Docs
+```bash
+git clone https://github.com/phillip-england/xerus
+cd xerus
+bun install
+make docs # bun ./www/html/**/*.html
+```
+
 ## What is Xerus?
 
 Xerus is a small, structured HTTP + WebSocket framework for Bun. You define routes as classes, optionally attach **validators** (for typed input) and **services** (for shared logic + lifecycle hooks). Xerus runs validators first, then services, then your route handler.
