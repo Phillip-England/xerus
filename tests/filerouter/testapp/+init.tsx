@@ -1,5 +1,4 @@
-
-import { InitModule, Xerus, logger } from "../../..";
+import { InitModule, logger, Xerus } from "../../..";
 
 let module = new InitModule();
 

@@ -1,8 +1,8 @@
 import { HTTPContext, Xerus } from "..";
 
-let app = new Xerus()
+let app = new Xerus();
 
-app.get('/', async (c: HTTPContext) => {
+app.get("/", async (c: HTTPContext) => {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -15,11 +15,11 @@ app.get('/', async (c: HTTPContext) => {
           controller.close();
         }
       }, 1000);
-    }
+    },
   });
   c.setHeader("Content-Type", "text/plain");
   c.setHeader("Content-Disposition", 'attachment; filename="odoyle_rules.txt"');
   return c.stream(stream);
 });
 
-await app.listen()
+await app.listen();

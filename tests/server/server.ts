@@ -1,4 +1,11 @@
-import { BodyType, HTTPContext, logger, Middleware, Xerus, WSContext } from "../..";
+import {
+  BodyType,
+  HTTPContext,
+  logger,
+  Middleware,
+  WSContext,
+  Xerus,
+} from "../..";
 
 import wsScript from "../../static/ws.html" with { type: "text" };
 
@@ -381,7 +388,7 @@ app.get("/ws/test", async (c: HTTPContext) => {
 
 app.ws("/chat", {
   async open(ws) {
-    let c = ws.data
+    let c = ws.data;
     console.log("WebSocket connection opened");
   },
   async message(ws, message) {
@@ -393,11 +400,11 @@ app.ws("/chat", {
     console.log("WebSocket connection closed");
   },
   async onConnect(c: WSContext) {
-    c.set('secret', 'booty')
-  }
+    c.set("secret", "booty");
+  },
 });
 
-app.get('/file-missing', async (c: HTTPContext) => {
+app.get("/file-missing", async (c: HTTPContext) => {
   return await c.file("./path/to/file");
 });
 

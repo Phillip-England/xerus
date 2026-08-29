@@ -6,6 +6,4 @@ export type MiddlewareFn = (
   next: MiddlewareNextFn,
 ) => Promise<void | Response>;
 
-
-
 //===

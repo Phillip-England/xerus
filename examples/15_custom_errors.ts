@@ -1,6 +1,6 @@
 import { HTTPContext, Xerus } from "..";
 
-let app = new Xerus()
+let app = new Xerus();
 
 app.onErr(async (c: HTTPContext): Promise<Response> => {
   let err = c.getErr();
@@ -8,4 +8,4 @@ app.onErr(async (c: HTTPContext): Promise<Response> => {
   return c.setStatus(500).text("internal server error");
 });
 
-await app.listen()
+await app.listen();

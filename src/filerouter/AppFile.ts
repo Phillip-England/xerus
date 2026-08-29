@@ -35,7 +35,7 @@ export class AppFile {
       appDirPath,
       parentDirPath,
     );
-    appModule.endpoint = endpoint
+    appModule.endpoint = endpoint;
     let appFile = new AppFile(
       appDirPath,
       filePath,

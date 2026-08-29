@@ -1,4 +1,4 @@
-import type { ServerWebSocket  } from "bun";
+import type { ServerWebSocket } from "bun";
 
 export type WSMessageFunc = (
   ws: ServerWebSocket<unknown>,

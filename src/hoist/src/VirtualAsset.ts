@@ -1,5 +1,5 @@
-import path from 'path';
-import { extname } from 'path';
+import path from "path";
+import { extname } from "path";
 
 export enum AssetType {
   Dir,
@@ -18,35 +18,36 @@ export class VirtualAsset {
     this.assetType = diskType;
     this.text = text;
     this.isRoot = false;
-    this.path = '';
-    this.filename = '';
-    this.dirname = '';
-    this.ext = '';
+    this.path = "";
+    this.filename = "";
+    this.dirname = "";
+    this.ext = "";
   }
   static dir(): VirtualAsset {
-    let record = new VirtualAsset(AssetType.Dir, '')
+    let record = new VirtualAsset(AssetType.Dir, "");
     return record;
   }
   static file(content: string): VirtualAsset {
-    let record = new VirtualAsset(AssetType.File, content)
+    let record = new VirtualAsset(AssetType.File, content);
     return record;
   }
   isDir(): boolean {
-    return this.assetType == AssetType.Dir || this.assetType == AssetType.RootDir;
+    return this.assetType == AssetType.Dir ||
+      this.assetType == AssetType.RootDir;
   }
   static rootDir(): VirtualAsset {
-    let asset = new VirtualAsset(AssetType.RootDir, '')
-    return asset
+    let asset = new VirtualAsset(AssetType.RootDir, "");
+    return asset;
   }
   setPath(p: string) {
     this.path = p;
-    this.ext = extname(p)
+    this.ext = extname(p);
     this.dirname = path.dirname(p);
     this.filename = path.basename(p);
   }
   async save() {
     if (this.assetType != AssetType.File) {
-      return
+      return;
     }
     await Bun.write(this.path, this.text);
   }

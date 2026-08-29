@@ -1,17 +1,17 @@
-import path from 'path';
-import { readdir } from 'fs/promises';
-import { access, stat } from 'fs/promises';
-import { join } from 'path';
-import { rm } from 'fs/promises';
-import type { BunFile } from 'bun';
+import path from "path";
+import { readdir } from "fs/promises";
+import { access, stat } from "fs/promises";
+import { join } from "path";
+import { rm } from "fs/promises";
+import type { BunFile } from "bun";
 
 export async function walkDir(
-  dirPath: string, 
-  callback: (path: string, isDirectory: boolean) => void | Promise<void>
+  dirPath: string,
+  callback: (path: string, isDirectory: boolean) => void | Promise<void>,
 ) {
   await callback(dirPath, true);
-  
-  const files = await readdir(dirPath, { withFileTypes: true })
+
+  const files = await readdir(dirPath, { withFileTypes: true });
   for (const file of files) {
     const path = join(dirPath, file.name);
     if (file.isDirectory()) {
@@ -48,7 +48,7 @@ export async function rmdirIfExists(path: string) {
 }
 
 export async function loadFile(...pathParts: string[]): Promise<BunFile> {
-  let p = path.join(...pathParts)
+  let p = path.join(...pathParts);
   let file = Bun.file(p);
-  return file
+  return file;
 }

@@ -30,6 +30,10 @@ export class HTTPHandler {
     // Apply middlewares in reverse order
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const middleware = this.middlewares[i];
+      if (middleware === undefined) {
+        continue;
+      }
+
       const nextChain = chain;
       chain = async (context: HTTPContext): Promise<Response> => {
         try {

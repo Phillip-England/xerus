@@ -3,12 +3,15 @@ import { AppDir } from "./AppDir";
 import { ServerManager } from "./ServerManager";
 import type { FileRouterOpts } from "./FileRouterOpts";
 
-
 export class FileRouter {
   opts: FileRouterOpts;
   serverManager: ServerManager;
   appDir: AppDir;
-  constructor(opts: FileRouterOpts, serverManager: ServerManager, appDir: AppDir) {
+  constructor(
+    opts: FileRouterOpts,
+    serverManager: ServerManager,
+    appDir: AppDir,
+  ) {
     this.opts = opts;
     this.serverManager = serverManager;
     this.appDir = appDir;
@@ -23,4 +26,3 @@ export class FileRouter {
     await this.serverManager.listen(this.opts.port);
   }
 }
-

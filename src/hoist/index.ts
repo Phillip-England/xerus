@@ -1,2 +1,2 @@
-export * from './src/VirtualAsset'
-export * from './src/VirtualFS'
+export * from "./src/VirtualAsset";
+export * from "./src/VirtualFS";

@@ -31,7 +31,9 @@ test("POST /context/parseJSON/invalidJSON should return error for invalid JSON",
   });
   const data = await res.text();
   expect(res.status).toBe(400);
-  expect(data).toBe('BODY_PARSING_FAILED: JSON parsing failed: Failed to parse JSON');
+  expect(data).toBe(
+    "BODY_PARSING_FAILED: JSON parsing failed: Failed to parse JSON",
+  );
 });
 
 test("POST /context/parseJSON/validJSON should return parsed JSON", async () => {

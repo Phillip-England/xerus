@@ -1,7 +1,7 @@
 import { AssetType, VirtualAsset } from "./VirtualAsset";
 import { walkDir } from "../../floss";
-import { rm, mkdir } from "fs/promises";
-import path from 'path';
+import { mkdir, rm } from "fs/promises";
+import path from "path";
 
 export class VirtualFS {
   rootPath: string;
@@ -19,17 +19,23 @@ export class VirtualFS {
 
   private normalizePath(inputPath: string): string {
     const relative = path.relative(process.cwd(), path.resolve(inputPath));
-    const normalized = relative.startsWith('.') ? relative : `./${relative}`;
-    return normalized.split(path.sep).join('/');
+    const normalized = relative.startsWith(".") ? relative : `./${relative}`;
+    return normalized.split(path.sep).join("/");
   }
 
-  static async overwrite(rootPath: string, VirtualAssets: Record<string, VirtualAsset>): Promise<VirtualFS> {
+  static async overwrite(
+    rootPath: string,
+    VirtualAssets: Record<string, VirtualAsset>,
+  ): Promise<VirtualFS> {
     const resolvedPath = path.resolve(rootPath);
     await rm(resolvedPath, { recursive: true, force: true });
     return await VirtualFS.create(resolvedPath, VirtualAssets);
   }
 
-  static async create(rootPath: string, VirtualAssets: Record<string, VirtualAsset>): Promise<VirtualFS> {
+  static async create(
+    rootPath: string,
+    VirtualAssets: Record<string, VirtualAsset>,
+  ): Promise<VirtualFS> {
     const fs = new VirtualFS(rootPath, VirtualAssets);
     await mkdir(fs.rootPath, { recursive: true });
     for (const [relativePath, asset] of Object.entries(fs.assets)) {
@@ -43,7 +49,7 @@ export class VirtualFS {
         await mkdir(path.dirname(fullPath), { recursive: true });
         await Bun.write(fullPath, asset.text);
       }
-      asset.setPath(fullPath)
+      asset.setPath(fullPath);
     }
     return fs;
   }
@@ -56,18 +62,18 @@ export class VirtualFS {
       if (isDir) {
         let asset: VirtualAsset;
         if (path.resolve(fullPath) === path.resolve(resolvedRoot)) {
-          asset = VirtualAsset.rootDir()
+          asset = VirtualAsset.rootDir();
         } else {
-          asset = VirtualAsset.dir()
+          asset = VirtualAsset.dir();
         }
-        asset.setPath(fullPath)
+        asset.setPath(fullPath);
         assets[relativePath] = asset;
         return;
       }
       const file = Bun.file(fullPath);
       const text = await file.text();
-      let asset = VirtualAsset.file(text)
-      asset.setPath(fullPath)
+      let asset = VirtualAsset.file(text);
+      asset.setPath(fullPath);
       assets[relativePath] = asset;
     });
 
@@ -101,22 +107,26 @@ export class VirtualFS {
   async sync(): Promise<void> {
     for (const [relativePath, asset] of Object.entries(this.assets)) {
       if (asset.assetType != AssetType.File) {
-        continue
+        continue;
       }
-      await asset.save()
+      await asset.save();
     }
   }
 
-  async iterAssets(callback: (asset: VirtualAsset, relativePath: string) => Promise<void> | void): Promise<void> {
-  for (const [relativePath, asset] of Object.entries(this.assets)) {
-    await callback(asset, relativePath);
+  async iterAssets(
+    callback: (
+      asset: VirtualAsset,
+      relativePath: string,
+    ) => Promise<void> | void,
+  ): Promise<void> {
+    for (const [relativePath, asset] of Object.entries(this.assets)) {
+      await callback(asset, relativePath);
+    }
   }
-}
-
 }
 
 function convertToRelativePath(absolutePath: string, basePath: string): string {
   const relative = path.relative(basePath, absolutePath);
-  const withDot = relative.startsWith('.') ? relative : `./${relative}`;
-  return withDot.split(path.sep).join('/');
+  const withDot = relative.startsWith(".") ? relative : `./${relative}`;
+  return withDot.split(path.sep).join("/");
 }

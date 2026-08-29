@@ -34,7 +34,7 @@ export class RouteModule {
   putMiddleware: MiddlewareExport[] = [];
   deleteFunc: undefined | ((c: HTTPContext) => Promise<Response>);
   deleteMiddleware: MiddlewareExport[] = [];
-  endpoint: string = ''
+  endpoint: string = "";
 
   constructor() {}
 

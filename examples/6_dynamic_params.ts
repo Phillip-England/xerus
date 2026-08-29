@@ -1,10 +1,10 @@
 import { BodyType, HTTPContext, Xerus } from "..";
 
-let app = new Xerus()
+let app = new Xerus();
 
-app.get('/user/:id', async (c: HTTPContext) => {
-  let id = c.getParam('id')
-  return c.html(`<h1>O'Doyle Rules Times ${id}!</h1>`)
-})
+app.get("/user/:id", async (c: HTTPContext) => {
+  let id = c.getParam("id");
+  return c.html(`<h1>O'Doyle Rules Times ${id}!</h1>`);
+});
 
-await app.listen()
+await app.listen();

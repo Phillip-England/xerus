@@ -1,13 +1,12 @@
 import { HTTPContext, RouteModule } from "../../..";
 
-
 let module = new RouteModule();
 
 module.get(async (c: HTTPContext) => {
   return c.jsx(
     <>
       <h1>Hello, World!</h1>
-    </>
+    </>,
   );
 });
 

@@ -1,8 +1,8 @@
-import type { ServerWebSocket, Server  } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import { TrieNode } from "./TrieNode";
 import { HTTPHandler } from "./HTTPHandler";
 import { Middleware } from "./Middleware";
-import  type { WSOpenFunc } from "./WSOpenFunc";
+import type { WSOpenFunc } from "./WSOpenFunc";
 import type { WSMessageFunc } from "./WSMessageFunc";
 import type { WSCloseFunc } from "./WSCloseFunc";
 import type { WSDrainFunc } from "./WSDrainFunc";
@@ -14,7 +14,7 @@ import { SystemErr } from "./SystemErr";
 import { SystemErrCode } from "./SystemErrCode";
 import { SystemErrRecord } from "./SystemErrRecord";
 import { WSContext } from "./WSContext";
-import path from 'path'
+import path from "path";
 
 export class Xerus {
   DEBUG_MODE = false;
@@ -28,13 +28,12 @@ export class Xerus {
     { handler?: HTTPHandler; params: Record<string, string> }
   >();
   private readonly MAX_CACHE_SIZE = 100;
-  private wsOpenRoutes: Record<string, WSOpenFunc> =
-    {};
+  private wsOpenRoutes: Record<string, WSOpenFunc> = {};
   private wsMessageRoutes: Record<string, WSMessageFunc> = {};
   private wsCloseRoutes: Record<string, WSCloseFunc> = {};
   private wsDrainRoutes: Record<string, WSDrainFunc> = {};
   private wsOnConnects: Record<string, WSOnConnect> = {};
-  private wsRoutes: Record<string, boolean> = {}
+  private wsRoutes: Record<string, boolean> = {};
 
   ws(
     path: string,
@@ -46,24 +45,24 @@ export class Xerus {
       onConnect?: WSOnConnect;
     },
   ) {
-    this.wsRoutes[path] = true
+    this.wsRoutes[path] = true;
     if (handlers.open) this.wsOpenRoutes[path] = handlers.open;
     if (handlers.message) this.wsMessageRoutes[path] = handlers.message;
     if (handlers.close) this.wsCloseRoutes[path] = handlers.close;
     if (handlers.drain) this.wsDrainRoutes[path] = handlers.drain;
-    if (handlers.onConnect) this.wsOnConnects[path] = handlers.onConnect
+    if (handlers.onConnect) this.wsOnConnects[path] = handlers.onConnect;
   }
 
   static(relPath: string) {
-    this.get('/'+relPath+'/*', async (c: HTTPContext) => {
-      return await c.file(process.cwd()+c.path);
-    })
+    this.get("/" + relPath + "/*", async (c: HTTPContext) => {
+      return await c.file(process.cwd() + c.path);
+    });
   }
 
   favicon(absolutePathToFavicon: string) {
-    this.get('/favicon.ico', async (c: HTTPContext) => {
-      return await c.file(absolutePathToFavicon)
-    })
+    this.get("/favicon.ico", async (c: HTTPContext) => {
+      return await c.file(absolutePathToFavicon);
+    });
   }
 
   use(...middlewares: Middleware[]) {
@@ -86,56 +85,57 @@ export class Xerus {
     this.notFoundHandler = handler;
   }
 
-private register(
-  method: string,
-  path: string,
-  handlerFunc: HTTPHandlerFunc,
-  middlewares: Middleware[],
-) {
-  try {
-    let handler = new HTTPHandler(handlerFunc);
-    handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
+  private register(
+    method: string,
+    path: string,
+    handlerFunc: HTTPHandlerFunc,
+    middlewares: Middleware[],
+  ) {
+    try {
+      let handler = new HTTPHandler(handlerFunc);
+      handler.setMiddlewares(this.globalMiddlewares.concat(middlewares));
 
-    if (!path.includes(":") && !path.includes("*")) {
-      if (this.routes[`${method} ${path}`]) {
+      if (!path.includes(":") && !path.includes("*")) {
+        if (this.routes[`${method} ${path}`]) {
+          throw new SystemErr(
+            SystemErrCode.ROUTE_ALREADY_REGISTERED,
+            `Route ${method} ${path} has already been registered`,
+          );
+        }
+        this.routes[`${method} ${path}`] = handler;
+        return;
+      }
+
+      const parts = path.split("/").filter(Boolean);
+      let node = this.root;
+
+      for (const part of parts) {
+        let isParam = part.startsWith(":");
+        let isWildcard = part === "*";
+
+        if (isParam) {
+          node = node.children[":param"] ??
+            (node.children[":param"] = new TrieNode());
+          node.paramKey ||= part.slice(1);
+        } else if (isWildcard) {
+          node.wildcard = node.wildcard ?? new TrieNode();
+          node = node.wildcard;
+        } else {
+          node = node.children[part] ?? (node.children[part] = new TrieNode());
+        }
+      }
+
+      if (node.handlers[method]) {
         throw new SystemErr(
           SystemErrCode.ROUTE_ALREADY_REGISTERED,
-          `Route ${method} ${path} has already been registered`
+          `Route ${method} ${path} has already been registered`,
         );
       }
-      this.routes[`${method} ${path}`] = handler;
-      return;
+      node.handlers[method] = handler;
+    } catch (err) {
+      throw err;
     }
-
-    const parts = path.split("/").filter(Boolean);
-    let node = this.root;
-
-    for (const part of parts) {
-      let isParam = part.startsWith(":");
-      let isWildcard = part === "*";
-
-      if (isParam) {
-        node = node.children[":param"] ?? (node.children[":param"] = new TrieNode());
-        node.paramKey ||= part.slice(1);
-      } else if (isWildcard) {
-        node.wildcard = node.wildcard ?? new TrieNode();
-        node = node.wildcard;
-      } else {
-        node = node.children[part] ?? (node.children[part] = new TrieNode());
-      }
-    }
-
-    if (node.handlers[method]) {
-      throw new SystemErr(
-        SystemErrCode.ROUTE_ALREADY_REGISTERED,
-        `Route ${method} ${path} has already been registered`
-      );
-    }
-    node.handlers[method] = handler;
-  } catch (err) {
-    throw err;
   }
-}
 
   get(path: string, handler: HTTPHandlerFunc, ...middlewares: Middleware[]) {
     this.register("GET", path, handler, middlewares);
@@ -218,14 +218,14 @@ private register(
     return result;
   }
 
-  async handleHTTP(req: Request, server: Server): Promise<Response | void> {
+  async handleHTTP(req: Request, server: Server<unknown>): Promise<Response | void> {
     const url = new URL(req.url);
     const path = url.pathname;
     const method = req.method;
 
     // determine if a ws path has been hit
     if (this.wsRoutes[path]) {
-      return await this.handleWS(req, server, path)
+      return await this.handleWS(req, server, path);
     }
 
     try {
@@ -235,44 +235,50 @@ private register(
         return await handler.execute(context);
       }
       if (this.notFoundHandler) {
-        return this.notFoundHandler.execute(new HTTPContext(req))
+        return this.notFoundHandler.execute(new HTTPContext(req));
       }
-      throw new SystemErr(SystemErrCode.ROUTE_NOT_FOUND, `${method} ${path} is not registered`)
+      throw new SystemErr(
+        SystemErrCode.ROUTE_NOT_FOUND,
+        `${method} ${path} is not registered`,
+      );
     } catch (e: any) {
-
       // setting up our context with an error
       let c = new HTTPContext(req);
-      c.setErr(e)
+      c.setErr(e);
 
       // catching all system-level errors (errors that can occur within functions provided by Xerus)
       if (e instanceof SystemErr) {
-        let errHandler = await SystemErrRecord[e.typeOf]
-        return await errHandler(c)
+        let errHandler = await SystemErrRecord[e.typeOf];
+        return await errHandler(c);
       }
 
       // if the user has default error handling
       if (this.errHandler) {
-        return this.errHandler.execute(c)
+        return this.errHandler.execute(c);
       }
-      
+
       // if the user does not have an error handler setup, then send a default message
-      return await SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR](c)
+      return await SystemErrRecord[SystemErrCode.INTERNAL_SERVER_ERR](c);
     }
   }
 
-  async handleWS(req: Request, server: Server, path: string): Promise<Response | void> {
+  async handleWS(
+    req: Request,
+    server: Server<unknown>,
+    path: string,
+  ): Promise<Response | void> {
     try {
-      let context = new WSContext(req, path)
+      let context = new WSContext(req, path);
       if (this.wsOnConnects[path]) {
-        let onConnect = this.wsOnConnects[path]
-        await onConnect(context)
-        await this.wsOnConnects[path](context)
+        let onConnect = this.wsOnConnects[path];
+        await onConnect(context);
+        await this.wsOnConnects[path](context);
       }
       if (server.upgrade(req, context)) {
         return;
       }
     } catch (e: any) {
-      throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message)
+      throw new SystemErr(SystemErrCode.WEBSOCKET_UPGRADE_FAILURE, e.message);
     }
   }
 
@@ -311,7 +317,7 @@ private register(
     let app = this;
     const server = Bun.serve({
       port: port,
-      fetch: async (req: Request, server: Server) => {
+      fetch: async (req: Request, server: Server<unknown>) => {
         return await app.handleHTTP(req, server);
       },
       websocket: {

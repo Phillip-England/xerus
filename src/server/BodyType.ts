@@ -1,5 +1,3 @@
-
-
 export enum BodyType {
   JSON = "json",
   TEXT = "string",
